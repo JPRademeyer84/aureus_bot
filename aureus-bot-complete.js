@@ -5778,6 +5778,48 @@ async function completePaymentVerification(ctx, transactionHash) {
   const screenshotUrl = urlData?.publicUrl || null;
 
   try {
+    // First check if this transaction hash already exists
+    const { data: existingPayment, error: hashCheckError } = await db.client
+      .from('crypto_payment_transactions')
+      .select('id, user_id, status, created_at')
+      .eq('transaction_hash', transactionHash)
+      .single();
+
+    if (!hashCheckError && existingPayment) {
+      // Duplicate hash found - provide clear error message
+      const existingDate = new Date(existingPayment.created_at).toLocaleDateString();
+      const duplicateMessage = `❌ **DUPLICATE TRANSACTION HASH**
+
+🚨 **This transaction hash has already been used:**
+
+**Transaction Hash:** \`${transactionHash}\`
+**Previously Used:** ${existingDate}
+**Status:** ${existingPayment.status.toUpperCase()}
+
+**⚠️ IMPORTANT:**
+• Each transaction hash can only be used once
+• This prevents double-spending and fraud
+• Please verify you're using the correct transaction hash
+
+**🔧 SOLUTIONS:**
+• Check if you already submitted this payment
+• Use a different/new transaction for this purchase
+• Contact support if you believe this is an error
+
+**📞 Need Help?**
+Contact support with your transaction details.`;
+
+      await ctx.replyWithMarkdown(duplicateMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Back to Payment", callback_data: `pay_${network}_${packageId}` }],
+            [{ text: "📞 Contact Support", callback_data: "menu_help" }]
+          ]
+        }
+      });
+      return;
+    }
+
     // Create payment transaction record
     const paymentData = {
       user_id: userId,
@@ -5799,7 +5841,37 @@ async function completePaymentVerification(ctx, transactionHash) {
 
     if (paymentError) {
       console.error('Payment record creation error:', paymentError);
-      await ctx.reply('❌ Failed to record payment. Please contact support.');
+
+      // Check if this is a unique constraint violation (duplicate hash)
+      if (paymentError.code === '23505' && paymentError.message.includes('transaction_hash')) {
+        const duplicateHashMessage = `❌ **DUPLICATE TRANSACTION HASH DETECTED**
+
+🚨 **This transaction hash is already in use:**
+
+**Transaction Hash:** \`${transactionHash}\`
+
+**⚠️ REASON:**
+Another payment was submitted with this exact transaction hash while you were completing your submission.
+
+**🔧 SOLUTION:**
+• Please verify your transaction hash is correct
+• Each blockchain transaction has a unique hash
+• Contact support if you need assistance
+
+**📞 Need Help?**
+Our support team can help verify your transaction.`;
+
+        await ctx.replyWithMarkdown(duplicateHashMessage, {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔙 Try Again", callback_data: `pay_${network}_${packageId}` }],
+              [{ text: "📞 Contact Support", callback_data: "menu_help" }]
+            ]
+          }
+        });
+      } else {
+        await ctx.reply('❌ Failed to record payment. Please contact support.');
+      }
       return;
     }
 

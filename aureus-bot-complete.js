@@ -80,20 +80,25 @@ function createMainMenuKeyboard(isAdmin = false) {
   return { inline_keyboard: keyboard };
 }
 
-function createPackagesKeyboard(packages) {
+async function createPackagesKeyboard(packages) {
   const keyboard = [];
 
   // Create rows of 2 packages each with professional formatting
   for (let i = 0; i < packages.length; i += 2) {
     const row = [];
+
+    // Calculate dynamic price for first package
+    const price1 = await calculatePackagePrice(packages[i]);
     row.push({
-      text: `⛏️ ${packages[i].name.toUpperCase()} - ${formatCurrency(packages[i].price)}`,
+      text: `⛏️ ${packages[i].name.toUpperCase()} - ${formatCurrency(price1)}`,
       callback_data: `package_${packages[i].id}`
     });
 
     if (i + 1 < packages.length) {
+      // Calculate dynamic price for second package
+      const price2 = await calculatePackagePrice(packages[i + 1]);
       row.push({
-        text: `⛏️ ${packages[i + 1].name.toUpperCase()} - ${formatCurrency(packages[i + 1].price)}`,
+        text: `⛏️ ${packages[i + 1].name.toUpperCase()} - ${formatCurrency(price2)}`,
         callback_data: `package_${packages[i + 1].id}`
       });
     }
@@ -246,6 +251,27 @@ async function getCurrentPhaseInfo() {
   } catch (error) {
     console.error('❌ Error getting current phase info:', error);
     return null;
+  }
+}
+
+// Calculate package price based on current phase
+async function calculatePackagePrice(pkg) {
+  try {
+    const currentPhase = await getCurrentPhaseInfo();
+    if (!currentPhase) {
+      console.error('❌ No active phase found, using base package price');
+      return pkg.price;
+    }
+
+    // Package price = shares × current phase price per share
+    const dynamicPrice = pkg.shares * currentPhase.price_per_share;
+
+    console.log(`💰 Package ${pkg.name}: ${pkg.shares} shares × $${currentPhase.price_per_share} = $${dynamicPrice}`);
+
+    return dynamicPrice;
+  } catch (error) {
+    console.error('❌ Error calculating package price:', error);
+    return pkg.price; // Fallback to base price
   }
 }
 
@@ -1896,9 +1922,11 @@ Choose from our 8 premium mining equipment packages, each representing real mini
 
 `;
 
-  packages.forEach((pkg, index) => {
-    packagesMessage += `**${index + 1}. ${pkg.name.toUpperCase()}** - ${formatCurrency(pkg.price)}\n   └ ${pkg.shares.toLocaleString()} equity shares\n\n`;
-  });
+  for (let index = 0; index < packages.length; index++) {
+    const pkg = packages[index];
+    const dynamicPrice = await calculatePackagePrice(pkg);
+    packagesMessage += `**${index + 1}. ${pkg.name.toUpperCase()}** - ${formatCurrency(dynamicPrice)}\n   └ ${pkg.shares.toLocaleString()} equity shares\n\n`;
+  }
 
   if (currentPhase) {
     packagesMessage += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📈 **CURRENT PHASE:** ${currentPhase.phase_name}\n💰 **Share Price:** ${formatCurrency(currentPhase.price_per_share)}\n📊 **Available:** ${(currentPhase.total_shares_available - currentPhase.shares_sold).toLocaleString()} shares\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
@@ -1907,7 +1935,7 @@ Choose from our 8 premium mining equipment packages, each representing real mini
   packagesMessage += '\n\n**Select a package to view detailed information:**';
 
   await ctx.replyWithMarkdown(packagesMessage, {
-    reply_markup: createPackagesKeyboard(packages)
+    reply_markup: await createPackagesKeyboard(packages)
   });
 }
 
@@ -3012,15 +3040,8 @@ async function handlePurchaseFlow(ctx, callbackData) {
 
   const currentPhase = await db.getCurrentPhase();
 
-  // Calculate package cost based on current phase
-  // Base package prices double each phase after phase 1
-  let packageCost = pkg.price;
-  if (currentPhase && currentPhase.phase_name !== 'Pre Sale') {
-    const phaseNumber = parseInt(currentPhase.phase_name.replace('Phase ', '')) || 0;
-    if (phaseNumber > 0) {
-      packageCost = pkg.price * Math.pow(2, phaseNumber);
-    }
-  }
+  // Calculate package cost based on current phase pricing
+  const packageCost = await calculatePackagePrice(pkg);
 
   // Get user's commission balance
   const { data: commissionBalance, error: balanceError } = await db.client
@@ -4717,14 +4738,7 @@ async function handleBSCPayment(ctx, callbackData) {
     return;
   }
 
-  const currentPhase = await db.getCurrentPhase();
-  let packageCost = pkg.price;
-  if (currentPhase && currentPhase.phase_name !== 'Pre Sale') {
-    const phaseNumber = parseInt(currentPhase.phase_name.replace('Phase ', '')) || 0;
-    if (phaseNumber > 0) {
-      packageCost = pkg.price * Math.pow(2, phaseNumber);
-    }
-  }
+  const packageCost = await calculatePackagePrice(pkg);
 
   const paymentMessage = `**💳 BSC USDT PAYMENT**
 
@@ -5167,14 +5181,7 @@ async function completePaymentVerification(ctx, transactionHash) {
   const userId = telegramUserData.user_id;
 
   // Calculate package cost with phase pricing
-  const currentPhase = await db.getCurrentPhase();
-  let packageCost = pkg.price;
-  if (currentPhase && currentPhase.phase_name !== 'Pre Sale') {
-    const phaseNumber = parseInt(currentPhase.phase_name.replace('Phase ', '')) || 0;
-    if (phaseNumber > 0) {
-      packageCost = pkg.price * Math.pow(2, phaseNumber);
-    }
-  }
+  const packageCost = await calculatePackagePrice(pkg);
 
   // Get company wallet for the network
   const walletData = await db.getWalletByNetwork(network.toUpperCase());

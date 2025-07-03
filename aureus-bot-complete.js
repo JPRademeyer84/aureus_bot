@@ -1164,10 +1164,25 @@ bot.on('callback_query', async (ctx) => {
         break;
     }
 
-    await ctx.answerCbQuery();
+    // Answer callback query with timeout protection
+    try {
+      await ctx.answerCbQuery();
+    } catch (cbError) {
+      // Ignore timeout errors - they're not critical
+      if (!cbError.message.includes('query is too old')) {
+        console.error('Callback query answer error:', cbError);
+      }
+    }
   } catch (error) {
     console.error('Callback query error:', error);
-    await ctx.answerCbQuery('An error occurred. Please try again.');
+    try {
+      await ctx.answerCbQuery('An error occurred. Please try again.');
+    } catch (cbError) {
+      // Ignore timeout errors on error responses too
+      if (!cbError.message.includes('query is too old')) {
+        console.error('Error callback query answer error:', cbError);
+      }
+    }
   }
 });
 

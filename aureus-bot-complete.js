@@ -4950,6 +4950,9 @@ async function ensureStorageBucket() {
 // Start bot
 async function startBot() {
   try {
+    console.log("🚀 Starting Aureus Alliance Holdings Telegram Bot...");
+    console.log("📊 Database: Supabase PostgreSQL");
+
     console.log("🔍 Testing database connection...");
     const isDbConnected = await db.testConnection();
 
@@ -4958,7 +4961,9 @@ async function startBot() {
     } else {
       console.log("✅ Database connection successful!");
       // Ensure storage bucket exists
+      console.log("🪣 Initializing storage bucket...");
       await ensureStorageBucket();
+      console.log("✅ Storage bucket ready!");
     }
 
     // Clear global commands - commands will be set per user
@@ -4967,14 +4972,32 @@ async function startBot() {
       { command: 'start', description: 'Start the bot' }
     ]);
 
+    // Add graceful shutdown handlers
+    process.once('SIGINT', () => {
+      console.log('🛑 Received SIGINT, shutting down gracefully...');
+      bot.stop('SIGINT');
+    });
+
+    process.once('SIGTERM', () => {
+      console.log('🛑 Received SIGTERM, shutting down gracefully...');
+      bot.stop('SIGTERM');
+    });
+
     console.log("🤖 Starting bot in polling mode...");
     await bot.launch();
+
     console.log("✅ Aureus Alliance Holdings Bot is running!");
     console.log("🤖 Bot username: @aureus_africa_bot");
     console.log("🔒 Commands restricted to admin only");
     console.log("👥 Regular users use button interface only");
+    console.log("🔗 Bot is now listening for messages...");
+
   } catch (error) {
     console.error("❌ Failed to start bot:", error);
+    console.error("📋 Error details:", error.message);
+    if (error.stack) {
+      console.error("🔍 Stack trace:", error.stack);
+    }
     process.exit(1);
   }
 }
@@ -5639,5 +5662,18 @@ process.once("SIGTERM", () => {
   bot.stop("SIGTERM");
 });
 
+// Global error handlers
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  process.exit(1);
+});
+
 // Start the bot
-startBot();
+startBot().catch(error => {
+  console.error('❌ Critical startup error:', error);
+  process.exit(1);
+});

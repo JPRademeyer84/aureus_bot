@@ -1177,6 +1177,10 @@ bot.on('callback_query', async (ctx) => {
         await startAuthenticationFlow(ctx);
         break;
 
+      case 'wait_pending':
+        await handleWaitPending(ctx);
+        break;
+
       default:
         if (callbackData.startsWith('package_')) {
           await handlePackageSelection(ctx, callbackData);
@@ -1220,6 +1224,10 @@ bot.on('callback_query', async (ctx) => {
           await handleConfirmRejection(ctx, callbackData);
         } else if (callbackData.startsWith('confirm_sponsor_')) {
           await handleConfirmSponsor(ctx, callbackData);
+        } else if (callbackData.startsWith('cancel_payment_')) {
+          await handleCancelPayment(ctx, callbackData);
+        } else if (callbackData.startsWith('confirm_cancel_')) {
+          await handleConfirmCancel(ctx, callbackData);
         }
         break;
     }
@@ -3228,6 +3236,53 @@ async function handlePurchaseFlow(ctx, callbackData) {
 
   const userId = telegramUser.user_id;
   console.log(`👤 Purchase flow - User ID: ${userId}`);
+
+  // Check for existing pending payments
+  const { data: pendingPayments, error: pendingError } = await db.client
+    .from('crypto_payment_transactions')
+    .select('id, amount, network, created_at, status')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  if (pendingError) {
+    console.error('Error checking pending payments:', pendingError);
+  } else if (pendingPayments && pendingPayments.length > 0) {
+    // User has pending payments - show management options
+    const pendingPayment = pendingPayments[0]; // Most recent pending payment
+    const paymentDate = new Date(pendingPayment.created_at).toLocaleDateString();
+
+    const pendingMessage = `⚠️ **PENDING PAYMENT DETECTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚨 **You have an existing pending payment:**
+
+💰 **Amount:** $${pendingPayment.amount}
+🌐 **Network:** ${pendingPayment.network}
+📅 **Submitted:** ${paymentDate}
+⏳ **Status:** Pending Admin Approval
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⚠️ IMPORTANT:**
+You cannot make new purchases while you have pending payments.
+
+**🔧 CHOOSE AN OPTION:**`;
+
+    await ctx.replyWithMarkdown(pendingMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⏳ Wait for Current Payment", callback_data: "wait_pending" }],
+          [{ text: "❌ Cancel Pending Payment", callback_data: `cancel_payment_${pendingPayment.id}` }],
+          [{ text: "📊 View Payment Status", callback_data: "view_portfolio" }],
+          [{ text: "🔙 Back to Packages", callback_data: "menu_packages" }]
+        ]
+      }
+    });
+    return;
+  }
+
   const requiredTerms = ['general', 'privacy', 'investment_risks', 'mining_operations', 'nft_terms', 'dividend_policy'];
 
   // Check which terms haven't been accepted
@@ -6073,6 +6128,141 @@ process.once("SIGTERM", () => {
   console.log("🛑 Stopping bot...");
   bot.stop("SIGTERM");
 });
+
+// Pending payment management handlers
+async function handleWaitPending(ctx) {
+  await ctx.replyWithMarkdown(`⏳ **WAITING FOR CURRENT PAYMENT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ **You chose to wait for your current payment to be processed.**
+
+**⏰ WHAT HAPPENS NEXT:**
+• Our admin team will review your payment
+• You'll receive a notification once approved
+• Your shares will be automatically allocated
+• You can then make additional purchases
+
+**📊 MEANWHILE:**
+• Check your portfolio for updates
+• Review your referral earnings
+• Explore mining calculator features
+
+**⏱️ PROCESSING TIME:** Usually within 24 hours`, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📊 View Portfolio", callback_data: "view_portfolio" }],
+        [{ text: "💰 Check Referrals", callback_data: "menu_referrals" }],
+        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+async function handleCancelPayment(ctx, callbackData) {
+  const paymentId = callbackData.split('_')[2];
+
+  const confirmMessage = `⚠️ **CANCEL PENDING PAYMENT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚨 **ARE YOU SURE?**
+
+This will permanently cancel your pending payment and allow you to make a new purchase.
+
+**⚠️ IMPORTANT WARNINGS:**
+• If you already sent payment, you'll need to contact support
+• This action cannot be undone
+• You'll lose your place in the payment queue
+
+**🔧 CHOOSE CAREFULLY:**`;
+
+  await ctx.replyWithMarkdown(confirmMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "✅ Yes, Cancel Payment", callback_data: `confirm_cancel_${paymentId}` }],
+        [{ text: "❌ No, Keep Payment", callback_data: "wait_pending" }],
+        [{ text: "📞 Contact Support", callback_data: "menu_help" }]
+      ]
+    }
+  });
+}
+
+async function handleConfirmCancel(ctx, callbackData) {
+  const paymentId = callbackData.split('_')[2];
+
+  try {
+    // Update payment status to cancelled
+    const { data: cancelledPayment, error: cancelError } = await db.client
+      .from('crypto_payment_transactions')
+      .update({
+        status: 'cancelled',
+        admin_notes: 'Cancelled by user request',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId)
+      .eq('status', 'pending') // Only cancel if still pending
+      .select()
+      .single();
+
+    if (cancelError || !cancelledPayment) {
+      await ctx.replyWithMarkdown(`❌ **CANCELLATION FAILED**
+
+Unable to cancel payment. It may have already been processed or doesn't exist.
+
+Please contact support if you need assistance.`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📞 Contact Support", callback_data: "menu_help" }],
+            [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Log the cancellation
+    await logAdminAction(
+      ctx.from.id,
+      ctx.from.username || ctx.from.first_name,
+      'CANCEL_PAYMENT',
+      'user_action',
+      paymentId,
+      { amount: cancelledPayment.amount, network: cancelledPayment.network }
+    );
+
+    const successMessage = `✅ **PAYMENT CANCELLED SUCCESSFULLY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🗑️ **Your pending payment has been cancelled:**
+
+💰 **Amount:** $${cancelledPayment.amount}
+🌐 **Network:** ${cancelledPayment.network}
+⏰ **Cancelled:** ${new Date().toLocaleDateString()}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ **You can now make new purchases!**
+
+**⚠️ IMPORTANT:**
+If you already sent payment to our wallet, please contact support immediately with your transaction details.`;
+
+    await ctx.replyWithMarkdown(successMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛒 Browse Packages", callback_data: "menu_packages" }],
+          [{ text: "📞 Contact Support", callback_data: "menu_help" }],
+          [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error cancelling payment:', error);
+    await ctx.replyWithMarkdown('❌ **Error cancelling payment**\n\nPlease try again or contact support.');
+  }
+}
 
 // Global error handlers
 process.on('unhandledRejection', (reason, promise) => {

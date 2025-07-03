@@ -824,7 +824,7 @@ bot.on('callback_query', async (ctx) => {
     // Skip authentication check for authentication-related callbacks
     const authCallbacks = [
       'login_investor', 'login_admin', 'register_new', 'help_access',
-      'back_to_welcome', 'enter_email', 'main_menu', 'sponsor_manual',
+      'back_to_welcome', 'enter_email', 'sponsor_manual',
       'sponsor_auto', 'back_to_password', 'back_to_sponsor_selection'
     ];
 

@@ -2809,7 +2809,7 @@ async function handleConfirmApproval(ctx, callbackData) {
 
         console.log('🔗 Payment linked to share purchase');
 
-        // Update investment phases with shares purchased
+        // Update investment phases with shares purchased (only when approved)
         await updateInvestmentPhases(packageInfo.shares);
 
         // Create commission for referrer if exists
@@ -3260,8 +3260,7 @@ async function processCommissionPayment(ctx, userId, pkg, commissionAmount, rema
         .eq('user_id', userId);
     }
 
-    // Update investment phases with shares purchased
-    await updateInvestmentPhases(pkg.shares);
+    // Note: Investment phases will be updated when purchase is approved by admin
 
     if (remainingAmount > 0) {
       // Show crypto payment options for remaining amount
@@ -5264,8 +5263,7 @@ async function completePaymentVerification(ctx, transactionHash) {
         .update({ share_purchase_id: investmentRecord.id })
         .eq('id', paymentRecord.id);
 
-      // Update investment phases with shares purchased
-      await updateInvestmentPhases(pkg.shares);
+      // Note: Investment phases will be updated when admin approves the purchase
     }
 
     // Clear user state

@@ -1412,12 +1412,37 @@ async function handleAutoSponsorAssignment(ctx) {
       .single();
 
     let sponsorInfo = null;
+
     if (!investorError && recentInvestor) {
+      // Use most recent investor as sponsor
       sponsorInfo = {
         id: recentInvestor.id,
         username: recentInvestor.username,
         full_name: recentInvestor.full_name
       };
+      console.log(`✅ Auto-assigned recent investor as sponsor: ${recentInvestor.username}`);
+    } else {
+      // Fallback to TTTFOUNDER if no recent investor found
+      console.log('⚠️ No recent investor found, falling back to TTTFOUNDER');
+
+      const { data: tttfounder, error: founderError } = await db.client
+        .from('users')
+        .select('id, username, full_name')
+        .eq('username', 'TTTFOUNDER')
+        .single();
+
+      if (!founderError && tttfounder) {
+        sponsorInfo = {
+          id: tttfounder.id,
+          username: tttfounder.username,
+          full_name: tttfounder.full_name
+        };
+        console.log('✅ TTTFOUNDER assigned as fallback sponsor');
+      } else {
+        console.error('❌ TTTFOUNDER not found in database:', founderError);
+        await ctx.replyWithMarkdown('❌ **Auto-assignment failed**\n\nTTTFOUNDER account not found. Please contact support.');
+        return;
+      }
     }
 
     await completeUserRegistration(ctx, session.session_data, sponsorInfo);
@@ -1807,6 +1832,60 @@ async function createCommissionForInvestment(investmentId, investorId, investmen
 
     if (referralError || !referral) {
       console.log('📋 No active referral found for this shareholder');
+
+      // FALLBACK: Check if this is user's first purchase and assign TTTFOUNDER as sponsor
+      console.log('🔍 Checking if this is user\'s first purchase for TTTFOUNDER fallback assignment...');
+
+      const { data: userPurchases, error: purchaseCheckError } = await db.client
+        .from('aureus_share_purchases')
+        .select('id')
+        .eq('user_id', investorId)
+        .eq('status', 'active');
+
+      if (!purchaseCheckError && userPurchases && userPurchases.length <= 1) {
+        // This is user's first purchase, assign TTTFOUNDER as sponsor
+        console.log('🎯 First purchase detected, assigning TTTFOUNDER as fallback sponsor');
+
+        const { data: tttfounder, error: founderError } = await db.client
+          .from('users')
+          .select('id, username, full_name')
+          .eq('username', 'TTTFOUNDER')
+          .single();
+
+        if (!founderError && tttfounder) {
+          // Create referral relationship with TTTFOUNDER
+          const { data: newReferral, error: referralCreationError } = await db.client
+            .from('referrals')
+            .insert([{
+              referrer_id: tttfounder.id,
+              referred_id: investorId,
+              commission_rate: 15.00,
+              status: 'active',
+              created_at: new Date().toISOString()
+            }])
+            .select()
+            .single();
+
+          if (!referralCreationError && newReferral) {
+            console.log(`✅ TTTFOUNDER fallback referral relationship created for user ${investorId}`);
+
+            // Now proceed with commission creation using the new referral
+            const commissionRate = 15.00;
+            const usdtCommission = (parseFloat(investmentAmount) * commissionRate) / 100;
+            const shareCommission = (parseFloat(investmentAmount) * commissionRate) / 100;
+
+            console.log(`🎯 Creating fallback commission: ${commissionRate}% USDT ($${usdtCommission.toFixed(2)}) + ${commissionRate}% Shares ($${shareCommission.toFixed(2)}) for TTTFOUNDER`);
+
+            // Continue with commission creation using TTTFOUNDER as referrer
+            return await createCommissionRecord(tttfounder.id, investorId, investmentId, commissionRate, investmentAmount, usdtCommission, shareCommission);
+          } else {
+            console.error('❌ Failed to create TTTFOUNDER fallback referral:', referralCreationError);
+          }
+        } else {
+          console.error('❌ TTTFOUNDER not found for fallback assignment:', founderError);
+        }
+      }
+
       return;
     }
 
@@ -1816,11 +1895,20 @@ async function createCommissionForInvestment(investmentId, investorId, investmen
 
     console.log(`🎯 Creating dual commission: ${commissionRate}% USDT ($${usdtCommission.toFixed(2)}) + ${commissionRate}% Shares ($${shareCommission.toFixed(2)})`);
 
+    return await createCommissionRecord(referral.referrer_id, investorId, investmentId, commissionRate, investmentAmount, usdtCommission, shareCommission);
+
+  } catch (error) {
+    console.error('❌ Create commission error:', error);
+  }
+}
+
+async function createCommissionRecord(referrerId, investorId, investmentId, commissionRate, investmentAmount, usdtCommission, shareCommission) {
+  try {
     // Create commission transaction record (new dual commission system)
     const { data: commissionTransaction, error: transactionError } = await db.client
       .from('commission_transactions')
       .insert([{
-        referrer_id: referral.referrer_id,
+        referrer_id: referrerId,
         referred_id: investorId,
         share_purchase_id: investmentId,
         commission_rate: commissionRate,
@@ -1841,7 +1929,7 @@ async function createCommissionForInvestment(investmentId, investorId, investmen
       const { data: commission, error: commissionError } = await db.client
         .from('commissions')
         .insert([{
-          referrer_id: referral.referrer_id,
+          referrer_id: referrerId,
           referred_id: investorId,
           share_purchase_id: investmentId,
           commission_rate: commissionRate,
@@ -1860,13 +1948,13 @@ async function createCommissionForInvestment(investmentId, investorId, investmen
     }
 
     // Update commission balance
-    await updateCommissionBalance(referral.referrer_id, usdtCommission, shareCommission);
+    await updateCommissionBalance(referrerId, usdtCommission, shareCommission);
 
-    console.log(`✅ Dual commission created: $${usdtCommission.toFixed(2)} USDT + $${shareCommission.toFixed(2)} Shares for referrer ${referral.referrer_id}`);
+    console.log(`✅ Dual commission created: $${usdtCommission.toFixed(2)} USDT + $${shareCommission.toFixed(2)} Shares for referrer ${referrerId}`);
 
     // Notify referrer about the commission
     try {
-      await notifyReferrerAboutCommission(referral.referrer_id, investmentAmount, usdtCommission, shareCommission);
+      await notifyReferrerAboutCommission(referrerId, investmentAmount, usdtCommission, shareCommission);
     } catch (notificationError) {
       console.error('Referrer notification error:', notificationError);
       // Don't fail the commission creation if notification fails
@@ -1875,7 +1963,8 @@ async function createCommissionForInvestment(investmentId, investorId, investmen
     return commissionRecord;
 
   } catch (error) {
-    console.error('❌ Create commission error:', error);
+    console.error('❌ Create commission record error:', error);
+    return null;
   }
 }
 

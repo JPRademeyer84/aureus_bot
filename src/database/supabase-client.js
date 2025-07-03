@@ -97,20 +97,23 @@ class SupabaseDB {
     try {
       const { data, error } = await this.client
         .from('telegram_users')
-        .update(updates)
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
         .eq('telegram_id', telegramId)
         .select()
         .single();
-      
+
       if (error) {
         console.error('Error updating telegram user:', error);
-        return false;
+        return null;
       }
-      
-      return true;
+
+      return data;
     } catch (error) {
       console.error('Error updating telegram user:', error);
-      return false;
+      return null;
     }
   }
 
@@ -424,30 +427,7 @@ class SupabaseDB {
     }
   }
 
-  // Update telegram user
-  async updateTelegramUser(telegramId, updates) {
-    try {
-      const { data, error } = await this.client
-        .from('telegram_users')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
-        .eq('telegram_id', telegramId)
-        .select()
-        .single();
 
-      if (error) {
-        console.error('Error updating telegram user:', error);
-        return null;
-      }
-
-      return data;
-    } catch (error) {
-      console.error('Error updating telegram user:', error);
-      return null;
-    }
-  }
 
   // User management functions
   async getUserByEmail(email) {

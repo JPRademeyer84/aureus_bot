@@ -856,7 +856,16 @@ bot.on('photo', async (ctx) => {
       await handlePaymentScreenshot(ctx);
     } else {
       console.log(`❌ User ${user.id} not in payment_verification state, current state: ${userState}`);
-      await ctx.reply('📷 Please use the payment verification process to upload screenshots.');
+
+      // Check if user is authenticated to provide appropriate response
+      const authStatus = await getUserAuthStatus(user.id);
+
+      if (authStatus === 'authenticated') {
+        await ctx.replyWithMarkdown('📷 **Image received**\n\nTo upload payment screenshots, please use the **Share Purchase** process from the main menu.\n\n💡 **Tip:** Go to Main Menu → Mining Packages → Select Package → Payment Verification');
+      } else {
+        await ctx.replyWithMarkdown('📷 **Image received**\n\nPlease complete authentication first to access payment features.');
+        await startAuthenticationFlow(ctx);
+      }
     }
   } catch (error) {
     console.error('Photo handler error:', error);
@@ -884,7 +893,16 @@ bot.on('document', async (ctx) => {
         await handlePaymentScreenshotDocument(ctx);
       } else {
         console.log(`❌ User ${user.id} not in payment_verification state, current state: ${userState}`);
-        await ctx.reply('📷 Please use the payment verification process to upload screenshots.');
+
+        // Check if user is authenticated to provide appropriate response
+        const authStatus = await getUserAuthStatus(user.id);
+
+        if (authStatus === 'authenticated') {
+          await ctx.replyWithMarkdown('📄 **Document received**\n\nTo upload payment screenshots, please use the **Share Purchase** process from the main menu.\n\n💡 **Tip:** Go to Main Menu → Mining Packages → Select Package → Payment Verification');
+        } else {
+          await ctx.replyWithMarkdown('📄 **Document received**\n\nPlease complete authentication first to access payment features.');
+          await startAuthenticationFlow(ctx);
+        }
       }
     } catch (error) {
       console.error('Document handler error:', error);
@@ -914,10 +932,23 @@ bot.on('text', async (ctx) => {
     console.log(`🔄 User state: ${userState}`);
 
     if (!userState) {
-      console.log('❌ No user state found, starting auth flow');
-      // No active state, show welcome
-      await startAuthenticationFlow(ctx);
-      return;
+      console.log('❌ No user state found, checking authentication status');
+
+      // Check if user is already authenticated before starting auth flow
+      const authStatus = await getUserAuthStatus(user.id);
+      console.log(`🔍 Auth status: ${authStatus}`);
+
+      if (authStatus === 'authenticated') {
+        // User is authenticated but has no active state - show main menu
+        console.log('✅ User is authenticated, showing main menu');
+        await showMainMenu(ctx);
+        return;
+      } else {
+        // User needs authentication
+        console.log('🔐 User needs authentication, starting auth flow');
+        await startAuthenticationFlow(ctx);
+        return;
+      }
     }
 
     switch (userState) {

@@ -1467,7 +1467,7 @@ async function handleAutoSponsorAssignment(ctx) {
       const { data: tttfounder, error: founderError } = await db.client
         .from('users')
         .select('id, username, full_name')
-        .eq('username', 'TTTFOUNDER')
+        .ilike('username', 'TTTFOUNDER')
         .single();
 
       if (!founderError && tttfounder) {
@@ -1574,8 +1574,8 @@ async function handleSponsorUsernameInput(ctx, username) {
     return;
   }
 
-  // Clean username (remove @ if present)
-  const cleanUsername = username.replace('@', '').trim();
+  // Clean username (remove @ if present) and convert to lowercase for case-insensitive matching
+  const cleanUsername = username.replace('@', '').trim().toLowerCase();
 
   if (cleanUsername.length < 3) {
     await ctx.replyWithMarkdown('❌ **Username too short**\n\nPlease enter a valid username (minimum 3 characters).');
@@ -1583,11 +1583,11 @@ async function handleSponsorUsernameInput(ctx, username) {
   }
 
   try {
-    // Find sponsor by username
+    // Find sponsor by username (case-insensitive search using ilike)
     const { data: sponsor, error: sponsorError } = await db.client
       .from('users')
       .select('id, username, full_name')
-      .eq('username', cleanUsername)
+      .ilike('username', cleanUsername)
       .single();
 
     if (sponsorError || !sponsor) {
@@ -1888,7 +1888,7 @@ async function createCommissionForInvestment(investmentId, investorId, investmen
         const { data: tttfounder, error: founderError } = await db.client
           .from('users')
           .select('id, username, full_name')
-          .eq('username', 'TTTFOUNDER')
+          .ilike('username', 'TTTFOUNDER')
           .single();
 
         if (!founderError && tttfounder) {
@@ -2893,24 +2893,64 @@ async function handleViewScreenshot(ctx, callbackData) {
   }
 }
 
-// Admin audit logging function
+// Admin audit logging function with defensive value truncation
 async function logAdminAction(adminTelegramId, adminUsername, action, targetType, targetId, details = {}) {
   try {
+    // Defensive programming: truncate values to prevent database errors
+    const truncatedAction = String(action || '').substring(0, 255);
+    const truncatedTargetType = String(targetType || '').substring(0, 50);
+    const truncatedTargetId = String(targetId || '').substring(0, 500);
+    const truncatedUsername = String(adminUsername || '').substring(0, 255);
+
+    // Ensure details is a valid object and not too large
+    let safeDetails = {};
+    try {
+      if (details && typeof details === 'object') {
+        const detailsString = JSON.stringify(details);
+        if (detailsString.length > 10000) {
+          // If details are too large, truncate or summarize
+          safeDetails = {
+            truncated: true,
+            original_size: detailsString.length,
+            summary: String(detailsString).substring(0, 1000) + '...'
+          };
+        } else {
+          safeDetails = details;
+        }
+      }
+    } catch (detailsError) {
+      safeDetails = { error: 'Failed to serialize details', type: typeof details };
+    }
+
     const { error } = await db.client
       .from('admin_audit_logs')
       .insert([{
         admin_telegram_id: adminTelegramId,
-        admin_username: adminUsername,
-        action: action,
-        target_type: targetType,
-        target_id: targetId,
-        details: details
+        admin_username: truncatedUsername,
+        action: truncatedAction,
+        target_type: truncatedTargetType,
+        target_id: truncatedTargetId,
+        details: safeDetails
       }]);
 
     if (error) {
       console.error('Audit log error:', error);
+      // If still failing due to column size, try with minimal data
+      if (error.message && error.message.includes('value too long')) {
+        console.log('🔧 Retrying with minimal audit log data...');
+        await db.client
+          .from('admin_audit_logs')
+          .insert([{
+            admin_telegram_id: adminTelegramId,
+            admin_username: truncatedUsername.substring(0, 50),
+            action: truncatedAction.substring(0, 50),
+            target_type: 'system',
+            target_id: 'truncated',
+            details: { error: 'Original data too long', action: truncatedAction }
+          }]);
+      }
     } else {
-      console.log(`📋 Admin action logged: ${action} by ${adminUsername} on ${targetType} ${targetId}`);
+      console.log(`📋 Admin action logged: ${truncatedAction} by ${truncatedUsername} on ${truncatedTargetType} ${truncatedTargetId}`);
     }
   } catch (error) {
     console.error('Audit logging failed:', error);
@@ -3819,7 +3859,7 @@ async function handleReferralSystem(ctx) {
       return;
     }
 
-    // Get referral statistics
+    // Get referral statistics with Telegram usernames
     const { data: referrals, error: referralsError } = await db.client
       .from('referrals')
       .select(`
@@ -3828,12 +3868,31 @@ async function handleReferralSystem(ctx) {
         commission_rate,
         total_commission,
         users!referrals_referred_id_fkey (
+          id,
           full_name,
-          email
+          email,
+          username
         )
       `)
       .eq('referrer_id', telegramUser.user_id)
       .eq('status', 'active');
+
+    // Get Telegram usernames for referred users
+    let referralsWithTelegram = [];
+    if (referrals && referrals.length > 0) {
+      for (const referral of referrals) {
+        const { data: telegramData, error: telegramError } = await db.client
+          .from('telegram_users')
+          .select('username')
+          .eq('user_id', referral.referred_id)
+          .single();
+
+        referralsWithTelegram.push({
+          ...referral,
+          telegram_username: telegramData?.username || null
+        });
+      }
+    }
 
     // Get commission balance (new dual commission system)
     const { data: commissionBalance, error: balanceError } = await db.client
@@ -3866,8 +3925,8 @@ async function handleReferralSystem(ctx) {
     let totalWithdrawn = 0;
     let pendingWithdrawalAmount = 0;
 
-    if (referrals && !referralsError) {
-      totalReferrals = referrals.length;
+    if (referralsWithTelegram && !referralsError) {
+      totalReferrals = referralsWithTelegram.length;
     }
 
     if (commissionBalance) {
@@ -3911,15 +3970,37 @@ async function handleReferralSystem(ctx) {
 • **Withdrawal:** Request withdrawals anytime
 • **Usage:** Use USDT balance for share purchases`;
 
-    if (referrals && referrals.length > 0) {
+    if (referralsWithTelegram && referralsWithTelegram.length > 0) {
       referralMessage += '\n\n**YOUR REFERRALS:**\n';
-      referrals.slice(0, 5).forEach((ref, index) => {
+
+      // Show first 5 referrals with contact information
+      referralsWithTelegram.slice(0, 5).forEach((ref, index) => {
         const referredName = ref.users?.full_name || ref.users?.email || 'Unknown User';
-        referralMessage += `\n${index + 1}. ${referredName}`;
+        const telegramUsername = ref.telegram_username;
+
+        if (telegramUsername) {
+          referralMessage += `\n${index + 1}. ${referredName} (@${telegramUsername})`;
+        } else {
+          referralMessage += `\n${index + 1}. ${referredName} (No Telegram username)`;
+        }
       });
 
-      if (referrals.length > 5) {
-        referralMessage += `\n... and ${referrals.length - 5} more referrals`;
+      if (referralsWithTelegram.length > 5) {
+        referralMessage += `\n... and ${referralsWithTelegram.length - 5} more referrals`;
+      }
+
+      // Add contact section if there are users with Telegram usernames
+      const usersWithTelegram = referralsWithTelegram.filter(ref => ref.telegram_username);
+      if (usersWithTelegram.length > 0) {
+        referralMessage += '\n\n**CONTACT YOUR REFERRALS:**\n';
+        const contactList = usersWithTelegram.slice(0, 3).map(ref => `@${ref.telegram_username}`).join(', ');
+        referralMessage += `${contactList}`;
+
+        if (usersWithTelegram.length > 3) {
+          referralMessage += ` and ${usersWithTelegram.length - 3} more`;
+        }
+
+        referralMessage += '\n\n💡 **Tip:** Click on usernames above to contact your referrals directly!';
       }
     } else {
       referralMessage += '\n\n**YOUR REFERRALS:**\nNo referrals yet. Start sharing your referral code!';

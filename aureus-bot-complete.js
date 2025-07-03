@@ -1772,6 +1772,8 @@ async function createCommissionForInvestment(investmentId, investorId, investmen
       .select()
       .single();
 
+    let commissionRecord = commissionTransaction;
+
     if (transactionError) {
       console.error('❌ Commission transaction creation error:', transactionError);
       // Fall back to old commission system
@@ -1792,6 +1794,8 @@ async function createCommissionForInvestment(investmentId, investorId, investmen
         console.error('❌ Fallback commission creation error:', commissionError);
         return;
       }
+
+      commissionRecord = commission;
     }
 
     // Update commission balance
@@ -1807,7 +1811,7 @@ async function createCommissionForInvestment(investmentId, investorId, investmen
       // Don't fail the commission creation if notification fails
     }
 
-    return commission;
+    return commissionRecord;
 
   } catch (error) {
     console.error('❌ Create commission error:', error);

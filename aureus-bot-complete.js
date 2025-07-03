@@ -3247,7 +3247,6 @@ async function processCommissionPayment(ctx, userId, pkg, commissionAmount, rema
 
     // Update investment phases with shares purchased
     await updateInvestmentPhases(pkg.shares);
-    }
 
     if (remainingAmount > 0) {
       // Show crypto payment options for remaining amount

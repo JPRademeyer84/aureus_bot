@@ -3352,6 +3352,62 @@ Choose your preferred network for the remaining amount:
   });
 }
 
+async function calculateWashplantDividends(shares) {
+  // Washplant operational data
+  const WASHPLANT_SCHEDULE = {
+    year1: 4,   // 4 washplants
+    year2: 10,  // 10 washplants
+    year3: 20,  // 20 washplants
+    year4: 30,  // 30 washplants
+    year5: 40   // 40 washplants
+  };
+
+  // Operational constants
+  const TONS_PER_HOUR = 200;
+  const HOURS_PER_DAY = 10;
+  const DAYS_PER_YEAR = 365;
+  const HECTARES_PER_WASHPLANT = 25;
+  const GOLD_GRAMS_PER_TON = 0.8; // Average gold content
+  const GOLD_PRICE_PER_GRAM = 107; // Current gold price ~$107/gram
+  const OPERATIONAL_COST_PERCENTAGE = 0.45; // 45% operational costs
+  const TOTAL_SHARES = 1400000; // Total Aureus shares
+
+  const results = {};
+
+  Object.keys(WASHPLANT_SCHEDULE).forEach(year => {
+    const washplants = WASHPLANT_SCHEDULE[year];
+
+    // Calculate annual production
+    const annualTons = washplants * TONS_PER_HOUR * HOURS_PER_DAY * DAYS_PER_YEAR;
+    const annualGoldGrams = annualTons * GOLD_GRAMS_PER_TON;
+    const annualGoldKg = annualGoldGrams / 1000;
+
+    // Calculate revenue and profit
+    const grossRevenue = annualGoldGrams * GOLD_PRICE_PER_GRAM;
+    const operationalCosts = grossRevenue * OPERATIONAL_COST_PERCENTAGE;
+    const netProfit = grossRevenue - operationalCosts;
+
+    // Calculate dividends
+    const dividendPerShare = netProfit / TOTAL_SHARES;
+    const userAnnualDividend = dividendPerShare * shares;
+    const userQuarterlyDividend = userAnnualDividend / 4;
+
+    results[year] = {
+      washplants,
+      annualTons: Math.round(annualTons),
+      annualGoldKg: Math.round(annualGoldKg * 100) / 100,
+      grossRevenue: Math.round(grossRevenue),
+      operationalCosts: Math.round(operationalCosts),
+      netProfit: Math.round(netProfit),
+      dividendPerShare: Math.round(dividendPerShare * 100) / 100,
+      userAnnualDividend: Math.round(userAnnualDividend * 100) / 100,
+      userQuarterlyDividend: Math.round(userQuarterlyDividend * 100) / 100
+    };
+  });
+
+  return results;
+}
+
 async function handleCalculateReturns(ctx, callbackData) {
   const packageId = callbackData.split('_')[1];
   const pkg = await db.getPackageById(packageId);
@@ -3361,7 +3417,10 @@ async function handleCalculateReturns(ctx, callbackData) {
     return;
   }
 
-  const calculationMessage = `📊 **RETURN CALCULATOR - ${pkg.name.toUpperCase()}**
+  // Calculate washplant-based dividends
+  const dividendProjections = await calculateWashplantDividends(pkg.shares);
+
+  const calculationMessage = `📊 **MINING DIVIDEND CALCULATOR - ${pkg.name.toUpperCase()}**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -3369,27 +3428,54 @@ async function handleCalculateReturns(ctx, callbackData) {
 
 💰 **Initial Share Purchase:** ${formatCurrency(pkg.price)}
 📊 **Equity Shares:** ${pkg.shares.toLocaleString()}
-📈 **Annual ROI:** ${pkg.roi}%
+⛏️ **Commission Rate:** 15% (not ROI)
 
-**PROJECTED RETURNS:**
+**WASHPLANT-BASED DIVIDEND PROJECTIONS:**
 
-**QUARTERLY DIVIDENDS:**
-• Q1: ${formatCurrency(pkg.quarter_dividends)}
-• Q2: ${formatCurrency(pkg.quarter_dividends)}
-• Q3: ${formatCurrency(pkg.quarter_dividends)}
-• Q4: ${formatCurrency(pkg.quarter_dividends)}
+**YEAR 1 (${dividendProjections.year1.washplants} Washplants):**
+🏭 Production: ${dividendProjections.year1.annualTons.toLocaleString()} tons/year
+🥇 Gold Output: ${dividendProjections.year1.annualGoldKg} kg/year
+💰 Your Annual Dividend: ${formatCurrency(dividendProjections.year1.userAnnualDividend)}
+📅 Quarterly Dividend: ${formatCurrency(dividendProjections.year1.userQuarterlyDividend)}
 
-**ANNUAL TOTALS:**
-• **Year 1:** ${formatCurrency(pkg.annual_dividends)}
-• **Year 2:** ${formatCurrency(pkg.annual_dividends * 1.1)} (10% growth)
-• **Year 3:** ${formatCurrency(pkg.annual_dividends * 1.21)} (10% growth)
-• **Year 5:** ${formatCurrency(pkg.annual_dividends * 1.46)} (10% growth)
+**YEAR 2 (${dividendProjections.year2.washplants} Washplants):**
+🏭 Production: ${dividendProjections.year2.annualTons.toLocaleString()} tons/year
+🥇 Gold Output: ${dividendProjections.year2.annualGoldKg} kg/year
+💰 Your Annual Dividend: ${formatCurrency(dividendProjections.year2.userAnnualDividend)}
 
-**5-YEAR TOTAL DIVIDENDS:** ${formatCurrency(pkg.annual_dividends * 6.11)}
+**YEAR 3 (${dividendProjections.year3.washplants} Washplants):**
+🏭 Production: ${dividendProjections.year3.annualTons.toLocaleString()} tons/year
+🥇 Gold Output: ${dividendProjections.year3.annualGoldKg} kg/year
+💰 Your Annual Dividend: ${formatCurrency(dividendProjections.year3.userAnnualDividend)}
+
+**YEAR 4 (${dividendProjections.year4.washplants} Washplants):**
+🏭 Production: ${dividendProjections.year4.annualTons.toLocaleString()} tons/year
+🥇 Gold Output: ${dividendProjections.year4.annualGoldKg} kg/year
+💰 Your Annual Dividend: ${formatCurrency(dividendProjections.year4.userAnnualDividend)}
+
+**YEAR 5 (${dividendProjections.year5.washplants} Washplants):**
+🏭 Production: ${dividendProjections.year5.annualTons.toLocaleString()} tons/year
+🥇 Gold Output: ${dividendProjections.year5.annualGoldKg} kg/year
+💰 Your Annual Dividend: ${formatCurrency(dividendProjections.year5.userAnnualDividend)}
+
+**5-YEAR TOTAL DIVIDENDS:** ${formatCurrency(
+  dividendProjections.year1.userAnnualDividend +
+  dividendProjections.year2.userAnnualDividend +
+  dividendProjections.year3.userAnnualDividend +
+  dividendProjections.year4.userAnnualDividend +
+  dividendProjections.year5.userAnnualDividend
+)}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-*Projections based on current mining operations and gold prices. Actual returns may vary.*`;
+**OPERATIONAL BASIS:**
+• 25 hectares per 200 tons/hour washplant
+• 10 hours daily operation per washplant
+• 0.8g gold per ton of material processed
+• Current gold price: ~$107/gram
+• 45% operational costs (fuel, maintenance, labor)
+
+*Projections based on actual mining operations and washplant capacity. Actual returns depend on gold content, weather, and operational factors.*`;
 
   await ctx.replyWithMarkdown(calculationMessage, {
     reply_markup: {

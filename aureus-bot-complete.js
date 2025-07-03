@@ -316,6 +316,49 @@ async function getUserAuthStatus(telegramId) {
   return 'needs_login'; // Exists but needs to login
 }
 
+// Ensure proper authentication state after login/registration
+async function ensureUserAuthenticationState(telegramId) {
+  try {
+    const telegramUser = await db.getTelegramUser(telegramId);
+
+    if (!telegramUser) {
+      console.log(`⚠️ No telegram user found for ID ${telegramId} during state verification`);
+      return false;
+    }
+
+    // Verify the user is properly authenticated
+    if (!telegramUser.is_registered || !telegramUser.user_id) {
+      console.log(`⚠️ User ${telegramId} authentication state inconsistent - fixing`);
+
+      // Try to fix the state if user exists in main users table
+      const mainUser = await db.client
+        .from('users')
+        .select('id')
+        .eq('id', telegramUser.user_id)
+        .single();
+
+      if (mainUser.data) {
+        // Fix the telegram user state
+        await db.updateTelegramUser(telegramId, {
+          is_registered: true,
+          user_id: mainUser.data.id
+        });
+        console.log(`✅ Fixed authentication state for user ${telegramId}`);
+        return true;
+      } else {
+        console.log(`❌ Cannot fix authentication state for user ${telegramId} - main user not found`);
+        return false;
+      }
+    }
+
+    console.log(`✅ User ${telegramId} authentication state verified`);
+    return true;
+  } catch (error) {
+    console.error('Error ensuring authentication state:', error);
+    return false;
+  }
+}
+
 async function requireAuthentication(ctx, action = 'perform this action') {
   const authStatus = await getUserAuthStatus(ctx.from.id);
 
@@ -463,7 +506,9 @@ async function handleLoginPasswordInput(ctx, password) {
     });
   }
 
+  // Ensure complete state cleanup and proper authentication state
   await clearUserState(user.id);
+  await ensureUserAuthenticationState(user.id);
 
   const successMessage = `**✅ LOGIN SUCCESSFUL**
 
@@ -1744,8 +1789,9 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
       }
     }
 
-    // Clear user state
+    // Ensure complete state cleanup and proper authentication state
     await clearUserState(user.id);
+    await ensureUserAuthenticationState(user.id);
 
     let sponsorText = '';
     if (sponsorInfo) {
@@ -3073,7 +3119,7 @@ async function handleConfirmApproval(ctx, callbackData) {
 👨‍💼 **Approved by:** @${user.username}
 
 ✅ **Status:** Payment approved successfully
-📧 **Next:** User will be notified automatically
+📱 **Next:** User will be notified in app automatically
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
@@ -3187,7 +3233,7 @@ async function handleConfirmRejection(ctx, callbackData) {
 👨‍💼 **Rejected by:** @${user.username}
 
 ❌ **Status:** Payment rejected
-📧 **Next:** User will be notified with reason
+📱 **Next:** User will be notified in app with reason
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
@@ -6096,8 +6142,8 @@ Our support team can help verify your transaction.`;
 **⏳ NEXT STEPS:**
 Your payment is now pending admin approval. You will be notified once your shares are allocated to your account.
 
-**📧 CONFIRMATION:**
-A confirmation email will be sent once approved.`;
+**📱 CONFIRMATION:**
+A confirmation message will be sent to this app once approved.`;
 
     await ctx.replyWithMarkdown(completionMessage, {
       reply_markup: {

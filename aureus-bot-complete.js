@@ -66,6 +66,9 @@ function createMainMenuKeyboard(isAdmin = false) {
     [
       { text: "📋 Legal Documents", callback_data: "menu_terms" },
       { text: "🆘 Support Center", callback_data: "menu_help" }
+    ],
+    [
+      { text: "🚪 Logout", callback_data: "user_logout" }
     ]
   ];
 
@@ -300,8 +303,10 @@ async function getUserAuthStatus(telegramId) {
     return 'new_user'; // Never used the system
   }
 
+  // If user is registered and has a linked user_id, they are permanently authenticated
+  // No need to re-authenticate as long as they're using the same Telegram account
   if (telegramUser.is_registered && telegramUser.user_id) {
-    return 'authenticated'; // Fully authenticated
+    return 'authenticated'; // Permanently authenticated via Telegram username
   }
 
   if (telegramUser.is_registered === false) {
@@ -309,6 +314,18 @@ async function getUserAuthStatus(telegramId) {
   }
 
   return 'needs_login'; // Exists but needs to login
+}
+
+async function requireAuthentication(ctx, action = 'perform this action') {
+  const authStatus = await getUserAuthStatus(ctx.from.id);
+
+  if (authStatus !== 'authenticated') {
+    await ctx.replyWithMarkdown(`❌ **Authentication required**\n\nPlease log in to ${action}.`);
+    await startAuthenticationFlow(ctx);
+    return false;
+  }
+
+  return true;
 }
 
 // Authentication flow
@@ -1104,6 +1121,10 @@ bot.on('callback_query', async (ctx) => {
         await handleAdminUserSponsors(ctx);
         break;
 
+      case 'user_logout':
+        await handleUserLogout(ctx);
+        break;
+
       case 'admin_approved_payments':
         await handleApprovedPayments(ctx);
         break;
@@ -1703,6 +1724,46 @@ Welcome to **Aureus Alliance Holdings**, ${user.first_name}!
     console.error('Registration completion error:', error);
     await ctx.replyWithMarkdown('❌ **Registration failed**\n\nPlease try again or contact support.');
     await startAuthenticationFlow(ctx);
+  }
+}
+
+async function handleUserLogout(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Update telegram user to logged out state
+    await db.updateTelegramUser(user.id, {
+      user_id: null,
+      is_registered: false
+    });
+
+    // Clear any user sessions
+    await clearUserState(user.id);
+
+    const logoutMessage = `🚪 **LOGOUT SUCCESSFUL**
+
+You have been logged out from your Aureus Alliance Holdings account.
+
+Your Telegram account is now unlinked from the platform.
+
+**To access your account again:**
+• Use /start to login or register
+• Your account data remains secure
+
+Thank you for using Aureus Alliance Holdings! 🏆`;
+
+    await ctx.replyWithMarkdown(logoutMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🔄 Login Again", callback_data: "start_login" }],
+          [{ text: "📞 Contact Support", callback_data: "menu_help" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Logout error:', error);
+    await ctx.replyWithMarkdown('❌ **Logout failed**\n\nPlease try again or contact support.');
   }
 }
 

@@ -8,7 +8,7 @@ console.log("🚀 Starting Aureus Alliance Holdings Telegram Bot...");
 console.log("📊 Database: Supabase PostgreSQL");
 
 // Bot configuration
-const BOT_TOKEN = "8015476800:AAGMH8HMXRurphYHRQDJdeHLO10ghZVzBt8";
+const BOT_TOKEN = process.env.BOT_TOKEN || "8015476800:AAGMH8HMXRurphYHRQDJdeHLO10ghZVzBt8";
 const ADMIN_USERNAME = "TTTFOUNDER";
 const ADMIN_EMAIL = "admin@smartunitednetwork.com";
 

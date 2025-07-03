@@ -2,13 +2,11 @@
   "name": "aureus-telegram-bot",
   "version": "1.0.0",
   "description": "Telegram bot for Aureus Angel Alliance investment platform",
-  "main": "dist/app.js",
+  "main": "aureus-bot-complete.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc",
-    "start": "node dist/app.js",
-    "dev": "nodemon --exec ts-node src/app.ts",
-    "dev:watch": "nodemon --watch src --ext ts --exec ts-node src/app.ts"
+    "start": "node aureus-bot-complete.js",
+    "dev": "nodemon aureus-bot-complete.js"
   },
   "keywords": [],
   "author": "",
@@ -27,11 +25,6 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^24.0.7",
-    "nodemon": "^3.1.10",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "nodemon": "^3.1.10"
   }
 }

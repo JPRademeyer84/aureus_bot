@@ -5009,24 +5009,50 @@ async function startBot() {
       throw botInfoError;
     }
 
-    // Launch with timeout and specific error handling
+    // Launch with conflict resolution
     console.log("🚀 Launching bot...");
     try {
-      const launchPromise = bot.launch();
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Bot launch timeout after 30 seconds')), 30000);
+      // First try normal launch with explicit polling mode
+      await bot.launch({
+        polling: {
+          timeout: 30,
+          limit: 100,
+          allowed_updates: []
+        }
       });
-
-      await Promise.race([launchPromise, timeoutPromise]);
     } catch (launchError) {
-      console.error("❌ Bot launch failed:", launchError.message);
-      if (launchError.message.includes('409')) {
-        console.error("🔄 Conflict error - another bot instance may be running with the same token");
-      }
-      if (launchError.message.includes('401')) {
+      console.error("❌ Initial bot launch failed:", launchError.message);
+
+      if (launchError.message.includes('409') || launchError.message.includes('conflict')) {
+        console.log("🔄 Conflict detected - attempting to resolve...");
+
+        // Try to stop any existing webhook and launch in polling mode
+        try {
+          console.log("🛑 Stopping any existing webhook...");
+          await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+          console.log("✅ Webhook cleared");
+
+          // Wait a moment then try again
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          console.log("🔄 Retrying bot launch...");
+          await bot.launch({
+            polling: {
+              timeout: 30,
+              limit: 100,
+              allowed_updates: []
+            }
+          });
+        } catch (retryError) {
+          console.error("❌ Retry launch failed:", retryError.message);
+          throw retryError;
+        }
+      } else if (launchError.message.includes('401')) {
         console.error("🔑 Unauthorized - bot token may be invalid");
+        throw launchError;
+      } else {
+        throw launchError;
       }
-      throw launchError;
     }
 
     console.log("✅ Aureus Alliance Holdings Bot is running!");

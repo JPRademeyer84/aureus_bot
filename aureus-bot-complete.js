@@ -138,6 +138,117 @@ async function isUserAuthenticated(telegramId) {
   return telegramUser && telegramUser.is_registered && telegramUser.user_id;
 }
 
+// Investment phase management functions
+async function updateInvestmentPhases(sharesPurchased) {
+  try {
+    console.log(`📊 Updating investment phases - ${sharesPurchased} shares purchased`);
+
+    // Get current active phase
+    const { data: currentPhase, error: phaseError } = await db.client
+      .from('investment_phases')
+      .select('*')
+      .eq('is_active', true)
+      .single();
+
+    if (phaseError || !currentPhase) {
+      console.error('❌ No active phase found:', phaseError);
+      return;
+    }
+
+    console.log(`📈 Current phase: ${currentPhase.phase_name} (${currentPhase.shares_sold}/${currentPhase.total_shares_available} shares sold)`);
+
+    // Update shares sold in current phase
+    const newSharesSold = currentPhase.shares_sold + sharesPurchased;
+
+    const { error: updateError } = await db.client
+      .from('investment_phases')
+      .update({
+        shares_sold: newSharesSold,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', currentPhase.id);
+
+    if (updateError) {
+      console.error('❌ Error updating phase shares:', updateError);
+      return;
+    }
+
+    console.log(`✅ Updated ${currentPhase.phase_name}: ${newSharesSold}/${currentPhase.total_shares_available} shares sold`);
+
+    // Check if current phase is complete
+    if (newSharesSold >= currentPhase.total_shares_available) {
+      console.log(`🎯 Phase ${currentPhase.phase_name} is complete! Moving to next phase...`);
+
+      // Deactivate current phase
+      await db.client
+        .from('investment_phases')
+        .update({
+          is_active: false,
+          end_date: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentPhase.id);
+
+      // Activate next phase
+      const { data: nextPhase, error: nextPhaseError } = await db.client
+        .from('investment_phases')
+        .select('*')
+        .eq('phase_number', currentPhase.phase_number + 1)
+        .single();
+
+      if (!nextPhaseError && nextPhase) {
+        await db.client
+          .from('investment_phases')
+          .update({
+            is_active: true,
+            start_date: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', nextPhase.id);
+
+        console.log(`🚀 Activated ${nextPhase.phase_name} - Price: $${nextPhase.price_per_share}/share`);
+
+        // Log phase transition for admin notification
+        await logAdminAction(null, 'PHASE_TRANSITION', {
+          from_phase: currentPhase.phase_name,
+          to_phase: nextPhase.phase_name,
+          new_price: nextPhase.price_per_share,
+          shares_available: nextPhase.total_shares_available
+        });
+      } else {
+        console.log('🏁 All phases complete! No more phases available.');
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error in updateInvestmentPhases:', error);
+  }
+}
+
+async function getCurrentPhaseInfo() {
+  try {
+    const { data: currentPhase, error } = await db.client
+      .from('investment_phases')
+      .select('*')
+      .eq('is_active', true)
+      .single();
+
+    if (error || !currentPhase) {
+      console.error('❌ No active phase found:', error);
+      return null;
+    }
+
+    return {
+      ...currentPhase,
+      shares_remaining: currentPhase.total_shares_available - currentPhase.shares_sold,
+      completion_percentage: Math.round((currentPhase.shares_sold / currentPhase.total_shares_available) * 100)
+    };
+  } catch (error) {
+    console.error('❌ Error getting current phase info:', error);
+    return null;
+  }
+}
+
 async function getUserState(telegramId) {
   const session = await db.getUserSession(telegramId);
   return session ? session.session_state : null;
@@ -2655,6 +2766,9 @@ async function handleConfirmApproval(ctx, callbackData) {
 
         console.log('🔗 Payment linked to share purchase');
 
+        // Update investment phases with shares purchased
+        await updateInvestmentPhases(packageInfo.shares);
+
         // Create commission for referrer if exists
         await createCommissionForInvestment(investmentRecord.id, updatedPayment.user_id, updatedPayment.amount);
       }
@@ -3108,6 +3222,10 @@ async function processCommissionPayment(ctx, userId, pkg, commissionAmount, rema
           last_updated: new Date().toISOString()
         })
         .eq('user_id', userId);
+    }
+
+    // Update investment phases with shares purchased
+    await updateInvestmentPhases(pkg.shares);
     }
 
     if (remainingAmount > 0) {
@@ -5124,6 +5242,9 @@ async function completePaymentVerification(ctx, transactionHash) {
         .from('crypto_payment_transactions')
         .update({ share_purchase_id: investmentRecord.id })
         .eq('id', paymentRecord.id);
+
+      // Update investment phases with shares purchased
+      await updateInvestmentPhases(pkg.shares);
     }
 
     // Clear user state

@@ -4966,11 +4966,23 @@ async function startBot() {
       console.log("✅ Storage bucket ready!");
     }
 
+    // Verify bot token works
+    console.log("🔑 Verifying bot token...");
+    if (!process.env.BOT_TOKEN) {
+      throw new Error('BOT_TOKEN environment variable is not set');
+    }
+
     // Clear global commands - commands will be set per user
     console.log("🔧 Setting up user-specific command system...");
-    await bot.telegram.setMyCommands([
-      { command: 'start', description: 'Start the bot' }
-    ]);
+    try {
+      await bot.telegram.setMyCommands([
+        { command: 'start', description: 'Start the bot' }
+      ]);
+      console.log("✅ Commands set successfully");
+    } catch (commandError) {
+      console.error("❌ Failed to set commands:", commandError.message);
+      throw commandError;
+    }
 
     // Add graceful shutdown handlers
     process.once('SIGINT', () => {
@@ -4984,7 +4996,38 @@ async function startBot() {
     });
 
     console.log("🤖 Starting bot in polling mode...");
-    await bot.launch();
+    console.log("🔍 Bot token length:", process.env.BOT_TOKEN ? process.env.BOT_TOKEN.length : 'undefined');
+    console.log("🔍 Bot token starts with:", process.env.BOT_TOKEN ? process.env.BOT_TOKEN.substring(0, 10) + '...' : 'undefined');
+
+    // Try to get bot info first
+    try {
+      console.log("📋 Getting bot information...");
+      const botInfo = await bot.telegram.getMe();
+      console.log("✅ Bot info retrieved:", botInfo.username);
+    } catch (botInfoError) {
+      console.error("❌ Failed to get bot info:", botInfoError.message);
+      throw botInfoError;
+    }
+
+    // Launch with timeout and specific error handling
+    console.log("🚀 Launching bot...");
+    try {
+      const launchPromise = bot.launch();
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Bot launch timeout after 30 seconds')), 30000);
+      });
+
+      await Promise.race([launchPromise, timeoutPromise]);
+    } catch (launchError) {
+      console.error("❌ Bot launch failed:", launchError.message);
+      if (launchError.message.includes('409')) {
+        console.error("🔄 Conflict error - another bot instance may be running with the same token");
+      }
+      if (launchError.message.includes('401')) {
+        console.error("🔑 Unauthorized - bot token may be invalid");
+      }
+      throw launchError;
+    }
 
     console.log("✅ Aureus Alliance Holdings Bot is running!");
     console.log("🤖 Bot username: @aureus_africa_bot");

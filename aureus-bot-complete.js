@@ -1088,12 +1088,20 @@ bot.on('callback_query', async (ctx) => {
         await handleAdminBroadcast(ctx);
         break;
 
+      case 'view_my_sponsor':
+        await showMySponsor(ctx);
+        break;
+
       case 'admin_settings':
         await handleAdminSettings(ctx);
         break;
 
       case 'admin_logs':
         await handleAdminLogs(ctx);
+        break;
+
+      case 'admin_user_sponsors':
+        await handleAdminUserSponsors(ctx);
         break;
 
       case 'admin_approved_payments':
@@ -2043,11 +2051,14 @@ Welcome, **Administrator ${user.first_name}**!
           { text: "💳 Payment Approvals", callback_data: "admin_payments" }
         ],
         [
-          { text: "📊 System Analytics", callback_data: "admin_analytics" },
-          { text: "📢 Broadcast Message", callback_data: "admin_broadcast" }
+          { text: "🤝 User Sponsors", callback_data: "admin_user_sponsors" },
+          { text: "📊 System Analytics", callback_data: "admin_analytics" }
         ],
         [
-          { text: "⚙️ System Settings", callback_data: "admin_settings" },
+          { text: "📢 Broadcast Message", callback_data: "admin_broadcast" },
+          { text: "⚙️ System Settings", callback_data: "admin_settings" }
+        ],
+        [
           { text: "📋 Audit Logs", callback_data: "admin_logs" }
         ],
         [
@@ -3599,6 +3610,7 @@ async function handleReferralSystem(ctx) {
 
     // Create keyboard with withdrawal option if user has USDT balance
     const keyboard = [
+      [{ text: "👤 My Sponsor", callback_data: "view_my_sponsor" }],
       [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
       [{ text: "📊 View Commission Rules", callback_data: "commission_rules" }]
     ];
@@ -3619,6 +3631,232 @@ async function handleReferralSystem(ctx) {
   } catch (error) {
     console.error('Referral system error:', error);
     await ctx.replyWithMarkdown('❌ **Error loading referral data**\n\nPlease try again later.');
+  }
+}
+
+async function showMySponsor(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user ID from telegram_users table
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // Get sponsor information
+    const { data: referralInfo, error: referralError } = await db.client
+      .from('referrals')
+      .select(`
+        id,
+        referrer_id,
+        commission_rate,
+        created_at,
+        users!referrals_referrer_id_fkey (
+          id,
+          username,
+          full_name,
+          email
+        )
+      `)
+      .eq('referred_id', telegramUser.user_id)
+      .eq('status', 'active')
+      .single();
+
+    if (referralError || !referralInfo) {
+      const noSponsorMessage = `👤 **MY SPONSOR**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ **No Sponsor Found**
+
+You don't have a sponsor assigned to your account.
+
+💡 **This could mean:**
+• You registered without a sponsor
+• Your sponsor relationship wasn't properly created
+• You were auto-assigned but the system didn't record it
+
+📞 **Need Help?**
+Contact support if you believe this is an error.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+      await ctx.replyWithMarkdown(noSponsorMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Back to Referrals", callback_data: "menu_referrals" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    const sponsor = referralInfo.users;
+    const joinDate = new Date(referralInfo.created_at).toLocaleDateString();
+
+    // Get sponsor's investment status
+    let sponsorStatus = '📊 Status Unknown';
+    try {
+      const { data: sponsorInvestments, error: investmentError } = await db.client
+        .from('aureus_share_purchases')
+        .select('id, shares_purchased, status')
+        .eq('user_id', sponsor.id)
+        .eq('status', 'active');
+
+      if (!investmentError && sponsorInvestments) {
+        const totalShares = sponsorInvestments.reduce((sum, inv) => sum + inv.shares_purchased, 0);
+        sponsorStatus = totalShares > 0 ? `✅ Active Shareholder (${totalShares.toLocaleString()} shares)` : '⚠️ No Active Investments';
+      }
+    } catch (error) {
+      console.error('Sponsor investment check error:', error);
+    }
+
+    const sponsorMessage = `👤 **MY SPONSOR**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**SPONSOR INFORMATION:**
+👤 **Name:** ${sponsor.full_name || 'Not provided'}
+🆔 **Username:** @${sponsor.username}
+📧 **Email:** ${sponsor.email}
+📊 **Status:** ${sponsorStatus}
+
+**REFERRAL DETAILS:**
+💰 **Commission Rate:** ${referralInfo.commission_rate}%
+📅 **Relationship Since:** ${joinDate}
+
+**BENEFITS:**
+• Your sponsor earns ${referralInfo.commission_rate}% commission on your share purchases
+• They can provide guidance and support
+• Part of their success network
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    await ctx.replyWithMarkdown(sponsorMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "💬 Contact Sponsor", url: `https://t.me/${sponsor.username}` }],
+          [{ text: "🔙 Back to Referrals", callback_data: "menu_referrals" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error in showMySponsor:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading sponsor information**\n\nPlease try again later.');
+  }
+}
+
+async function handleAdminUserSponsors(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== ADMIN_USERNAME) {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**\n\nAdmin access is restricted.');
+    return;
+  }
+
+  try {
+    // Get all referral relationships with user details
+    const { data: referrals, error: referralsError } = await db.client
+      .from('referrals')
+      .select(`
+        id,
+        referrer_id,
+        referred_id,
+        commission_rate,
+        total_commission,
+        status,
+        created_at,
+        referrer:users!referrals_referrer_id_fkey (
+          id,
+          username,
+          full_name,
+          email
+        ),
+        referred:users!referrals_referred_id_fkey (
+          id,
+          username,
+          full_name,
+          email
+        )
+      `)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (referralsError) {
+      console.error('Admin referrals query error:', referralsError);
+      await ctx.replyWithMarkdown('❌ **Error loading referral data**\n\nPlease try again later.');
+      return;
+    }
+
+    let sponsorMessage = `🤝 **USER SPONSORS OVERVIEW**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**ACTIVE REFERRAL RELATIONSHIPS:** ${referrals.length}
+
+`;
+
+    if (referrals.length === 0) {
+      sponsorMessage += `❌ **No active referral relationships found**
+
+This could mean:
+• No users have sponsors assigned
+• Referral system needs to be activated
+• Database relationships need to be created
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    } else {
+      sponsorMessage += `**RECENT SPONSOR-USER RELATIONSHIPS:**\n\n`;
+
+      referrals.forEach((referral, index) => {
+        const sponsor = referral.referrer;
+        const user = referral.referred;
+        const joinDate = new Date(referral.created_at).toLocaleDateString();
+
+        sponsorMessage += `**${index + 1}. ${user.full_name || user.username}**
+   👤 **User:** @${user.username}
+   🤝 **Sponsor:** @${sponsor.username} (${sponsor.full_name || 'No name'})
+   💰 **Commission Rate:** ${referral.commission_rate}%
+   📅 **Since:** ${joinDate}
+   💵 **Total Earned:** $${referral.total_commission.toFixed(2)}
+
+`;
+      });
+
+      sponsorMessage += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 **Admin Actions:**
+• View detailed sponsor statistics
+• Modify referral relationships
+• Track commission payments`;
+    }
+
+    await ctx.replyWithMarkdown(sponsorMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "📊 Sponsor Stats", callback_data: "admin_sponsor_stats" },
+            { text: "🔄 Refresh", callback_data: "admin_user_sponsors" }
+          ],
+          [
+            { text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }
+          ]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error in handleAdminUserSponsors:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading sponsor data**\n\nPlease try again later.');
   }
 }
 

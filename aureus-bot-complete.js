@@ -869,27 +869,46 @@ async function checkUserTermsAndStart(ctx) {
 async function showWelcomeIntroduction(ctx) {
   const user = ctx.from;
 
-  const welcomeMessage = `🏆 **WELCOME TO AUREUS ALLIANCE HOLDINGS!**
+  // Send company logo for new users
+  try {
+    const logoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/logo.png';
+    await ctx.replyWithPhoto(logoUrl, {
+      caption: `🏆 **WELCOME TO AUREUS ALLIANCE HOLDINGS** 🏆\n*Premium Gold Mining Investment Company*`,
+      parse_mode: 'Markdown'
+    });
+  } catch (logoError) {
+    console.log('Company logo not available for welcome:', logoError.message);
+  }
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const welcomeMessage = `╔══════════════════════════════════════╗
+║        🌟 **WELCOME** ${user.first_name}! 🌟        ║
+╚══════════════════════════════════════╝
 
-Hello **${user.first_name}**! 👋
+**Thank you for joining Aureus Alliance Holdings!** 👋
 
-**🌟 ABOUT AUREUS ALLIANCE HOLDINGS:**
+┌─────────────────────────────────────┐
+│      🏆 **ABOUT OUR COMPANY**        │
+└─────────────────────────────────────┘
 
 We are a **premium gold mining investment company** offering exclusive opportunities to own shares in real gold mining operations.
 
-**💎 WHAT WE OFFER:**
-• **Real Gold Mining Shares** - Own actual mining equipment
-• **Quarterly Dividends** - Earn from gold production
-• **NFT Share Certificates** - Digital proof of ownership
-• **Professional Management** - Expert mining operations
-• **Transparent Operations** - Real-time mining updates
+┌─────────────────────────────────────┐
+│        💎 **WHAT WE OFFER**          │
+└─────────────────────────────────────┘
 
-**🎯 INVESTMENT OPPORTUNITIES:**
-• **Flexible Amounts** - Invest $25 to $50,000
-• **Phase-Based Pricing** - Early investor advantages
-• **Referral Program** - Earn 15% commissions
+🥇 **Real Gold Mining Shares** - Own actual mining equipment
+💰 **Quarterly Dividends** - Earn from gold production
+🎫 **NFT Share Certificates** - Digital proof of ownership
+👨‍💼 **Professional Management** - Expert mining operations
+📊 **Transparent Operations** - Real-time mining updates
+
+┌─────────────────────────────────────┐
+│    🎯 **INVESTMENT OPPORTUNITIES**    │
+└─────────────────────────────────────┘
+
+💵 **Flexible Amounts** - Invest $25 to $50,000
+📈 **Phase-Based Pricing** - Early investor advantages
+🤝 **Referral Program** - Earn 15% commissions
 • **Secure Payments** - Multiple crypto networks
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -5415,7 +5434,12 @@ async function handlePortfolio(ctx) {
 • **Total Investments:** ${investments?.length || 0}`;
 
     if (investments && investments.length > 0) {
-      portfolioMessage += '\n\n**SHARE PURCHASE HISTORY:**\n';
+      portfolioMessage += `
+
+┌─────────────────────────────────────┐
+│     📋 **INVESTMENT HISTORY**        │
+└─────────────────────────────────────┘
+`;
       investments.slice(0, 5).forEach((inv, index) => {
         const packageName = inv.package_name || 'Share Purchase';
         const statusIcon = inv.status === 'active' ? '✅' :
@@ -5425,18 +5449,28 @@ async function handlePortfolio(ctx) {
                           inv.status === 'pending_approval' ? 'Pending Approval' :
                           inv.status === 'pending' ? 'Pending' : inv.status;
 
-        portfolioMessage += `\n${index + 1}. ${statusIcon} **${packageName}**
-   💰 Amount: $${parseFloat(inv.total_amount || 0).toFixed(2)}
-   📊 Shares: ${parseInt(inv.shares_purchased || 0).toLocaleString()}
-   📅 Date: ${new Date(inv.created_at).toLocaleDateString()}
-   🔄 Status: ${statusText}`;
+        portfolioMessage += `
+${index + 1}. ${statusIcon} **${packageName}**
+   💰 **Amount:** $${parseFloat(inv.total_amount || 0).toFixed(2)}
+   📊 **Shares:** ${parseInt(inv.shares_purchased || 0).toLocaleString()}
+   📅 **Date:** ${new Date(inv.created_at).toLocaleDateString()}
+   🔄 **Status:** ${statusText}`;
       });
 
       if (investments.length > 5) {
-        portfolioMessage += `\n\n... and ${investments.length - 5} more share purchases`;
+        portfolioMessage += `
+
+📋 **...and ${investments.length - 5} more investments**`;
       }
     } else {
-      portfolioMessage += '\n\n**SHARE PURCHASE HISTORY:**\nNo share purchases yet. Start with custom share purchases!';
+      portfolioMessage += `
+
+┌─────────────────────────────────────┐
+│     📋 **INVESTMENT HISTORY**        │
+└─────────────────────────────────────┘
+
+🎯 **No investments yet!**
+Start your gold mining journey with custom share purchases.`;
     }
 
     portfolioMessage += `
@@ -7333,505 +7367,6 @@ If you already sent payment to our wallet, please contact support immediately wi
 }
 
 // Global error handlers
-// Project Overview Documentation
-async function showProjectOverview(ctx) {
-  const user = ctx.from;
-
-  const overviewMessage = `╔══════════════════════════════════════╗
-║     📊 **PROJECT OVERVIEW** 📊      ║
-╚══════════════════════════════════════╝
-
-**Comprehensive 300-hectare mining project documentation**
-
-**🌍 Project Scope:**
-• **Total Area:** 300 hectares
-• **Viable Mining Land:** 250 hectares
-• **Community Development:** 50 hectares
-• **Infrastructure Planning:** Complete development strategy
-
-**⚠️ Loading project documentation... Please wait**`;
-
-  await ctx.replyWithMarkdown(overviewMessage);
-
-  try {
-    // Send 300 hectare overview video
-    const hectareVideoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/300hac.mp4';
-    await ctx.replyWithVideo(hectareVideoUrl, {
-      caption: `🌍 **300-HECTARE PROJECT AREA OVERVIEW**
-
-**Project Specifications:**
-• **Total Area:** 300 hectares of prime mining land
-• **Viable Gold-Bearing Land:** 250 hectares designated for mining operations
-• **Community Development Zone:** 50 hectares for relocation infrastructure
-• **Planned Infrastructure:** Comprehensive development program
-
-**Community Development Commitments:**
-🏠 **Modern Housing:** Proper residential facilities for relocated families
-💧 **Water Infrastructure:** Borehole installation and maintenance systems
-⚡ **Renewable Energy:** Solar and wind electricity generation
-🏥 **Healthcare Facilities:** Medical clinics and healthcare access
-🎓 **Educational Infrastructure:** Schools and vocational training centers
-
-**Operational Significance:**
-This comprehensive overview showcases the full scope of our 300-hectare project, demonstrating our commitment to both profitable mining operations and responsible community development. The project represents a sustainable approach to gold mining with long-term infrastructure investments.`,
-      parse_mode: 'Markdown'
-    });
-
-  } catch (videoError) {
-    console.error('Error loading project overview video:', videoError);
-    await ctx.replyWithMarkdown(`⚠️ **Video Loading Error**
-
-The project overview video could not be loaded at this time. Please try again later or contact support for direct access to our project documentation.
-
-**Project Details Available:**
-• **Total Area:** 300 hectares
-• **Mining Operations:** 250 hectares of viable gold-bearing land
-• **Community Development:** 50 hectares for infrastructure
-• **Planned Amenities:** Housing, water, electricity, healthcare, education
-
-**Alternative Access:**
-• Contact support for direct video links
-• Request detailed project documentation
-• Schedule virtual project presentation`);
-  }
-
-  // Navigation options
-  await ctx.replyWithMarkdown(`**📊 Project Overview Complete**
-
-**Next Steps:**
-View additional mining documentation or return to main menu.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🎬 Excavation Videos", callback_data: "mining_excavation" }],
-        [{ text: "🔬 Geological Evidence", callback_data: "mining_geology" }],
-        [{ text: "👨‍💼 Executive Assessment", callback_data: "mining_executive" }],
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-
-  console.log(`📊 Project overview shown to user ${user.id} (${user.first_name})`);
-}
-
-// Executive Assessment Documentation
-async function showExecutiveAssessment(ctx) {
-  const user = ctx.from;
-
-  const executiveMessage = `╔══════════════════════════════════════╗
-║   👨‍💼 **EXECUTIVE ASSESSMENT** 👨‍💼   ║
-╚══════════════════════════════════════╝
-
-**Professional due diligence and executive site evaluation**
-
-**👨‍💼 Executive Leadership:**
-• **JP Rademeyer** - SUN CEO conducting professional site assessment
-• **Location:** Kadoma mining site evaluation
-• **Purpose:** Executive-level due diligence and expert interviews
-• **Scope:** Professional land evaluation and operational planning
-
-**⚠️ Loading executive documentation... Please wait**`;
-
-  await ctx.replyWithMarkdown(executiveMessage);
-
-  try {
-    // Send executive assessment video
-    const kadomaVideoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/kadoma.mp4';
-    await ctx.replyWithVideo(kadomaVideoUrl, {
-      caption: `👨‍💼 **JP RADEMEYER - EXECUTIVE SITE ASSESSMENT IN KADOMA**
-
-**Executive Due Diligence:**
-• **Executive:** JP Rademeyer, SUN CEO
-• **Location:** Kadoma mining site, Zimbabwe
-• **Purpose:** Professional site assessment and evaluation
-• **Activities:** Expert interviews and land evaluation
-• **Scope:** Comprehensive operational planning and feasibility analysis
-
-**Professional Validation:**
-This documentation showcases executive-level involvement in our mining operations, demonstrating the professional expertise and leadership commitment behind Aureus Alliance Holdings. The assessment includes detailed site evaluation, expert consultations, and strategic planning for optimal mining operations.
-
-**Investment Significance:**
-Executive-level due diligence provides investors with confidence in the professional management and strategic planning of our mining operations. This level of leadership involvement ensures optimal operational efficiency and strategic decision-making.`,
-      parse_mode: 'Markdown'
-    });
-
-  } catch (videoError) {
-    console.error('Error loading executive assessment video:', videoError);
-    await ctx.replyWithMarkdown(`⚠️ **Video Loading Error**
-
-The executive assessment video could not be loaded at this time. Please try again later or contact support for direct access to our executive documentation.
-
-**Executive Assessment Details:**
-• **Executive:** JP Rademeyer, SUN CEO
-• **Location:** Kadoma mining site evaluation
-• **Activities:** Professional site assessment and expert interviews
-• **Purpose:** Executive-level due diligence and operational planning
-
-**Alternative Access:**
-• Contact support for direct video links
-• Request executive assessment reports
-• Schedule virtual executive presentation`);
-  }
-
-  // Navigation options
-  await ctx.replyWithMarkdown(`**👨‍💼 Executive Assessment Complete**
-
-**Next Steps:**
-View additional mining documentation or return to main menu.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🎬 Excavation Videos", callback_data: "mining_excavation" }],
-        [{ text: "🔬 Geological Evidence", callback_data: "mining_geology" }],
-        [{ text: "📊 Project Overview", callback_data: "mining_overview" }],
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-
-  console.log(`👨‍💼 Executive assessment shown to user ${user.id} (${user.first_name})`);
-}
-
-// Community Meetings Documentation
-async function showCommunityMeetings(ctx) {
-  const user = ctx.from;
-
-  const meetingsMessage = `╔══════════════════════════════════════╗
-║   🤝 **COMMUNITY MEETINGS** 🤝      ║
-╚══════════════════════════════════════╝
-
-**Documentation of community engagement and ethical mining practices**
-
-**🏘️ Community Relations:**
-• **Transparent Negotiations** - Open dialogue with local residents
-• **Fair Relocation Assistance** - Comprehensive support programs
-• **Infrastructure Commitments** - Modern amenities and facilities
-• **Long-term Partnerships** - Sustainable community relationships
-
-**⚠️ Loading community documentation... Please wait**`;
-
-  await ctx.replyWithMarkdown(meetingsMessage);
-
-  try {
-    // Send community meetings video
-    const hutsVideoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/huts.mp4';
-    await ctx.replyWithVideo(hutsVideoUrl, {
-      caption: `🏘️ **COMMUNITY ENGAGEMENT MEETINGS & NEGOTIATIONS**
-
-**Community Relations Program:**
-• **Purpose:** Transparent negotiations with local residents
-• **Approach:** Open dialogue and fair relocation assistance
-• **Commitments:** Comprehensive infrastructure development
-• **Timeline:** Systematic community engagement process
-
-**Ethical Mining Practices:**
-Our commitment to ethical mining includes transparent community relations and fair partnerships with local residents. This documentation shows our systematic approach to community engagement, ensuring all stakeholders benefit from our mining operations.
-
-**Infrastructure Commitments:**
-🏠 **Modern Housing:** Proper residential facilities
-💧 **Water Systems:** Borehole installation and maintenance
-⚡ **Electricity:** Solar and wind power generation
-🏥 **Healthcare:** Medical clinics and services
-🎓 **Education:** Schools and training facilities
-
-**Social Responsibility:**
-This video demonstrates our commitment to responsible mining practices and community development, ensuring our operations benefit both investors and local communities through sustainable partnerships.`,
-      parse_mode: 'Markdown'
-    });
-
-  } catch (videoError) {
-    console.error('Error loading community meetings video:', videoError);
-    await ctx.replyWithMarkdown(`⚠️ **Video Loading Error**
-
-The community meetings video could not be loaded at this time. Please try again later or contact support for direct access to our community relations documentation.
-
-**Community Engagement Details:**
-• **Approach:** Transparent negotiations with local residents
-• **Support:** Comprehensive relocation assistance programs
-• **Infrastructure:** Modern housing, water, electricity, healthcare, education
-• **Partnership:** Long-term sustainable community relationships
-
-**Alternative Access:**
-• Contact support for direct video links
-• Request community relations reports
-• Schedule virtual community presentation`);
-  }
-
-  // Navigation options
-  await ctx.replyWithMarkdown(`**🤝 Community Meetings Complete**
-
-**Next Steps:**
-View additional community documentation or return to main menu.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🏗️ Development Plans", callback_data: "community_development" }],
-        [{ text: "🏘️ Back to Community Relations", callback_data: "menu_community" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-
-  console.log(`🤝 Community meetings shown to user ${user.id} (${user.first_name})`);
-}
-
-// Development Plans Documentation
-async function showDevelopmentPlans(ctx) {
-  const user = ctx.from;
-
-  const developmentMessage = `╔══════════════════════════════════════╗
-║   🏗️ **DEVELOPMENT PLANS** 🏗️      ║
-╚══════════════════════════════════════╝
-
-**Comprehensive infrastructure development and community planning**
-
-**🏗️ Infrastructure Development:**
-• **50 hectares** designated for community relocation
-• **Modern amenities** and sustainable infrastructure
-• **Long-term commitments** to community development
-• **Professional planning** and implementation
-
-**📋 Development Components:**
-🏠 **Housing:** Modern residential facilities
-💧 **Water:** Borehole systems and maintenance
-⚡ **Energy:** Solar and wind electricity
-🏥 **Healthcare:** Medical clinics and services
-🎓 **Education:** Schools and training centers
-🛣️ **Infrastructure:** Roads and utilities
-
-**Investment in Community:**
-Our development plans demonstrate a commitment to sustainable community partnerships, ensuring our mining operations create lasting positive impact for local residents through comprehensive infrastructure development.`;
-
-  await ctx.replyWithMarkdown(developmentMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🤝 Community Meetings", callback_data: "community_meetings" }],
-        [{ text: "🏘️ Back to Community Relations", callback_data: "menu_community" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-
-  console.log(`🏗️ Development plans shown to user ${user.id} (${user.first_name})`);
-}
-
-// Geological Evidence Documentation
-async function showGeologicalEvidence(ctx) {
-  const user = ctx.from;
-
-  const evidenceMessage = `╔══════════════════════════════════════╗
-║    🔬 **GEOLOGICAL EVIDENCE** 🔬     ║
-╚══════════════════════════════════════╝
-
-**Scientific documentation of gold discoveries and geological analysis**
-
-**🥇 Gold Recovery Documentation:**
-• **Gold particles in sand** - Recovered from pit washing
-• **Gold veins in rock** - Close-up geological samples
-• **Riverbed discoveries** - Natural gold-bearing formations
-• **Expert field analysis** - Professional geological assessment
-
-**⚠️ Loading geological evidence... Please wait**`;
-
-  await ctx.replyWithMarkdown(evidenceMessage);
-
-  try {
-    // Send gold in sand image
-    const goldInSandUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldinsand.jpg';
-    await ctx.replyWithPhoto(goldInSandUrl, {
-      caption: `🥇 **GOLD PARTICLES RECOVERED FROM PIT DIGGING**
-
-**Extraction Process:**
-• **Method:** Bucket washing of excavated soil
-• **Location:** Primary excavation pit
-• **Recovery Rate:** Visible gold particles per bucket
-• **Analysis:** Confirmed gold content through field testing
-• **Significance:** Validates gold-bearing soil presence
-
-**Technical Details:**
-This image shows actual gold particles recovered through our bucket washing process. The soil was extracted from our primary excavation pit and processed using standard placer mining techniques. The visible gold particles confirm the presence of recoverable gold in our mining area.`,
-      parse_mode: 'Markdown'
-    });
-
-    // Send gold in rock image
-    const goldInRockUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldinrock.JPG';
-    await ctx.replyWithPhoto(goldInRockUrl, {
-      caption: `💎 **GOLD VEINS IN EXTRACTED ROCK SAMPLES**
-
-**Geological Analysis:**
-• **Sample Type:** Hard rock specimens from excavation
-• **Gold Veins:** Visible gold deposits within rock matrix
-• **Formation:** Natural gold mineralization in quartz veins
-• **Assessment:** Professional geological evaluation
-• **Potential:** Indicates significant gold reserves
-
-**Technical Significance:**
-Close-up documentation of gold veins discovered in rock samples extracted from our mining site. These formations indicate natural gold mineralization and suggest substantial gold reserves within the excavation area.`,
-      parse_mode: 'Markdown'
-    });
-
-    // Send golden riverbed image
-    const goldenRiverbedUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldenriverbed.jpg';
-    await ctx.replyWithPhoto(goldenRiverbedUrl, {
-      caption: `🏞️ **DRY RIVERBED GOLD DISCOVERY LOCATION**
-
-**Site Analysis:**
-• **Location:** Dry riverbed within project area
-• **Discovery:** Gold-bearing rock formations identified
-• **Geological Context:** Natural gold deposition area
-• **Exploration:** Systematic site survey and sampling
-• **Potential:** Primary source of gold-bearing material
-
-**Operational Significance:**
-This dry riverbed location is where our team discovered significant gold-bearing rock formations. The geological characteristics of this area indicate natural gold deposition over time, making it a prime target for our mining operations.`,
-      parse_mode: 'Markdown'
-    });
-
-    // Send team member with gold rock image
-    const thondeUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/Thonde.jpg';
-    await ctx.replyWithPhoto(thondeUrl, {
-      caption: `👨‍🔬 **EXPERT FIELD ASSESSMENT & GOLD SPECIMEN**
-
-**Field Documentation:**
-• **Expert:** Team member conducting geological assessment
-• **Specimen:** Gold-containing rock sample
-• **Analysis:** On-site evaluation of gold content
-• **Verification:** Professional confirmation of gold presence
-• **Documentation:** Field evidence collection process
-
-**Professional Validation:**
-Our geological team member displaying a gold-containing rock specimen discovered during field operations. This demonstrates our systematic approach to geological assessment and the professional expertise involved in our mining operations.`,
-      parse_mode: 'Markdown'
-    });
-
-  } catch (imageError) {
-    console.error('Error loading geological evidence:', imageError);
-    await ctx.replyWithMarkdown(`⚠️ **Image Loading Error**
-
-Some geological evidence images could not be loaded at this time. Please try again later or contact support for direct access to our geological documentation.
-
-**Alternative Access:**
-• Contact support for direct image links
-• Request geological reports via email
-• Schedule virtual geological presentation`);
-  }
-
-  // Navigation options
-  await ctx.replyWithMarkdown(`**🔬 Geological Evidence Complete**
-
-**Next Steps:**
-View additional mining documentation or return to main menu.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🎬 Excavation Videos", callback_data: "mining_excavation" }],
-        [{ text: "📊 Project Overview", callback_data: "mining_overview" }],
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-
-  console.log(`🔬 Geological evidence shown to user ${user.id} (${user.first_name})`);
-}
-
-// Excavation Videos Documentation
-async function showExcavationVideos(ctx) {
-  const user = ctx.from;
-
-  const videosMessage = `╔══════════════════════════════════════╗
-║     🎬 **EXCAVATION VIDEOS** 🎬      ║
-╚══════════════════════════════════════╝
-
-**Live documentation of our active mining operations**
-
-**📹 Video Documentation Available:**
-• **Primary Pit Excavation** - Main excavation operations
-• **Active Soil Processing** - Real-time digging and processing
-• **Secondary Site Operations** - Additional excavation sites
-
-**⚠️ Loading videos... Please wait**`;
-
-  await ctx.replyWithMarkdown(videosMessage);
-
-  try {
-    // Send primary pit excavation video
-    const pitsVideoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/pits.mp4';
-    await ctx.replyWithVideo(pitsVideoUrl, {
-      caption: `🎬 **PRIMARY PIT EXCAVATION OPERATIONS**
-
-**Technical Details:**
-• **Location:** Main excavation site, Zimbabwe
-• **Equipment:** Heavy machinery pit excavation
-• **Purpose:** Primary gold-bearing soil extraction
-• **Depth:** Progressive excavation to bedrock level
-• **Soil Analysis:** Continuous sampling for gold content verification
-
-**Operational Significance:**
-This video demonstrates our systematic approach to pit excavation, showcasing the scale and professionalism of our mining operations. The excavation follows geological surveys to target gold-bearing soil layers.`,
-      parse_mode: 'Markdown'
-    });
-
-    // Send active digging video
-    const diggingVideoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/digging.mp4';
-    await ctx.replyWithVideo(diggingVideoUrl, {
-      caption: `🎬 **ACTIVE EXCAVATION & SOIL PROCESSING**
-
-**Technical Details:**
-• **Process:** Real-time excavation and soil processing
-• **Equipment:** Professional mining machinery
-• **Method:** Systematic soil extraction and analysis
-• **Quality Control:** Continuous monitoring of excavated material
-
-**Operational Significance:**
-This footage shows our active excavation process, demonstrating the continuous nature of our mining operations and the professional equipment used for soil extraction and processing.`,
-      parse_mode: 'Markdown'
-    });
-
-    // Send secondary site video
-    const digging2VideoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/digging%202.mp4';
-    await ctx.replyWithVideo(digging2VideoUrl, {
-      caption: `🎬 **SECONDARY EXCAVATION SITE DOCUMENTATION**
-
-**Technical Details:**
-• **Location:** Secondary excavation area
-• **Purpose:** Expanded mining operations
-• **Method:** Systematic site development
-• **Scope:** Additional gold-bearing area exploration
-
-**Operational Significance:**
-Documentation of our secondary excavation site, showing the expansion of our mining operations across multiple areas of the 300-hectare project site.`,
-      parse_mode: 'Markdown'
-    });
-
-  } catch (videoError) {
-    console.error('Error loading excavation videos:', videoError);
-    await ctx.replyWithMarkdown(`⚠️ **Video Loading Error**
-
-Some videos could not be loaded at this time. Please try again later or contact support for direct access to our excavation documentation.
-
-**Alternative Access:**
-• Contact support for direct video links
-• Request technical documentation via email
-• Schedule virtual site tour presentation`);
-  }
-
-  // Navigation options
-  await ctx.replyWithMarkdown(`**📹 Excavation Videos Complete**
-
-**Next Steps:**
-View additional mining documentation or return to main menu.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🔬 Geological Evidence", callback_data: "mining_geology" }],
-        [{ text: "📊 Project Overview", callback_data: "mining_overview" }],
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-
-  console.log(`🎬 Excavation videos shown to user ${user.id} (${user.first_name})`);
-}
-
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });

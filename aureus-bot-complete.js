@@ -880,8 +880,76 @@ bot.start(async (ctx) => {
   // Set user-specific commands
   await setUserCommands(ctx);
 
-  await startAuthenticationFlow(ctx);
+  // Check if user needs to accept terms first
+  await checkUserTermsAndStart(ctx);
 });
+
+async function checkUserTermsAndStart(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Check if user is already authenticated
+    const authStatus = await getUserAuthStatus(user.id);
+    if (authStatus === 'authenticated') {
+      console.log('✅ User already authenticated, showing main menu');
+      await showMainMenu(ctx);
+      return;
+    }
+
+    // Check if user has accepted all required terms
+    const requiredTerms = ['general', 'privacy', 'investment_risks', 'mining_operations', 'nft_terms', 'dividend_policy'];
+    const unacceptedTerms = [];
+
+    // Create temporary user record if needed for terms tracking
+    let telegramUser = await db.getTelegramUser(user.id);
+    if (!telegramUser) {
+      telegramUser = await db.createTelegramUser(user.id, {
+        username: user.username,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        user_id: null,
+        is_registered: false
+      });
+    }
+
+    // Check which terms haven't been accepted
+    for (const termType of requiredTerms) {
+      const hasAccepted = await db.hasAcceptedTerms(user.id, termType);
+      if (!hasAccepted) {
+        unacceptedTerms.push(termType);
+      }
+    }
+
+    if (unacceptedTerms.length > 0) {
+      // User needs to accept terms - start terms flow
+      console.log(`🔒 User needs to accept ${unacceptedTerms.length} terms`);
+      await startTermsAcceptanceFlow(ctx);
+    } else {
+      // All terms accepted - check if user is registered
+      if (telegramUser.user_id) {
+        // User is registered but not authenticated - show main menu
+        await showMainMenu(ctx);
+      } else {
+        // Terms accepted but not registered - go to sponsor selection
+        console.log('✅ Terms accepted, starting registration flow');
+        await handleQuickRegistration(ctx);
+      }
+    }
+
+  } catch (error) {
+    console.error('Error checking user terms and start:', error);
+    await startAuthenticationFlow(ctx);
+  }
+}
+
+async function startTermsAcceptanceFlow(ctx) {
+  const user = ctx.from;
+
+  // Set user state to indicate they're in the initial terms flow
+  await setUserState(user.id, 'accepting_terms');
+
+  await handleStartTermsReview(ctx);
+}
 
 // Restrict help command to admin only
 bot.help(async (ctx) => {
@@ -1232,7 +1300,8 @@ bot.on('callback_query', async (ctx) => {
         !callbackData.startsWith('auth_') &&
         !callbackData.startsWith('confirm_sponsor_') &&
         !callbackData.startsWith('terms_') &&
-        !callbackData.startsWith('accept_')) {
+        !callbackData.startsWith('accept_') &&
+        callbackData !== 'separator') {
       const isAuth = await isUserAuthenticated(user.id);
       if (!isAuth) {
         await ctx.answerCbQuery('Please complete authentication first');
@@ -1280,6 +1349,11 @@ bot.on('callback_query', async (ctx) => {
 
       case 'exit_bot':
         await handleExitBot(ctx);
+        break;
+
+      case 'separator':
+        // Do nothing - this is just a visual separator
+        await ctx.answerCbQuery();
         break;
 
       case 'sponsor_manual':
@@ -2078,12 +2152,22 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
         user_id: newUser.id,
         is_registered: true
       });
+      console.log('✅ Created new telegram user record');
     } else {
       await db.updateTelegramUser(user.id, {
         user_id: newUser.id,
         is_registered: true
       });
+      console.log('✅ Updated existing telegram user record');
     }
+
+    // Verify the telegram user was updated correctly
+    const verifyTelegramUser = await db.getTelegramUser(user.id);
+    console.log('✅ Telegram user verification:', {
+      exists: !!verifyTelegramUser,
+      user_id: verifyTelegramUser?.user_id,
+      is_registered: verifyTelegramUser?.is_registered
+    });
 
     // Create referral relationship if sponsor exists
     if (sponsorInfo) {

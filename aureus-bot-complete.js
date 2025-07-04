@@ -1294,6 +1294,8 @@ bot.on('text', async (ctx) => {
         break;
 
       case 'payment_verification':
+        console.log(`🔍 Text input for payment_verification: "${text}"`);
+        console.log(`🔍 User ID: ${user.id}`);
         await handlePaymentVerificationInput(ctx, text);
         break;
 
@@ -6825,6 +6827,7 @@ async function handleTRONPayment(ctx, callbackData) {
 async function handlePaymentVerificationInput(ctx, text) {
   const user = ctx.from;
   console.log(`🔍 Payment verification input from ${user.first_name}: "${text}"`);
+  console.log(`🔍 handlePaymentVerificationInput called for user ${user.id}`);
 
   const session = await db.getUserSession(user.id);
   console.log('📊 User session:', session);

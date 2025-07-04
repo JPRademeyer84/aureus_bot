@@ -518,6 +518,73 @@ bot.on('callback_query', async (ctx) => {
         await showDevelopmentPlans(ctx);
         break;
 
+      // Video Handlers - Display videos directly in Telegram
+      case 'video_pits':
+        await ctx.answerCbQuery('Loading primary pit video...');
+        await ctx.replyWithVideo('https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/pits.mp4', {
+          caption: '🎥 *PRIMARY PIT EXCAVATION*\n⛏️ *AUREUS ALLIANCE HOLDINGS*\n\n🏗️ Active washplant operations at our main excavation site\n📊 Equipment: 200 tons/hour processing capacity\n🌍 Location: Mpumalanga Province, South Africa',
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔙 Back to Excavation Videos", callback_data: "mining_excavation" }]
+            ]
+          }
+        });
+        break;
+
+      case 'video_digging':
+        await ctx.answerCbQuery('Loading processing video...');
+        await ctx.replyWithVideo('https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/digging.mp4', {
+          caption: '⚒️ *SOIL PROCESSING OPERATIONS*\n⛏️ *AUREUS ALLIANCE HOLDINGS*\n\n🔄 Real-time gold extraction process\n🌱 Method: Environmentally responsible mining\n💰 Output: Continuous gold recovery operations',
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔙 Back to Excavation Videos", callback_data: "mining_excavation" }]
+            ]
+          }
+        });
+        break;
+
+      case 'video_digging2':
+        await ctx.answerCbQuery('Loading secondary site video...');
+        await ctx.replyWithVideo('https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/digging%202.mp4', {
+          caption: '📹 *SECONDARY SITE DOCUMENTATION*\n⛏️ *AUREUS ALLIANCE HOLDINGS*\n\n🏞️ Additional excavation activities\n📋 Scope: Comprehensive operational coverage\n🎬 Quality: Professional documentation standards',
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔙 Back to Excavation Videos", callback_data: "mining_excavation" }]
+            ]
+          }
+        });
+        break;
+
+      // Image Handlers - Display images directly in Telegram
+      case 'image_goldinsand':
+        await ctx.answerCbQuery('Loading gold in sand image...');
+        await ctx.replyWithPhoto('https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldinsand.jpg', {
+          caption: '🏖️ *GOLD PARTICLES IN SAND*\n⛏️ *AUREUS ALLIANCE HOLDINGS*\n\n🔍 Analysis: Visible gold particles in processed sand\n📊 Concentration: High-grade alluvial deposits\n✅ Verification: Professional geological assessment',
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔙 Back to Geological Evidence", callback_data: "mining_geology" }]
+            ]
+          }
+        });
+        break;
+
+      case 'image_goldinrock':
+        await ctx.answerCbQuery('Loading gold in rock image...');
+        await ctx.replyWithPhoto('https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldinrock.JPG', {
+          caption: '💎 *GOLD VEINS IN ROCK SAMPLES*\n⛏️ *AUREUS ALLIANCE HOLDINGS*\n\n🏔️ Discovery: Natural gold veins in rock formations\n⭐ Quality: Premium grade ore samples\n🎯 Significance: Substantial mineral reserves confirmed',
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔙 Back to Geological Evidence", callback_data: "mining_geology" }]
+            ]
+          }
+        });
+        break;
+
       default:
         await ctx.answerCbQuery("🚧 Feature coming soon!");
         break;
@@ -594,9 +661,9 @@ async function showExcavationVideos(ctx) {
   await ctx.replyWithMarkdown(videosMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "🎥 Primary Pit Video", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/pits.mp4" }],
-        [{ text: "⚒️ Processing Video", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/digging.mp4" }],
-        [{ text: "📹 Secondary Site", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/digging%202.mp4" }],
+        [{ text: "🎥 Primary Pit Video", callback_data: "video_pits" }],
+        [{ text: "⚒️ Processing Video", callback_data: "video_digging" }],
+        [{ text: "📹 Secondary Site", callback_data: "video_digging2" }],
         [{ text: "🔙 Back to Mining Operations", callback_data: "menu_mining_operations" }]
       ]
     }
@@ -630,8 +697,8 @@ async function showGeologicalEvidence(ctx) {
   await ctx.replyWithMarkdown(evidenceMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "🏖️ Gold in Sand", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldinsand.jpg" }],
-        [{ text: "💎 Gold in Rock", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldinrock.JPG" }],
+        [{ text: "🏖️ Gold in Sand", callback_data: "image_goldinsand" }],
+        [{ text: "💎 Gold in Rock", callback_data: "image_goldinrock" }],
         [{ text: "🔙 Back to Mining Operations", callback_data: "menu_mining_operations" }]
       ]
     }

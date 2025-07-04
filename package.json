@@ -2,11 +2,11 @@
   "name": "aureus-telegram-bot",
   "version": "1.0.0",
   "description": "Telegram bot for Aureus Angel Alliance investment platform",
-  "main": "aureus-bot-complete.js",
+  "main": "aureus-bot-new.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node aureus-bot-complete.js",
-    "dev": "nodemon aureus-bot-complete.js"
+    "start": "node aureus-bot-new.js",
+    "dev": "nodemon aureus-bot-new.js"
   },
   "keywords": [],
   "author": "",

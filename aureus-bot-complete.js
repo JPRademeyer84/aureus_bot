@@ -6307,14 +6307,12 @@ Please type your sender wallet address (the address you're sending payment FROM)
 
     console.log(`✅ Screenshot uploaded successfully:`, data);
 
-    // Update session with screenshot info (handle both package and custom purchases)
-    const { network, packageId, walletAddress, custom_purchase, amount, shares, phase_id, requested_amount } = session.session_data;
+    // Update session with screenshot info (preserve all custom purchase data)
+    const { network, packageId, sender_wallet_address, custom_purchase, amount, shares, phase_id, requested_amount } = session.session_data;
 
     const updatedSessionData = {
-      network: network,
-      packageId: packageId,
+      ...session.session_data, // Preserve all existing session data
       step: 'transaction_hash',
-      walletAddress: walletAddress,
       screenshotPath: filename
     };
 
@@ -6414,15 +6412,14 @@ async function handlePaymentScreenshotDocument(ctx) {
 
     console.log(`✅ Screenshot document uploaded successfully:`, data);
 
-    // Update session with screenshot info
-    const { network, packageId, walletAddress } = session.session_data;
-    await setUserState(user.id, 'payment_verification', {
-      network: network,
-      packageId: packageId,
+    // Update session with screenshot info (preserve all custom purchase data)
+    const updatedSessionData = {
+      ...session.session_data, // Preserve all existing session data
       step: 'transaction_hash',
-      walletAddress: walletAddress,
       screenshotPath: filename
-    });
+    };
+
+    await setUserState(user.id, 'payment_verification', updatedSessionData);
 
     const hashMessage = `**✅ SCREENSHOT UPLOADED**
 

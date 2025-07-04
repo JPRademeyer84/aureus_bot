@@ -422,7 +422,6 @@ Regular community meetings and transparent communication about our operations.
       inline_keyboard: [
         [{ text: "📅 Community Meetings", callback_data: "community_meetings" }],
         [{ text: "🏗️ Development Plans", callback_data: "community_development" }],
-        [{ text: "📞 Contact Community Liaison", url: "mailto:community@aureusalliance.com" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
     }

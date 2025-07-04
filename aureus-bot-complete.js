@@ -6847,7 +6847,7 @@ async function handlePaymentVerificationInput(ctx, text) {
       sender_wallet_address: text // Store sender's wallet address
     });
 
-    const pkg = await db.getPackageById(packageId);
+    // Skip package lookup for custom purchases
     const screenshotMessage = `**✅ WALLET ADDRESS CONFIRMED**
 
 **Step 2 of 3: Payment Screenshot**
@@ -6864,10 +6864,12 @@ Now please upload a **screenshot** of your payment transaction:
 
 **Upload your screenshot now:**`;
 
+    const backButtonData = packageId === 'custom' ? 'back_to_custom_payment' : `pay_${network}_${packageId}`;
+
     await ctx.replyWithMarkdown(screenshotMessage, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "🔙 Back to Payment", callback_data: `pay_${network}_${packageId}` }]
+          [{ text: "🔙 Back to Payment", callback_data: backButtonData }]
         ]
       }
     });
@@ -6884,8 +6886,18 @@ async function handlePaymentScreenshot(ctx) {
   const user = ctx.from;
   const session = await db.getUserSession(user.id);
 
-  if (!session || !session.session_data || session.session_data.step !== 'screenshot') {
+  if (!session || !session.session_data) {
     await ctx.reply('❌ Please start the payment verification process first.');
+    return;
+  }
+
+  if (session.session_data.step === 'wallet_address') {
+    await ctx.replyWithMarkdown('⚠️ **PLEASE ENTER WALLET ADDRESS FIRST**\n\nYou need to provide your sender wallet address before uploading the screenshot.\n\nPlease enter your wallet address as text first.');
+    return;
+  }
+
+  if (session.session_data.step !== 'screenshot') {
+    await ctx.reply('❌ Please complete the previous steps first.');
     return;
   }
 

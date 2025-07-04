@@ -31,20 +31,30 @@ function formatCurrency(amount) {
 function createMainMenuKeyboard(isAdmin = false) {
   const keyboard = [
     [
-      { text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }
+      { text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }
     ],
     [
       { text: "👥 Referral Program", callback_data: "menu_referrals" },
-      { text: "📱 My Portfolio", callback_data: "menu_portfolio" }
+      { text: "📊 My Portfolio", callback_data: "menu_portfolio" }
     ],
     [
       { text: "💳 Payment Status", callback_data: "menu_payments" },
+      { text: "📋 Company Presentation", callback_data: "menu_presentation" }
+    ],
+    [
+      { text: "⛏️ Mining Operations", callback_data: "menu_mining_operations" },
+      { text: "🏘️ Community Relations", callback_data: "menu_community" }
+    ],
+    [
       { text: "🆘 Support Center", callback_data: "menu_help" }
     ]
   ];
 
   // Add admin options if user is admin
   if (isAdmin) {
+    keyboard.push([
+      { text: "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈", callback_data: "separator" }
+    ]);
     keyboard.push([
       { text: "🔑 Admin Panel", callback_data: "admin_panel" },
       { text: "📊 System Status", callback_data: "admin_status" }
@@ -708,25 +718,47 @@ async function showMainMenu(ctx) {
   const currentPhase = await db.getCurrentPhase();
   const isAdmin = user.username === ADMIN_USERNAME;
 
+  // Send actual Aureus Alliance Holdings company logo
+  try {
+    const logoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/logo.png';
+    await ctx.replyWithPhoto(logoUrl, {
+      caption: `🏆 **AUREUS ALLIANCE HOLDINGS** 🏆\n*Premium Gold Mining Investments*`,
+      parse_mode: 'Markdown'
+    });
+  } catch (logoError) {
+    console.log('Company logo not available, proceeding with text menu:', logoError.message);
+  }
+
   const phaseInfo = currentPhase
     ? `📈 **CURRENT PHASE:** ${currentPhase.phase_name}\n💰 **Share Price:** ${formatCurrency(currentPhase.price_per_share)}\n📊 **Available:** ${(currentPhase.total_shares_available - currentPhase.shares_sold).toLocaleString()} shares`
     : '📈 **PHASE:** Loading...';
 
-  const menuMessage = `🏆 **AUREUS ALLIANCE HOLDINGS**
-*Premium Gold Mining Share Purchase Dashboard*
+  const menuMessage = `╔══════════════════════════════════════╗
+║     🏆 **AUREUS ALLIANCE HOLDINGS** 🏆     ║
+╚══════════════════════════════════════╝
 
-Welcome back, **${user.first_name}**! 👋
+**Welcome back, ${user.first_name}!** 👋
+
+┌─────────────────────────────────────┐
+│         📊 **CURRENT INVESTMENT**         │
+└─────────────────────────────────────┘
 
 ${phaseInfo}
 
-⛏️ **MINING OPERATIONS STATUS:**
-• 🏭 **Washplants:** 10 units (200 tons/hour each)
-• 🥇 **Annual Target:** 3,200 KG gold production
-• 📅 **Full Capacity:** June 2026
-• 📊 **Total Shares:** 1,400,000 available
+┌─────────────────────────────────────┐
+│       ⛏️ **MINING OPERATIONS**        │
+└─────────────────────────────────────┘
 
-💎 **SHARE PURCHASE OPPORTUNITIES:**
-Choose your preferred method to buy shares in Aureus Alliance Holdings below.`;
+🏭 **Washplants:** 10 units (200 tons/hour each)
+🥇 **Annual Target:** 3,200 KG gold production
+📅 **Full Capacity:** June 2026
+📊 **Total Shares:** 1,400,000 available
+
+┌─────────────────────────────────────┐
+│      💎 **INVESTMENT DASHBOARD**       │
+└─────────────────────────────────────┘
+
+Choose your action below to manage your gold mining investments:`;
 
   await ctx.replyWithMarkdown(menuMessage, {
     reply_markup: createMainMenuKeyboard(isAdmin)
@@ -1410,32 +1442,6 @@ bot.on('callback_query', async (ctx) => {
 
       case 'menu_help':
         await handleSupportCenter(ctx);
-        break;
-
-      // Mining Operations Multimedia Handlers
-      case 'mining_excavation':
-        await showExcavationVideos(ctx);
-        break;
-
-      case 'mining_geology':
-        await showGeologicalEvidence(ctx);
-        break;
-
-      case 'mining_overview':
-        await showProjectOverview(ctx);
-        break;
-
-      case 'mining_executive':
-        await showExecutiveAssessment(ctx);
-        break;
-
-      // Community Relations Handlers
-      case 'community_meetings':
-        await showCommunityMeetings(ctx);
-        break;
-
-      case 'community_development':
-        await showDevelopmentPlans(ctx);
         break;
 
       case 'admin_panel':
@@ -7367,238 +7373,6 @@ process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);
   process.exit(1);
 });
-
-// Excavation Videos Documentation
-async function showExcavationVideos(ctx) {
-  const user = ctx.from;
-
-  const videosMessage = `╔══════════════════════════════════════╗
-║     🎬 **EXCAVATION VIDEOS** 🎬      ║
-╚══════════════════════════════════════╝
-
-**Live documentation of our active mining operations**
-
-**📹 Video Documentation Available:**
-• **Primary Pit Excavation** - Main excavation operations
-• **Active Soil Processing** - Real-time digging and processing
-• **Secondary Site Operations** - Additional excavation sites
-
-**⚠️ Loading videos... Please wait**`;
-
-  await ctx.replyWithMarkdown(videosMessage);
-
-  try {
-    // Send primary pit excavation video
-    const pitsVideoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/pits.mp4';
-    await ctx.replyWithVideo(pitsVideoUrl, {
-      caption: `🎬 **PRIMARY PIT EXCAVATION OPERATIONS**
-
-**Technical Details:**
-• **Location:** Main excavation site, Zimbabwe
-• **Equipment:** Heavy machinery pit excavation
-• **Purpose:** Primary gold-bearing soil extraction
-• **Depth:** Progressive excavation to bedrock level
-• **Soil Analysis:** Continuous sampling for gold content verification
-
-**Operational Significance:**
-This video demonstrates our systematic approach to pit excavation, showcasing the scale and professionalism of our mining operations. The excavation follows geological surveys to target gold-bearing soil layers.`,
-      parse_mode: 'Markdown'
-    });
-
-    // Send active digging video
-    const diggingVideoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/digging.mp4';
-    await ctx.replyWithVideo(diggingVideoUrl, {
-      caption: `🎬 **ACTIVE EXCAVATION & SOIL PROCESSING**
-
-**Technical Details:**
-• **Process:** Real-time excavation and soil processing
-• **Equipment:** Professional mining machinery
-• **Method:** Systematic soil extraction and analysis
-• **Quality Control:** Continuous monitoring of excavated material
-
-**Operational Significance:**
-This footage shows our active excavation process, demonstrating the continuous nature of our mining operations and the professional equipment used for soil extraction and processing.`,
-      parse_mode: 'Markdown'
-    });
-
-    // Send secondary site video
-    const digging2VideoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/digging%202.mp4';
-    await ctx.replyWithVideo(digging2VideoUrl, {
-      caption: `🎬 **SECONDARY EXCAVATION SITE DOCUMENTATION**
-
-**Technical Details:**
-• **Location:** Secondary excavation area
-• **Purpose:** Expanded mining operations
-• **Method:** Systematic site development
-• **Scope:** Additional gold-bearing area exploration
-
-**Operational Significance:**
-Documentation of our secondary excavation site, showing the expansion of our mining operations across multiple areas of the 300-hectare project site.`,
-      parse_mode: 'Markdown'
-    });
-
-  } catch (videoError) {
-    console.error('Error loading excavation videos:', videoError);
-    await ctx.replyWithMarkdown(`⚠️ **Video Loading Error**
-
-Some videos could not be loaded at this time. Please try again later or contact support for direct access to our excavation documentation.
-
-**Alternative Access:**
-• Contact support for direct video links
-• Request technical documentation via email
-• Schedule virtual site tour presentation`);
-  }
-
-  // Navigation options
-  await ctx.replyWithMarkdown(`**📹 Excavation Videos Complete**
-
-**Next Steps:**
-View additional mining documentation or return to main menu.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🔬 Geological Evidence", callback_data: "mining_geology" }],
-        [{ text: "📊 Project Overview", callback_data: "mining_overview" }],
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-
-  console.log(`🎬 Excavation videos shown to user ${user.id} (${user.first_name})`);
-}
-
-// Geological Evidence Documentation
-async function showGeologicalEvidence(ctx) {
-  const user = ctx.from;
-
-  const evidenceMessage = `╔══════════════════════════════════════╗
-║    🔬 **GEOLOGICAL EVIDENCE** 🔬     ║
-╚══════════════════════════════════════╝
-
-**Scientific documentation of gold discoveries and geological analysis**
-
-**🥇 Gold Recovery Documentation:**
-• **Gold particles in sand** - Recovered from pit washing
-• **Gold veins in rock** - Close-up geological samples
-• **Riverbed discoveries** - Natural gold-bearing formations
-• **Expert field analysis** - Professional geological assessment
-
-**⚠️ Loading geological evidence... Please wait**`;
-
-  await ctx.replyWithMarkdown(evidenceMessage);
-
-  try {
-    // Send gold in sand image
-    const goldInSandUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldinsand.jpg';
-    await ctx.replyWithPhoto(goldInSandUrl, {
-      caption: `🥇 **GOLD PARTICLES RECOVERED FROM PIT DIGGING**
-
-**Extraction Process:**
-• **Method:** Bucket washing of excavated soil
-• **Location:** Primary excavation pit
-• **Recovery Rate:** Visible gold particles per bucket
-• **Analysis:** Confirmed gold content through field testing
-• **Significance:** Validates gold-bearing soil presence
-
-**Technical Details:**
-This image shows actual gold particles recovered through our bucket washing process. The soil was extracted from our primary excavation pit and processed using standard placer mining techniques. The visible gold particles confirm the presence of recoverable gold in our mining area.`,
-      parse_mode: 'Markdown'
-    });
-
-    // Send gold in rock image
-    const goldInRockUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldinrock.JPG';
-    await ctx.replyWithPhoto(goldInRockUrl, {
-      caption: `💎 **GOLD VEINS IN EXTRACTED ROCK SAMPLES**
-
-**Geological Analysis:**
-• **Sample Type:** Hard rock specimens from excavation
-• **Gold Veins:** Visible gold deposits within rock matrix
-• **Formation:** Natural gold mineralization in quartz veins
-• **Assessment:** Professional geological evaluation
-• **Potential:** Indicates significant gold reserves
-
-**Technical Significance:**
-Close-up documentation of gold veins discovered in rock samples extracted from our mining site. These formations indicate natural gold mineralization and suggest substantial gold reserves within the excavation area.`,
-      parse_mode: 'Markdown'
-    });
-
-  } catch (imageError) {
-    console.error('Error loading geological evidence:', imageError);
-    await ctx.replyWithMarkdown(`⚠️ **Image Loading Error**
-
-Some geological evidence images could not be loaded at this time. Please try again later or contact support for direct access to our geological documentation.`);
-  }
-
-  // Navigation options
-  await ctx.replyWithMarkdown(`**🔬 Geological Evidence Complete**
-
-**Next Steps:**
-View additional mining documentation or return to main menu.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🎬 Excavation Videos", callback_data: "mining_excavation" }],
-        [{ text: "📊 Project Overview", callback_data: "mining_overview" }],
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-
-  console.log(`🔬 Geological evidence shown to user ${user.id} (${user.first_name})`);
-}
-
-// Placeholder functions for other multimedia handlers
-async function showProjectOverview(ctx) {
-  await ctx.replyWithMarkdown(`📊 **PROJECT OVERVIEW**
-
-Coming soon - 300-hectare project documentation.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
-
-async function showExecutiveAssessment(ctx) {
-  await ctx.replyWithMarkdown(`👨‍💼 **EXECUTIVE ASSESSMENT**
-
-Coming soon - JP Rademeyer CEO site evaluation.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
-
-async function showCommunityMeetings(ctx) {
-  await ctx.replyWithMarkdown(`🤝 **COMMUNITY MEETINGS**
-
-Coming soon - Community engagement documentation.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🏘️ Back to Community Relations", callback_data: "menu_community" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
-
-async function showDevelopmentPlans(ctx) {
-  await ctx.replyWithMarkdown(`🏗️ **DEVELOPMENT PLANS**
-
-Coming soon - Infrastructure development planning.`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🏘️ Back to Community Relations", callback_data: "menu_community" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
 
 // Start the bot
 startBot().catch(error => {

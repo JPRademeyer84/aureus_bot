@@ -584,7 +584,18 @@ bot.on('callback_query', async (ctx) => {
         break;
 
       default:
-        await ctx.answerCbQuery("🚧 Feature coming soon!");
+        // Check for dynamic callback patterns
+        if (callbackData.startsWith('continue_payment_')) {
+          await handleContinuePayment(ctx, callbackData);
+        } else if (callbackData.startsWith('cancel_payment_')) {
+          await handleCancelPayment(ctx, callbackData);
+        } else if (callbackData.startsWith('confirm_cancel_')) {
+          await handleConfirmCancel(ctx, callbackData);
+        } else if (callbackData === 'view_portfolio') {
+          await handlePortfolio(ctx);
+        } else {
+          await ctx.answerCbQuery("🚧 Feature coming soon!");
+        }
         break;
     }
   } catch (error) {
@@ -1641,6 +1652,274 @@ async function handleAdminUserSponsors(ctx) {
       ]
     }
   });
+}
+
+// PENDING PAYMENT HANDLERS
+async function handleContinuePayment(ctx, callbackData) {
+  const paymentId = callbackData.split('_')[2];
+
+  try {
+    // Get the pending payment details
+    const { data: payment, error } = await db.client
+      .from('crypto_payment_transactions')
+      .select('*')
+      .eq('id', paymentId)
+      .eq('status', 'pending')
+      .single();
+
+    if (error || !payment) {
+      await ctx.replyWithMarkdown('❌ **Payment not found or no longer pending.**\n\nIt may have been processed or cancelled.');
+      return;
+    }
+
+    // Get the wallet address for this network
+    const { data: walletData, error: walletError } = await db.client
+      .from('crypto_wallets')
+      .select('wallet_address')
+      .eq('network', payment.network.toLowerCase())
+      .eq('is_active', true)
+      .single();
+
+    if (walletError || !walletData) {
+      await ctx.replyWithMarkdown('❌ **Wallet configuration error.**\n\nPlease contact support.');
+      return;
+    }
+
+    const paymentDate = new Date(payment.created_at);
+    const timeAgo = Math.floor((new Date() - paymentDate) / (1000 * 60 * 60));
+    const displayTime = timeAgo < 24 ? `${timeAgo} hours ago` : `${Math.floor(timeAgo/24)} days ago`;
+
+    const continueMessage = `💳 **CONTINUE PENDING PAYMENT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 PAYMENT DETAILS:**
+
+💰 **Amount:** $${payment.amount} USDT
+🌐 **Network:** ${payment.network.toUpperCase()}
+📅 **Created:** ${displayTime}
+⏳ **Status:** Waiting for your payment
+
+**🏦 SEND PAYMENT TO:**
+\`${walletData.wallet_address}\`
+
+**📱 NEXT STEPS:**
+1. Send exactly $${payment.amount} USDT to the address above
+2. Take a screenshot of your transaction
+3. Upload the screenshot using the button below
+4. Wait for admin approval
+
+**⚠️ IMPORTANT:**
+• Use ${payment.network.toUpperCase()} network only
+• Send exact amount: $${payment.amount} USDT
+• Keep your transaction screenshot ready`;
+
+    await ctx.replyWithMarkdown(continueMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📷 Upload Payment Screenshot", callback_data: `upload_screenshot_${paymentId}` }],
+          [{ text: "📋 Copy Wallet Address", callback_data: `copy_wallet_${payment.network}` }],
+          [{ text: "📊 Check Payment Status", callback_data: "view_portfolio" }],
+          [{ text: "🔙 Back to Purchase Options", callback_data: "menu_purchase_shares" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in handleContinuePayment:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading payment details.**\n\nPlease try again or contact support.');
+  }
+}
+
+async function handleCancelPayment(ctx, callbackData) {
+  const paymentId = callbackData.split('_')[2];
+
+  // Get payment details for confirmation
+  const { data: payment, error } = await db.client
+    .from('crypto_payment_transactions')
+    .select('amount, network, created_at')
+    .eq('id', paymentId)
+    .single();
+
+  if (error || !payment) {
+    await ctx.replyWithMarkdown('❌ **Payment not found or already processed.**');
+    return;
+  }
+
+  const paymentDate = new Date(payment.created_at);
+  const daysDiff = Math.floor((new Date() - paymentDate) / (1000 * 60 * 60 * 24));
+  const isOld = daysDiff >= 1;
+
+  const confirmMessage = `🗑️ **DELETE PENDING PAYMENT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚨 **CONFIRM DELETION**
+
+**Payment Details:**
+💰 Amount: $${payment.amount}
+🌐 Network: ${payment.network.toUpperCase()}
+📅 Created: ${paymentDate.toLocaleDateString()}
+
+**⚠️ IMPORTANT:**
+${isOld ?
+  '• This payment is old - safe to delete if you haven\'t sent crypto yet' :
+  '• Only delete if you haven\'t sent the crypto payment yet'}
+• If you already sent payment, contact support instead
+• This action cannot be undone
+• You can create a new purchase after deletion
+
+**🔧 ARE YOU SURE?**`;
+
+  await ctx.replyWithMarkdown(confirmMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🗑️ Yes, Delete Payment", callback_data: `confirm_cancel_${paymentId}` }],
+        [{ text: "❌ No, Keep Payment", callback_data: "menu_purchase_shares" }],
+        [{ text: "📞 Contact Support First", callback_data: "menu_help" }]
+      ]
+    }
+  });
+}
+
+async function handleConfirmCancel(ctx, callbackData) {
+  const paymentId = callbackData.split('_')[2];
+
+  try {
+    // Update payment status to cancelled
+    const { data: cancelledPayment, error: cancelError } = await db.client
+      .from('crypto_payment_transactions')
+      .update({
+        status: 'cancelled',
+        admin_notes: 'Cancelled by user request',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId)
+      .eq('status', 'pending') // Only cancel if still pending
+      .select()
+      .single();
+
+    if (cancelError || !cancelledPayment) {
+      await ctx.replyWithMarkdown(`❌ **CANCELLATION FAILED**
+
+Unable to cancel payment. It may have already been processed or doesn't exist.
+
+Please contact support if you need assistance.`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📞 Contact Support", callback_data: "menu_help" }],
+            [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Log the cancellation
+    await logAdminAction(
+      ctx.from.id,
+      ctx.from.username || ctx.from.first_name,
+      'CANCEL_PAYMENT',
+      'user_action',
+      paymentId,
+      { amount: cancelledPayment.amount, network: cancelledPayment.network }
+    );
+
+    const successMessage = `✅ **PAYMENT DELETED SUCCESSFULLY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🗑️ **Your pending payment has been deleted:**
+
+💰 **Amount:** $${cancelledPayment.amount}
+🌐 **Network:** ${cancelledPayment.network}
+⏰ **Cancelled:** ${new Date().toLocaleDateString()}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ **You can now make new purchases!**
+
+**⚠️ IMPORTANT:**
+If you already sent payment to our wallet, please contact support immediately with your transaction details.`;
+
+    await ctx.replyWithMarkdown(successMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+          [{ text: "📞 Contact Support", callback_data: "menu_help" }],
+          [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error cancelling payment:', error);
+    await ctx.replyWithMarkdown('❌ **Error cancelling payment**\n\nPlease try again or contact support.');
+  }
+}
+
+// Admin audit logging function
+async function logAdminAction(adminTelegramId, adminUsername, action, targetType, targetId, details = {}) {
+  try {
+    // Defensive programming: truncate values to prevent database errors
+    const truncatedAction = String(action || '').substring(0, 255);
+    const truncatedTargetType = String(targetType || '').substring(0, 50);
+    const truncatedTargetId = String(targetId || '').substring(0, 500);
+    const truncatedUsername = String(adminUsername || '').substring(0, 255);
+
+    // Ensure details is a valid object and not too large
+    let safeDetails = {};
+    try {
+      if (details && typeof details === 'object') {
+        const detailsString = JSON.stringify(details);
+        if (detailsString.length > 10000) {
+          // If details are too large, truncate or summarize
+          safeDetails = {
+            truncated: true,
+            original_size: detailsString.length,
+            summary: String(detailsString).substring(0, 1000) + '...'
+          };
+        } else {
+          safeDetails = details;
+        }
+      }
+    } catch (detailsError) {
+      safeDetails = { error: 'Failed to serialize details', type: typeof details };
+    }
+
+    const { error } = await db.client
+      .from('admin_audit_logs')
+      .insert([{
+        admin_telegram_id: adminTelegramId,
+        admin_username: truncatedUsername,
+        action: truncatedAction,
+        target_type: truncatedTargetType,
+        target_id: truncatedTargetId,
+        details: safeDetails
+      }]);
+
+    if (error) {
+      console.error('Audit log error:', error);
+      // If still failing due to column size, try with minimal data
+      if (error.message && error.message.includes('value too long')) {
+        console.log('🔧 Retrying with minimal audit log data...');
+        await db.client
+          .from('admin_audit_logs')
+          .insert([{
+            admin_telegram_id: adminTelegramId,
+            admin_username: truncatedUsername.substring(0, 50),
+            action: truncatedAction.substring(0, 50),
+            target_type: 'system',
+            target_id: 'truncated',
+            details: { error: 'Original data too long', action: truncatedAction }
+          }]);
+      }
+    } else {
+      console.log(`📋 Admin action logged: ${truncatedAction} by ${truncatedUsername} on ${truncatedTargetType} ${truncatedTargetId}`);
+    }
+  } catch (error) {
+    console.error('Audit logging failed:', error);
+  }
 }
 
 // Start the bot

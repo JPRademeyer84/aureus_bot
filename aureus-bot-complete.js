@@ -914,7 +914,7 @@ async function checkUserTermsAndStart(ctx) {
 
     // Check which terms haven't been accepted
     for (const termType of requiredTerms) {
-      const hasAccepted = await db.hasAcceptedTerms(user.id, termType);
+      const hasAccepted = await db.hasAcceptedTermsTelegram(user.id, termType);
       if (!hasAccepted) {
         unacceptedTerms.push(termType);
       }
@@ -6338,50 +6338,46 @@ async function handleTermsAcceptance(ctx, callbackData) {
   const termType = callbackData.replace('accept_', '');
   const user = ctx.from;
 
-  // For new terms flow, create a temporary user record if needed
-  let telegramUser = await db.getTelegramUser(user.id);
-  let userId = null;
+  console.log(`📋 Terms acceptance: ${termType} for telegram user ${user.id}`);
 
+  // Create telegram user record if needed for terms tracking
+  let telegramUser = await db.getTelegramUser(user.id);
   if (!telegramUser) {
-    // Create telegram user record for terms tracking
+    console.log('📝 Creating telegram user record for terms tracking');
     telegramUser = await db.createTelegramUser(user.id, {
       username: user.username,
       first_name: user.first_name,
       last_name: user.last_name,
       is_registered: false
     });
-  }
 
-  // If user doesn't have a main user record yet, create a temporary one for terms
-  if (!telegramUser.user_id) {
-    // Create a temporary user record for terms acceptance
-    const tempUser = await db.createUser({
-      username: user.username || `temp_${user.id}`,
-      email: `temp_${user.id}@telegram.aureus`,
-      password_hash: 'temp_password_hash',
-      full_name: `${user.first_name} ${user.last_name || ''}`.trim(),
-      is_active: false, // Mark as inactive until full registration
-      is_verified: false
-    });
-
-    if (tempUser) {
-      userId = tempUser.id;
-      // Link telegram user to temp user
-      await db.updateTelegramUser(user.id, { user_id: userId });
+    if (!telegramUser) {
+      console.error('❌ Failed to create telegram user record');
+      await ctx.replyWithMarkdown('❌ **Error creating user record**\n\nPlease try again.');
+      return;
     }
-  } else {
-    userId = telegramUser.user_id;
   }
 
-  if (!userId) {
-    await ctx.replyWithMarkdown('❌ **Error creating user record**\n\nPlease try again.');
+  // Use telegram user ID directly for terms acceptance (no main user needed yet)
+  const userId = user.id; // Use telegram ID directly
+
+  // Record terms acceptance using telegram ID
+  console.log(`📋 Attempting to accept terms: telegramId=${userId}, termType=${termType}`);
+
+  try {
+    const success = await db.acceptTermsTelegram(userId, termType);
+    console.log(`📋 Terms acceptance result: ${success}`);
+
+    if (!success) {
+      console.error(`❌ Terms acceptance failed for ${termType}`);
+      await ctx.replyWithMarkdown(`❌ **Failed to accept ${termType.replace('_', ' ')} terms**\n\nDatabase error occurred. Please try again.`);
+      return;
+    }
+  } catch (error) {
+    console.error('❌ Terms acceptance error:', error);
+    await ctx.replyWithMarkdown(`❌ **Terms acceptance error**\n\nPlease try again or restart with /start.`);
     return;
   }
-
-  // Record terms acceptance
-  console.log(`📋 Attempting to accept terms: userId=${userId}, termType=${termType}`);
-  const success = await db.acceptTerms(userId, termType);
-  console.log(`📋 Terms acceptance result: ${success}`);
 
   if (success) {
     await ctx.replyWithMarkdown(`✅ **${termType.toUpperCase().replace('_', ' ')} TERMS ACCEPTED**\n\nThank you for accepting the ${termType.replace('_', ' ')} terms.`);
@@ -6390,7 +6386,7 @@ async function handleTermsAcceptance(ctx, callbackData) {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     // Verify the terms were actually saved
-    const verification = await db.hasAcceptedTerms(userId, termType);
+    const verification = await db.hasAcceptedTermsTelegram(userId, termType);
     console.log(`📋 Terms verification: ${termType} = ${verification}`);
 
     if (!verification) {
@@ -6409,7 +6405,7 @@ async function handleTermsAcceptance(ctx, callbackData) {
       const unacceptedTerms = [];
 
       for (const termType of requiredTerms) {
-        const hasAccepted = await db.hasAcceptedTerms(userId, termType);
+        const hasAccepted = await db.hasAcceptedTermsTelegram(userId, termType);
         if (!hasAccepted) {
           unacceptedTerms.push(termType);
         }
@@ -6444,7 +6440,7 @@ async function handleTermsAcceptance(ctx, callbackData) {
       const unacceptedTerms = [];
 
       for (const termType of requiredTerms) {
-        const hasAccepted = await db.hasAcceptedTerms(userId, termType);
+        const hasAccepted = await db.hasAcceptedTermsTelegram(userId, termType);
         console.log(`📋 Terms check: ${termType} = ${hasAccepted}`);
         if (!hasAccepted) {
           unacceptedTerms.push(termType);

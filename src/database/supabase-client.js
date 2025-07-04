@@ -354,6 +354,52 @@ class SupabaseDB {
     }
   }
 
+  // Telegram-based terms acceptance functions
+  async hasAcceptedTermsTelegram(telegramId, termsType) {
+    try {
+      const { data, error } = await this.client
+        .from('terms_acceptance')
+        .select('id')
+        .eq('telegram_id', telegramId)
+        .eq('terms_type', termsType)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking telegram terms acceptance:', error);
+        return false;
+      }
+
+      return !!data;
+    } catch (error) {
+      console.error('Error checking telegram terms acceptance:', error);
+      return false;
+    }
+  }
+
+  async acceptTermsTelegram(telegramId, termsType, version = '1.0') {
+    try {
+      const { data, error } = await this.client
+        .from('terms_acceptance')
+        .insert([{
+          telegram_id: telegramId,
+          terms_type: termsType,
+          version: version
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error accepting telegram terms:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error accepting telegram terms:', error);
+      return false;
+    }
+  }
+
   // User session functions
   async getUserSession(telegramId) {
     try {

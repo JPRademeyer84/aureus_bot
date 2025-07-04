@@ -1346,8 +1346,23 @@ bot.on('callback_query', async (ctx) => {
         !callbackData.startsWith('terms_') &&
         !callbackData.startsWith('accept_') &&
         callbackData !== 'separator') {
+
+      console.log(`🔍 Checking auth for callback: ${callbackData}`);
       const isAuth = await isUserAuthenticated(user.id);
+      console.log(`🔍 Auth result: ${isAuth}`);
+
       if (!isAuth) {
+        // Get detailed auth status for debugging
+        const authStatus = await getUserAuthStatus(user.id);
+        console.log(`🔍 Detailed auth status: ${authStatus}`);
+
+        const telegramUser = await db.getTelegramUser(user.id);
+        console.log(`🔍 Telegram user details:`, {
+          exists: !!telegramUser,
+          is_registered: telegramUser?.is_registered,
+          user_id: telegramUser?.user_id
+        });
+
         await ctx.answerCbQuery('Please complete authentication first');
         await startAuthenticationFlow(ctx);
         return;
@@ -2198,10 +2213,17 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
       });
       console.log('✅ Created new telegram user record');
     } else {
-      await db.updateTelegramUser(user.id, {
+      console.log('📝 Updating existing telegram user with:', {
         user_id: newUser.id,
         is_registered: true
       });
+
+      const updateResult = await db.updateTelegramUser(user.id, {
+        user_id: newUser.id,
+        is_registered: true
+      });
+
+      console.log('✅ Update result:', updateResult);
       console.log('✅ Updated existing telegram user record');
     }
 
@@ -2212,6 +2234,10 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
       user_id: verifyTelegramUser?.user_id,
       is_registered: verifyTelegramUser?.is_registered
     });
+
+    // Double-check authentication status
+    const finalAuthCheck = await isUserAuthenticated(user.id);
+    console.log('✅ Final authentication check:', finalAuthCheck);
 
     // Create referral relationship if sponsor exists
     if (sponsorInfo) {

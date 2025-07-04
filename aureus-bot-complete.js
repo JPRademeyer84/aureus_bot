@@ -6412,6 +6412,9 @@ async function handlePaymentScreenshotDocument(ctx) {
 
     await setUserState(user.id, 'payment_verification', updatedSessionData);
 
+    // Extract network and packageId from session data for the back button
+    const { network, packageId } = session.session_data;
+
     const hashMessage = `**✅ SCREENSHOT UPLOADED**
 
 **Step 3 of 3: Transaction Hash**
@@ -6430,7 +6433,7 @@ Now please provide your **transaction hash**:
     await ctx.replyWithMarkdown(hashMessage, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "🔙 Back to Payment", callback_data: `pay_${network}_${packageId}` }]
+          [{ text: "🔙 Back to Payment", callback_data: "back_to_custom_payment" }]
         ]
       }
     });

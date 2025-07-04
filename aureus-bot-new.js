@@ -543,6 +543,46 @@ bot.on('callback_query', async (ctx) => {
         await handleAdminStatus(ctx);
         break;
 
+      case 'admin_pending':
+        await handleAdminPayments(ctx);
+        break;
+
+      case 'admin_users':
+        await handleAdminUsers(ctx);
+        break;
+
+      case 'admin_commissions':
+        await handleAdminCommissions(ctx);
+        break;
+
+      case 'admin_stats':
+        await handleAdminAnalytics(ctx);
+        break;
+
+      case 'admin_logs':
+        await handleAdminLogs(ctx);
+        break;
+
+      case 'admin_payments':
+        await handleAdminPayments(ctx);
+        break;
+
+      case 'admin_analytics':
+        await handleAdminAnalytics(ctx);
+        break;
+
+      case 'admin_broadcast':
+        await handleAdminBroadcast(ctx);
+        break;
+
+      case 'admin_settings':
+        await handleAdminSettings(ctx);
+        break;
+
+      case 'admin_user_sponsors':
+        await handleAdminUserSponsors(ctx);
+        break;
+
       default:
         await ctx.answerCbQuery("🚧 Feature coming soon!");
         break;
@@ -1223,6 +1263,384 @@ async function setUserState(userId, state, data = null) {
     global.userStates = new Map();
   }
   global.userStates.set(userId, { state, data, timestamp: Date.now() });
+}
+
+// ADMIN PANEL DETAILED HANDLERS
+
+// Admin Payments Handler
+async function handleAdminPayments(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**');
+    return;
+  }
+
+  try {
+    // Get pending payments with user info
+    const { data: pendingPayments, error } = await db.client
+      .from('crypto_payment_transactions')
+      .select(`
+        *,
+        users!inner(email, full_name)
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (error) {
+      console.error('Error fetching pending payments:', error);
+      await ctx.replyWithMarkdown('❌ **Error loading payments**\n\nPlease try again.');
+      return;
+    }
+
+    if (!pendingPayments || pendingPayments.length === 0) {
+      await ctx.replyWithMarkdown(`💳 **PAYMENT APPROVALS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ **No pending payments**
+
+All payments have been processed!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "✅ View Approved", callback_data: "admin_approved_payments" }],
+            [{ text: "❌ View Rejected", callback_data: "admin_rejected_payments" }],
+            [{ text: "🔄 Refresh", callback_data: "admin_payments" }],
+            [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Show pending payments
+    const paymentsText = pendingPayments.map((payment, index) => {
+      const userInfo = payment.users;
+      const paymentDate = new Date(payment.created_at);
+      const timeAgo = Math.floor((Date.now() - paymentDate.getTime()) / (1000 * 60 * 60));
+
+      return `${index + 1}. **${userInfo.full_name}**
+💰 Amount: $${payment.amount}
+🌐 Network: ${payment.network.toUpperCase()}
+📅 ${timeAgo}h ago
+🆔 ID: ${payment.id}`;
+    }).join('\n\n');
+
+    await ctx.replyWithMarkdown(`💳 **PENDING PAYMENTS** (${pendingPayments.length})
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${paymentsText}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Click a payment to review:**`, {
+      reply_markup: {
+        inline_keyboard: [
+          ...pendingPayments.map((payment, index) => [
+            { text: `Review Payment ${index + 1} ($${payment.amount})`, callback_data: `review_payment_${payment.id}` }
+          ]),
+          [{ text: "🔄 Refresh", callback_data: "admin_payments" }],
+          [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Admin payments error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading payment data**\n\nPlease try again.');
+  }
+}
+
+// Admin Users Handler
+async function handleAdminUsers(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**');
+    return;
+  }
+
+  const usersMessage = `👥 **USER MANAGEMENT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**USER ADMINISTRATION TOOLS:**
+• View all registered users
+• Check user investment history
+• Manage user accounts
+• Monitor user activity
+• Handle user support requests
+
+**COMING SOON:**
+• User search functionality
+• Account status management
+• Investment analytics per user
+• User communication tools
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(usersMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔍 Search Users", callback_data: "admin_search_users" }],
+        [{ text: "📊 User Statistics", callback_data: "admin_user_stats" }],
+        [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+      ]
+    }
+  });
+}
+
+// Admin Analytics Handler
+async function handleAdminAnalytics(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**');
+    return;
+  }
+
+  const analyticsMessage = `📊 **SYSTEM ANALYTICS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**PERFORMANCE METRICS:**
+• Total users registered
+• Total investments processed
+• Commission payouts
+• System performance data
+
+**FINANCIAL ANALYTICS:**
+• Revenue tracking
+• Investment flow analysis
+• Commission distribution
+• Phase progression metrics
+
+**COMING SOON:**
+• Real-time dashboard
+• Advanced reporting
+• Export capabilities
+• Trend analysis
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(analyticsMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📈 View Reports", callback_data: "admin_reports" }],
+        [{ text: "💰 Financial Summary", callback_data: "admin_financial" }],
+        [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+      ]
+    }
+  });
+}
+
+// Admin Commissions Handler
+async function handleAdminCommissions(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**');
+    return;
+  }
+
+  const commissionsMessage = `💰 **COMMISSION REQUESTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**COMMISSION MANAGEMENT:**
+• Review withdrawal requests
+• Process commission payments
+• Monitor referral activity
+• Track commission balances
+
+**WITHDRAWAL PROCESSING:**
+• Pending withdrawal requests
+• Approved payouts
+• Commission calculations
+• Network fee management
+
+**COMING SOON:**
+• Automated processing
+• Bulk approval tools
+• Commission analytics
+• Payment scheduling
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(commissionsMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "⏳ Pending Withdrawals", callback_data: "admin_pending_withdrawals" }],
+        [{ text: "✅ Approved Payouts", callback_data: "admin_approved_withdrawals" }],
+        [{ text: "📊 Commission Stats", callback_data: "admin_commission_stats" }],
+        [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+      ]
+    }
+  });
+}
+
+// Admin Logs Handler
+async function handleAdminLogs(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**');
+    return;
+  }
+
+  const logsMessage = `📋 **AUDIT LOGS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**SYSTEM ACTIVITY TRACKING:**
+• Admin actions and approvals
+• User registration and activity
+• Payment processing events
+• Security and access logs
+
+**LOG CATEGORIES:**
+• Authentication events
+• Payment transactions
+• Admin operations
+• System errors and warnings
+
+**COMING SOON:**
+• Real-time log monitoring
+• Advanced filtering
+• Export functionality
+• Alert notifications
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(logsMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔍 View Recent Logs", callback_data: "admin_recent_logs" }],
+        [{ text: "⚠️ Security Events", callback_data: "admin_security_logs" }],
+        [{ text: "💳 Payment Logs", callback_data: "admin_payment_logs" }],
+        [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+      ]
+    }
+  });
+}
+
+// Admin Broadcast Handler
+async function handleAdminBroadcast(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**');
+    return;
+  }
+
+  const broadcastMessage = `📢 **BROADCAST MESSAGE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**MASS COMMUNICATION TOOLS:**
+• Send announcements to all users
+• Target specific user groups
+• Schedule message delivery
+• Track message engagement
+
+**COMING SOON:**
+• Message templates
+• User segmentation
+• Delivery scheduling
+• Analytics tracking
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(broadcastMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📝 Compose Message", callback_data: "admin_compose_broadcast" }],
+        [{ text: "📊 Message History", callback_data: "admin_broadcast_history" }],
+        [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+      ]
+    }
+  });
+}
+
+// Admin Settings Handler
+async function handleAdminSettings(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**');
+    return;
+  }
+
+  const settingsMessage = `⚙️ **SYSTEM SETTINGS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**CONFIGURATION OPTIONS:**
+• Phase management and pricing
+• Commission rate settings
+• Payment method configuration
+• System maintenance mode
+
+**COMING SOON:**
+• Advanced configuration
+• Backup and restore
+• Performance tuning
+• Security settings
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(settingsMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "💰 Phase Settings", callback_data: "admin_phase_settings" }],
+        [{ text: "💳 Payment Config", callback_data: "admin_payment_config" }],
+        [{ text: "🔧 System Config", callback_data: "admin_system_config" }],
+        [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+      ]
+    }
+  });
+}
+
+// Admin User Sponsors Handler
+async function handleAdminUserSponsors(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**');
+    return;
+  }
+
+  const sponsorsMessage = `🤝 **USER SPONSORS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**REFERRAL MANAGEMENT:**
+• View user sponsor relationships
+• Monitor referral activity
+• Manage commission structures
+• Track referral performance
+
+**COMING SOON:**
+• Sponsor assignment tools
+• Referral analytics
+• Commission calculations
+• Performance reports
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(sponsorsMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "👥 View Relationships", callback_data: "admin_view_sponsors" }],
+        [{ text: "📊 Referral Stats", callback_data: "admin_referral_stats" }],
+        [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+      ]
+    }
+  });
 }
 
 // Start the bot

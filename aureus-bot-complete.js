@@ -1449,7 +1449,7 @@ bot.on('callback_query', async (ctx) => {
         break;
 
       case 'menu_packages':
-        await handlePackagesMenu(ctx);
+        await handleCustomAmountPurchase(ctx);
         break;
 
       case 'menu_purchase_shares':
@@ -1580,8 +1580,7 @@ bot.on('callback_query', async (ctx) => {
           await handleCancelPayment(ctx, callbackData);
         } else if (callbackData.startsWith('confirm_cancel_')) {
           await handleConfirmCancel(ctx, callbackData);
-        } else if (callbackData.startsWith('quick_amount_')) {
-          await handleQuickAmount(ctx, callbackData);
+        // Quick amount handlers removed
         } else if (callbackData.startsWith('custom_pay_')) {
           await handleCustomPayment(ctx, callbackData);
         } else if (callbackData === 'back_to_custom_payment') {
@@ -2691,10 +2690,6 @@ Type the dollar amount you want to invest (e.g., 500)`;
   await ctx.replyWithMarkdown(fullMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "💡 Quick Amount: $100", callback_data: "quick_amount_100" }],
-        [{ text: "💡 Quick Amount: $500", callback_data: "quick_amount_500" }],
-        [{ text: "💡 Quick Amount: $1000", callback_data: "quick_amount_1000" }],
-        [{ text: "📊 View Old Packages", callback_data: "menu_packages" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
     }
@@ -2704,11 +2699,7 @@ Type the dollar amount you want to invest (e.g., 500)`;
   await setUserState(user.id, 'awaiting_custom_amount');
 }
 
-// PHASE 2: Quick amount handlers
-async function handleQuickAmount(ctx, callbackData) {
-  const amount = parseInt(callbackData.split('_')[2]);
-  await processCustomAmount(ctx, amount);
-}
+// Quick amount handlers removed - using text input only
 
 async function handleCustomAmountInput(ctx, text) {
   const amount = parseFloat(text.replace(/[$,\s]/g, ''));
@@ -4420,7 +4411,7 @@ Interactive calculator with real-time gold prices and production data.`;
   await ctx.replyWithMarkdown(calculatorMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "⛏️ View Mining Packages", callback_data: "menu_packages" }],
+        [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
         [{ text: "📧 Get Calculator Updates", callback_data: "notify_calculator" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
@@ -5381,7 +5372,7 @@ Comprehensive share purchase tracking and management tools.`;
           [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
         ]
       : [
-          [{ text: "⛏️ Start Buying Shares", callback_data: "menu_packages" }],
+          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
           [{ text: "📧 Get Portfolio Updates", callback_data: "notify_portfolio" }],
           [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
         ];
@@ -5427,7 +5418,7 @@ Secure 3-step payment verification with instant processing.`;
   await ctx.replyWithMarkdown(paymentMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "⛏️ Start Share Purchase", callback_data: "menu_packages" }],
+        [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
         [{ text: "📧 Get Payment Updates", callback_data: "notify_payments" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
@@ -6871,7 +6862,7 @@ If you already sent payment to our wallet, please contact support immediately wi
     await ctx.replyWithMarkdown(successMessage, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "🛒 Browse Packages", callback_data: "menu_packages" }],
+          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
           [{ text: "📞 Contact Support", callback_data: "menu_help" }],
           [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
         ]

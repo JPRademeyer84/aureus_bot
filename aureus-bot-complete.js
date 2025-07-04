@@ -31,14 +31,21 @@ function formatCurrency(amount) {
 function createMainMenuKeyboard(isAdmin = false) {
   const keyboard = [
     [
-      { text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }
+      { text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }
     ],
     [
       { text: "👥 Referral Program", callback_data: "menu_referrals" },
-      { text: "📱 My Portfolio", callback_data: "menu_portfolio" }
+      { text: "📊 My Portfolio", callback_data: "menu_portfolio" }
     ],
     [
       { text: "💳 Payment Status", callback_data: "menu_payments" },
+      { text: "📋 Company Presentation", callback_data: "menu_presentation" }
+    ],
+    [
+      { text: "⛏️ Mining Operations", callback_data: "menu_mining_operations" },
+      { text: "🏘️ Community Relations", callback_data: "menu_community" }
+    ],
+    [
       { text: "🆘 Support Center", callback_data: "menu_help" }
     ]
   ];
@@ -707,6 +714,17 @@ async function showMainMenu(ctx) {
   const user = ctx.from;
   const currentPhase = await db.getCurrentPhase();
   const isAdmin = user.username === ADMIN_USERNAME;
+
+  // Send the new Aureus Alliance Holdings company logo
+  try {
+    const logoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/logonew.png';
+    await ctx.replyWithPhoto(logoUrl, {
+      caption: `🏆 **AUREUS ALLIANCE HOLDINGS** 🏆\n*Premium Gold Mining Investments*`,
+      parse_mode: 'Markdown'
+    });
+  } catch (logoError) {
+    console.log('Company logo not available, proceeding with text menu:', logoError.message);
+  }
 
   const phaseInfo = currentPhase
     ? `📈 **CURRENT PHASE:** ${currentPhase.phase_name}\n💰 **Share Price:** ${formatCurrency(currentPhase.price_per_share)}\n📊 **Available:** ${(currentPhase.total_shares_available - currentPhase.shares_sold).toLocaleString()} shares`
@@ -1410,6 +1428,50 @@ bot.on('callback_query', async (ctx) => {
 
       case 'menu_help':
         await handleSupportCenter(ctx);
+        break;
+
+      case 'menu_presentation':
+        console.log('📋 Company Presentation button clicked');
+        await ctx.answerCbQuery('Loading company presentation...');
+        await handleCompanyPresentation(ctx);
+        break;
+
+      case 'menu_mining_operations':
+        console.log('⛏️ Mining Operations button clicked');
+        await ctx.answerCbQuery('Loading mining operations...');
+        await handleMiningOperations(ctx);
+        break;
+
+      case 'menu_community':
+        console.log('🏘️ Community Relations button clicked');
+        await ctx.answerCbQuery('Loading community relations...');
+        await handleCommunityRelations(ctx);
+        break;
+
+      // Mining Operations Multimedia Handlers
+      case 'mining_excavation':
+        await showExcavationVideos(ctx);
+        break;
+
+      case 'mining_geology':
+        await showGeologicalEvidence(ctx);
+        break;
+
+      case 'mining_overview':
+        await showProjectOverview(ctx);
+        break;
+
+      case 'mining_executive':
+        await showExecutiveAssessment(ctx);
+        break;
+
+      // Community Relations Handlers
+      case 'community_meetings':
+        await showCommunityMeetings(ctx);
+        break;
+
+      case 'community_development':
+        await showDevelopmentPlans(ctx);
         break;
 
       case 'admin_panel':
@@ -2228,7 +2290,7 @@ Welcome to **Aureus Alliance Holdings**, ${user.first_name}!
       reply_markup: {
         inline_keyboard: [
           [{ text: "🏠 Enter Dashboard", callback_data: "main_menu" }],
-          [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }]
+          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }]
         ]
       }
     });
@@ -3324,7 +3386,7 @@ A confirmation message will be sent to this app once approved.`;
       inline_keyboard: [
         [{ text: "📊 View Portfolio", callback_data: "view_portfolio" }],
         [{ text: "💰 Check Commission Balance", callback_data: "menu_referrals" }],
-        [{ text: "🛒 Purchase More Gold Shares", callback_data: "menu_purchase_shares" }],
+        [{ text: "🛒 Make Another Purchase", callback_data: "menu_purchase_shares" }],
         [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
       ]
     }
@@ -4499,7 +4561,7 @@ Interactive calculator with real-time gold prices and production data.`;
   await ctx.replyWithMarkdown(calculatorMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
+        [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
         [{ text: "📧 Get Calculator Updates", callback_data: "notify_calculator" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
@@ -5460,7 +5522,7 @@ Comprehensive share purchase tracking and management tools.`;
           [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
         ]
       : [
-          [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
+          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
           [{ text: "📧 Get Portfolio Updates", callback_data: "notify_portfolio" }],
           [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
         ];
@@ -5506,7 +5568,7 @@ Secure 3-step payment verification with instant processing.`;
   await ctx.replyWithMarkdown(paymentMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
+        [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
         [{ text: "📧 Get Payment Updates", callback_data: "notify_payments" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
@@ -7319,7 +7381,7 @@ If you already sent payment to our wallet, please contact support immediately wi
     await ctx.replyWithMarkdown(successMessage, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
+          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
           [{ text: "📞 Contact Support", callback_data: "menu_help" }],
           [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
         ]

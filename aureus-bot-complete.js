@@ -31,21 +31,14 @@ function formatCurrency(amount) {
 function createMainMenuKeyboard(isAdmin = false) {
   const keyboard = [
     [
-      { text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }
+      { text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }
     ],
     [
       { text: "👥 Referral Program", callback_data: "menu_referrals" },
-      { text: "📊 My Portfolio", callback_data: "menu_portfolio" }
+      { text: "📱 My Portfolio", callback_data: "menu_portfolio" }
     ],
     [
       { text: "💳 Payment Status", callback_data: "menu_payments" },
-      { text: "📋 Company Presentation", callback_data: "menu_presentation" }
-    ],
-    [
-      { text: "⛏️ Mining Operations", callback_data: "menu_mining_operations" },
-      { text: "🏘️ Community Relations", callback_data: "menu_community" }
-    ],
-    [
       { text: "🆘 Support Center", callback_data: "menu_help" }
     ]
   ];
@@ -2235,7 +2228,7 @@ Welcome to **Aureus Alliance Holdings**, ${user.first_name}!
       reply_markup: {
         inline_keyboard: [
           [{ text: "🏠 Enter Dashboard", callback_data: "main_menu" }],
-          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }]
+          [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }]
         ]
       }
     });
@@ -3331,7 +3324,7 @@ A confirmation message will be sent to this app once approved.`;
       inline_keyboard: [
         [{ text: "📊 View Portfolio", callback_data: "view_portfolio" }],
         [{ text: "💰 Check Commission Balance", callback_data: "menu_referrals" }],
-        [{ text: "🛒 Make Another Purchase", callback_data: "menu_purchase_shares" }],
+        [{ text: "🛒 Purchase More Gold Shares", callback_data: "menu_purchase_shares" }],
         [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
       ]
     }
@@ -4506,7 +4499,7 @@ Interactive calculator with real-time gold prices and production data.`;
   await ctx.replyWithMarkdown(calculatorMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+        [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
         [{ text: "📧 Get Calculator Updates", callback_data: "notify_calculator" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
@@ -5467,7 +5460,7 @@ Comprehensive share purchase tracking and management tools.`;
           [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
         ]
       : [
-          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+          [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
           [{ text: "📧 Get Portfolio Updates", callback_data: "notify_portfolio" }],
           [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
         ];
@@ -5513,7 +5506,7 @@ Secure 3-step payment verification with instant processing.`;
   await ctx.replyWithMarkdown(paymentMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+        [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
         [{ text: "📧 Get Payment Updates", callback_data: "notify_payments" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
@@ -7326,7 +7319,7 @@ If you already sent payment to our wallet, please contact support immediately wi
     await ctx.replyWithMarkdown(successMessage, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+          [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
           [{ text: "📞 Contact Support", callback_data: "menu_help" }],
           [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
         ]

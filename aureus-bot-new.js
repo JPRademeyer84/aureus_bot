@@ -393,26 +393,26 @@ Explore our comprehensive visual documentation of mining operations.
 
 // Community Relations Handler
 async function handleCommunityRelations(ctx) {
-  const communityMessage = `🏘️ **COMMUNITY RELATIONS**
+  const communityMessage = `🏘️ *COMMUNITY RELATIONS*
 
-🤝 **AUREUS ALLIANCE HOLDINGS**
+🤝 *AUREUS ALLIANCE HOLDINGS*
 *Building Sustainable Community Partnerships*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🌟 **COMMUNITY ENGAGEMENT:**
-• 👥 **Local Employment:** Priority hiring from surrounding communities
-• 🏫 **Education Support:** Funding for local schools and training programs
-• 🏥 **Healthcare Initiatives:** Medical facility support and health programs
-• 🛤️ **Infrastructure:** Road improvements and utility upgrades
+🌟 *COMMUNITY ENGAGEMENT:*
+• 👥 *Local Employment:* Priority hiring from surrounding communities
+• 🏫 *Education Support:* Funding for local schools and training programs
+• 🏥 *Healthcare Initiatives:* Medical facility support and health programs
+• 🛤️ *Infrastructure:* Road improvements and utility upgrades
 
-💼 **ECONOMIC IMPACT:**
-• 💰 **Job Creation:** 200+ direct employment opportunities
-• 🏪 **Local Business:** Support for community suppliers and services
-• 📈 **Economic Growth:** Sustainable development initiatives
-• 🎓 **Skills Development:** Mining and technical training programs
+💼 *ECONOMIC IMPACT:*
+• 💰 *Job Creation:* 200+ direct employment opportunities
+• 🏪 *Local Business:* Support for community suppliers and services
+• 📈 *Economic Growth:* Sustainable development initiatives
+• 🎓 *Skills Development:* Mining and technical training programs
 
-🤝 **STAKEHOLDER RELATIONS:**
+🤝 *STAKEHOLDER RELATIONS:*
 Regular community meetings and transparent communication about our operations.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;

@@ -2174,52 +2174,34 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
       return;
     }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(sessionData.password, 10);
+    // No password needed for telegram-only authentication
+    console.log('✅ Skipping password hashing - telegram-only authentication');
 
-    // Create user in main users table with better error handling
-    console.log('Creating user with data:', {
-      username: user.username || `user_${user.id}`,
-      email: sessionData.email,
-      full_name: `${user.first_name} ${user.last_name || ''}`.trim()
-    });
+    // Since we removed email/password system, just use telegram user record
+    console.log('✅ Skipping main user creation - using telegram-only authentication');
 
-    const newUser = await db.createUser({
-      username: user.username || `user_${user.id}`,
-      email: sessionData.email,
-      password_hash: passwordHash,
-      full_name: `${user.first_name} ${user.last_name || ''}`.trim(),
-      is_active: true,
-      is_verified: true // Skip email verification for Telegram users
-    });
+    // Use telegram ID as the user identifier
+    const userId = user.id;
 
-    if (!newUser) {
-      console.error('❌ createUser returned null/undefined');
-      await ctx.replyWithMarkdown('❌ **Registration failed**\n\nDatabase error occurred. Please try again.');
-      return;
-    }
-
-    console.log('✅ User created successfully:', newUser.id);
-
-    // Link Telegram account to user
+    // Update telegram user record to mark as registered (no main user needed)
     let telegramUser = await db.getTelegramUser(user.id);
     if (!telegramUser) {
       telegramUser = await db.createTelegramUser(user.id, {
         username: user.username,
         first_name: user.first_name,
         last_name: user.last_name,
-        user_id: newUser.id,
+        user_id: user.id, // Use telegram ID as user ID
         is_registered: true
       });
       console.log('✅ Created new telegram user record');
     } else {
       console.log('📝 Updating existing telegram user with:', {
-        user_id: newUser.id,
+        user_id: user.id, // Use telegram ID as user ID
         is_registered: true
       });
 
       const updateResult = await db.updateTelegramUser(user.id, {
-        user_id: newUser.id,
+        user_id: user.id, // Use telegram ID as user ID
         is_registered: true
       });
 
@@ -2238,6 +2220,12 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
     // Double-check authentication status
     const finalAuthCheck = await isUserAuthenticated(user.id);
     console.log('✅ Final authentication check:', finalAuthCheck);
+
+    if (!finalAuthCheck) {
+      console.error('❌ Authentication check failed after registration');
+      await ctx.replyWithMarkdown('❌ **Registration completed but authentication failed**\n\nPlease restart with /start to try again.');
+      return;
+    }
 
     // Create referral relationship if sponsor exists
     if (sponsorInfo) {

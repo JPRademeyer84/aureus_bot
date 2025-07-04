@@ -354,13 +354,13 @@ class SupabaseDB {
     }
   }
 
-  // Telegram-based terms acceptance functions
+  // Telegram-based terms acceptance functions (using user_id column temporarily)
   async hasAcceptedTermsTelegram(telegramId, termsType) {
     try {
       const { data, error } = await this.client
         .from('terms_acceptance')
         .select('id')
-        .eq('telegram_id', telegramId)
+        .eq('user_id', telegramId)  // Use user_id column instead
         .eq('terms_type', termsType)
         .single();
 
@@ -383,7 +383,7 @@ class SupabaseDB {
       const { data, error } = await this.client
         .from('terms_acceptance')
         .insert([{
-          telegram_id: telegramId,
+          user_id: telegramId,  // Use user_id column instead
           terms_type: termsType,
           version: version
         }])

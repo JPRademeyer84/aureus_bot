@@ -1412,6 +1412,18 @@ bot.on('callback_query', async (ctx) => {
         await handleSupportCenter(ctx);
         break;
 
+      case 'menu_presentation':
+        await handleCompanyPresentation(ctx);
+        break;
+
+      case 'menu_mining_operations':
+        await handleMiningOperations(ctx);
+        break;
+
+      case 'menu_community':
+        await handleCommunityRelations(ctx);
+        break;
+
       case 'admin_panel':
         await handleAdminPanel(ctx);
         break;
@@ -7456,199 +7468,6 @@ process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);
   process.exit(1);
 });
-
-// Multimedia Handler Functions for Mining Operations
-async function showExcavationVideos(ctx) {
-  const excavationMessage = `🎬 **EXCAVATION VIDEOS**
-
-⛏️ **AUREUS MINING OPERATIONS**
-*Live Documentation of Our Mining Activities*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📹 **AVAILABLE VIDEOS:**
-• 🚜 **Pit Excavation:** Large-scale earth moving operations
-• ⛏️ **Active Digging:** Real-time mining footage
-• 🏭 **Washplant Operations:** Gold processing in action
-• 🔧 **Equipment Maintenance:** Professional mining equipment
-
-🎥 **PROFESSIONAL DOCUMENTATION:**
-All videos are professionally shot and provide authentic insight into our mining operations.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-  await ctx.replyWithMarkdown(excavationMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📹 Coming Soon: Video Gallery", callback_data: "video_gallery_soon" }],
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
-
-async function showGeologicalEvidence(ctx) {
-  const geologicalMessage = `🔬 **GEOLOGICAL EVIDENCE**
-
-🥇 **GOLD DISCOVERY DOCUMENTATION**
-*Scientific Evidence of Our Gold Deposits*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🔍 **GEOLOGICAL FINDINGS:**
-• 🪨 **Gold in Rock Formations:** Visible gold veins in quartz
-• 🏖️ **Gold in Sand Deposits:** Alluvial gold concentrations
-• 📊 **Assay Reports:** Professional geological assessments
-• 🗺️ **Survey Maps:** Detailed geological mapping
-
-🧪 **SCIENTIFIC VALIDATION:**
-All geological evidence has been professionally verified and documented by certified geologists.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-  await ctx.replyWithMarkdown(geologicalMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📸 Coming Soon: Photo Gallery", callback_data: "photo_gallery_soon" }],
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
-
-async function showProjectOverview(ctx) {
-  const overviewMessage = `📊 **PROJECT OVERVIEW**
-
-🏗️ **AUREUS MINING PROJECT SCOPE**
-*Comprehensive Project Documentation*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📋 **PROJECT SPECIFICATIONS:**
-• 📍 **Location:** Mpumalanga Province, South Africa
-• 📏 **Area:** 25 hectares per washplant operation
-• 🏭 **Equipment:** 10 x 200 tons/hour washplants
-• ⏱️ **Timeline:** Full operations by June 2026
-
-🎯 **OPERATIONAL TARGETS:**
-• 📈 **Daily Processing:** 48,000 tons capacity
-• 🥇 **Annual Production:** 3,200 KG gold target
-• 💰 **Revenue Projection:** Based on current gold prices
-• 📊 **ROI Timeline:** 5-year projection model
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-  await ctx.replyWithMarkdown(overviewMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📈 View Financial Projections", callback_data: "financial_projections" }],
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
-
-async function showExecutiveAssessment(ctx) {
-  const executiveMessage = `👔 **EXECUTIVE LEADERSHIP ASSESSMENT**
-
-🏆 **AUREUS ALLIANCE HOLDINGS LEADERSHIP**
-*Professional Management Team*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-👨‍💼 **EXECUTIVE TEAM:**
-• 🎯 **CEO:** Mining industry veteran with 20+ years experience
-• 💼 **CFO:** Financial expert in mining investments
-• ⛏️ **Operations Director:** On-site mining operations specialist
-• 🔬 **Geological Advisor:** Certified professional geologist
-
-📈 **LEADERSHIP CREDENTIALS:**
-• 🏅 **Track Record:** Successful mining project completions
-• 🎓 **Education:** Advanced degrees in mining engineering
-• 🌍 **Experience:** International mining operations
-• 💎 **Specialization:** Alluvial gold mining expertise
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-  await ctx.replyWithMarkdown(executiveMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📄 View Executive Profiles", callback_data: "executive_profiles" }],
-        [{ text: "⛏️ Back to Mining Operations", callback_data: "menu_mining_operations" }],
-        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
-
-async function showCommunityMeetings(ctx) {
-  const meetingsMessage = `📅 **COMMUNITY MEETINGS**
-
-🤝 **STAKEHOLDER ENGAGEMENT**
-*Regular Community Consultation*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📋 **MEETING SCHEDULE:**
-• 📆 **Monthly Meetings:** First Saturday of each month
-• 🏛️ **Venue:** Local community center
-• 🕐 **Time:** 10:00 AM - 12:00 PM
-• 👥 **Attendance:** Open to all community members
-
-🗣️ **DISCUSSION TOPICS:**
-• 📊 **Project Updates:** Mining progress reports
-• 💼 **Employment Opportunities:** Job creation updates
-• 🌍 **Environmental Impact:** Sustainability measures
-• 💰 **Community Benefits:** Local development initiatives
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-  await ctx.replyWithMarkdown(meetingsMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📞 Contact Community Liaison", url: "mailto:community@aureusalliance.com" }],
-        [{ text: "🏘️ Back to Community Relations", callback_data: "menu_community" }],
-        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
-
-async function showDevelopmentPlans(ctx) {
-  const developmentMessage = `🏗️ **COMMUNITY DEVELOPMENT PLANS**
-
-🌟 **SUSTAINABLE DEVELOPMENT INITIATIVES**
-*Long-term Community Investment*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 **DEVELOPMENT PRIORITIES:**
-• 🏫 **Education:** School infrastructure improvements
-• 🏥 **Healthcare:** Medical facility upgrades
-• 🛤️ **Infrastructure:** Road and utility improvements
-• 💼 **Economic:** Local business development support
-
-📈 **INVESTMENT TIMELINE:**
-• 📅 **Phase 1:** Immediate infrastructure needs (2024)
-• 📅 **Phase 2:** Educational facility upgrades (2025)
-• 📅 **Phase 3:** Healthcare system improvements (2026)
-• 📅 **Phase 4:** Long-term economic development (2027+)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-  await ctx.replyWithMarkdown(developmentMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📋 View Detailed Plans", callback_data: "detailed_development_plans" }],
-        [{ text: "🏘️ Back to Community Relations", callback_data: "menu_community" }],
-        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
 
 // Start the bot
 startBot().catch(error => {

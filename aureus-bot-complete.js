@@ -3670,8 +3670,10 @@ async function showIndividualPaymentForReview(ctx, payment, index, total) {
     console.log('Could not fetch telegram username for user:', payment.user_id);
   }
 
-  // Format transaction hash for display
-  const shortTxHash = payment.transaction_hash.substring(0, 12) + '...' + payment.transaction_hash.substring(-8);
+  // Safely format wallet addresses and transaction hash
+  const senderWallet = payment.sender_wallet || 'Not provided';
+  const receiverWallet = payment.receiver_wallet || 'Not provided';
+  const transactionHash = payment.transaction_hash || 'Not provided';
 
   const paymentMessage = `💳 **PAYMENT REVIEW ${index}/${total}**
 
@@ -3686,13 +3688,13 @@ async function showIndividualPaymentForReview(ctx, payment, index, total) {
 📅 **Date:** ${new Date(payment.created_at).toLocaleString()}
 
 🔗 **TRANSACTION HASH:**
-\`${payment.transaction_hash}\`
+${transactionHash}
 
 💳 **SENDER WALLET:**
-\`${payment.sender_wallet}\`
+${senderWallet}
 
 🏦 **RECEIVER WALLET:**
-\`${payment.receiver_wallet}\`
+${receiverWallet}
 
 📷 **SCREENSHOT:** ${payment.screenshot_url ? 'Available' : 'Not provided'}
 

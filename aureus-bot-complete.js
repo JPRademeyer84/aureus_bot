@@ -7117,6 +7117,10 @@ async function completePaymentVerification(ctx, transactionHash) {
     phase_id
   });
 
+  if (!sender_wallet_address) {
+    console.warn(`⚠️ WARNING: Missing sender wallet address for user ${telegramUser.id}`);
+  }
+
   let pkg = null;
   let packageCost = 0;
   let sharesAmount = 0;
@@ -7214,12 +7218,14 @@ Contact support with your transaction details.`;
       amount: packageCost,
       currency: 'USDT',
       network: network.toUpperCase(),
-      sender_wallet: sender_wallet_address,
+      sender_wallet: sender_wallet_address || 'NOT_PROVIDED', // Fallback for missing wallet address
       receiver_wallet: receiverWallet,
       transaction_hash: transactionHash,
       screenshot_url: screenshotUrl,
       status: 'pending'
     };
+
+    console.log(`💾 Payment data being inserted:`, paymentData);
 
     const { data: paymentRecord, error: paymentError } = await db.client
       .from('crypto_payment_transactions')
@@ -7312,7 +7318,7 @@ Our support team can help verify your transaction.`;
 • **Transaction ID:** #${paymentRecord.id.substring(0, 8)}
 
 **✅ VERIFICATION SUBMITTED:**
-• Sender Wallet: \`${walletAddress}\`
+• Sender Wallet: \`${sender_wallet_address || 'NOT PROVIDED - Admin will request'}\`
 • Screenshot: Uploaded to secure storage
 • Transaction Hash: \`${transactionHash}\`
 

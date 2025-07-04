@@ -2610,9 +2610,16 @@ async function handleCustomAmountPurchase(ctx) {
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
 
+  console.log(`🔍 PENDING PAYMENT CHECK in handleCustomAmountPurchase for user ${userId}:`, {
+    pendingPayments,
+    pendingError,
+    paymentCount: pendingPayments?.length || 0
+  });
+
   if (pendingError) {
     console.error('Error checking pending payments:', pendingError);
   } else if (pendingPayments && pendingPayments.length > 0) {
+    console.log(`🚨 FOUND ${pendingPayments.length} pending payments for user ${userId}`);
     // User has pending payments - show enhanced management options
     const pendingPayment = pendingPayments[0];
     const paymentDate = new Date(pendingPayment.created_at);
@@ -2880,6 +2887,88 @@ async function handleCustomPayment(ctx, callbackData) {
   const amount = parseFloat(parts[3]);
 
   const user = ctx.from;
+
+  // CRITICAL: Check for pending payments before allowing new payment
+  const { data: telegramUser, error: telegramError } = await db.client
+    .from('telegram_users')
+    .select('user_id')
+    .eq('telegram_id', user.id)
+    .single();
+
+  if (telegramError || !telegramUser) {
+    await ctx.replyWithMarkdown('❌ **Authentication Error**\n\nPlease restart the bot and try again.');
+    return;
+  }
+
+  const userId = telegramUser.user_id;
+
+  // Check for existing pending payments
+  const { data: pendingPayments, error: pendingError } = await db.client
+    .from('crypto_payment_transactions')
+    .select('id, amount, network, created_at, status')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  console.log(`🔍 PENDING PAYMENT CHECK for user ${userId}:`, { pendingPayments, pendingError });
+
+  if (pendingError) {
+    console.error('Error checking pending payments in handleCustomPayment:', pendingError);
+  } else if (pendingPayments && pendingPayments.length > 0) {
+    console.log(`🚨 BLOCKING: User ${userId} has ${pendingPayments.length} pending payments`);
+
+    // User has pending payments - redirect to management
+    const pendingPayment = pendingPayments[0];
+    const paymentDate = new Date(pendingPayment.created_at);
+    const now = new Date();
+    const daysDiff = Math.floor((now - paymentDate) / (1000 * 60 * 60 * 24));
+    const hoursAgo = Math.floor((now - paymentDate) / (1000 * 60 * 60));
+
+    const timeAgo = daysDiff > 0 ? `${daysDiff} day${daysDiff > 1 ? 's' : ''} ago` :
+                    hoursAgo > 0 ? `${hoursAgo} hour${hoursAgo > 1 ? 's' : ''} ago` :
+                    'Less than 1 hour ago';
+
+    const isOld = daysDiff >= 1;
+    const statusIcon = isOld ? '🔴' : '🟡';
+    const ageWarning = isOld ? '\n\n🔴 **OLD PAYMENT:** This payment is over 24 hours old.' : '';
+
+    const pendingMessage = `⚠️ **CANNOT CREATE NEW PAYMENT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚨 **You already have a pending payment:**
+
+💰 **Amount:** $${pendingPayment.amount}
+🌐 **Network:** ${pendingPayment.network.toUpperCase()}
+📅 **Submitted:** ${paymentDate.toLocaleDateString()} (${timeAgo})
+⏳ **Status:** Pending Admin Approval${ageWarning}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔧 HANDLE EXISTING PAYMENT FIRST:**
+
+You must complete or delete your pending payment before creating a new one.`;
+
+    const keyboard = [
+      [{ text: "💳 Continue with Pending Payment", callback_data: `continue_payment_${pendingPayment.id}` }],
+      [{ text: "🗑️ Delete Pending Payment", callback_data: `cancel_payment_${pendingPayment.id}` }]
+    ];
+
+    if (isOld) {
+      keyboard.push([{ text: "📞 Contact Support (Old Payment)", callback_data: "menu_help" }]);
+    }
+
+    keyboard.push([{ text: "📊 View Payment Details", callback_data: "view_portfolio" }]);
+    keyboard.push([{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]);
+
+    await ctx.replyWithMarkdown(pendingMessage, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+    return;
+  }
+
+  console.log(`✅ No pending payments found for user ${userId}, proceeding with payment creation`);
+
   const session = await db.getUserSession(user.id);
 
   if (!session || session.session_state !== 'custom_purchase_confirmed') {

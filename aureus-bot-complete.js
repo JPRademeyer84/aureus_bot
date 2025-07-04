@@ -52,7 +52,7 @@ ${bonusList}`;
 function createMainMenuKeyboard(isAdmin = false) {
   const keyboard = [
     [
-      { text: "⛏️ Mining Packages", callback_data: "menu_packages" },
+      { text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" },
       { text: "💰 Custom Share Purchase", callback_data: "menu_custom" }
     ],
     [
@@ -371,7 +371,7 @@ async function requireAuthentication(ctx, action = 'perform this action') {
   return true;
 }
 
-// Authentication flow
+// PHASE 1: Terms-first authentication flow
 async function startAuthenticationFlow(ctx) {
   const user = ctx.from;
   const isAdmin = user.username === ADMIN_USERNAME;
@@ -384,6 +384,34 @@ async function startAuthenticationFlow(ctx) {
     await showMainMenu(ctx);
     return;
   }
+
+  // For admin users, skip terms and go directly to admin login
+  if (isAdmin) {
+    await showAuthenticationOptions(ctx);
+    return;
+  }
+
+  // For regular users, check if they've accepted all terms first
+  const telegramUser = await db.getTelegramUser(user.id);
+  let allTermsAccepted = false;
+
+  if (telegramUser && telegramUser.user_id) {
+    allTermsAccepted = await checkAllTermsAccepted(telegramUser.user_id);
+  }
+
+  if (allTermsAccepted) {
+    // Terms already accepted, show authentication options
+    await showAuthenticationOptions(ctx);
+  } else {
+    // Terms not accepted, start terms acceptance flow
+    await startTermsAcceptanceFlow(ctx);
+  }
+}
+
+// New function to show authentication options after terms are accepted
+async function showAuthenticationOptions(ctx) {
+  const user = ctx.from;
+  const isAdmin = user.username === ADMIN_USERNAME;
 
   // Clear any existing session
   await clearUserState(user.id);
@@ -418,17 +446,153 @@ To begin buying shares in Aureus Alliance Holdings, please choose your access me
     inline_keyboard: [
       [{ text: "👤 Login as Shareholder", callback_data: "login_investor" }],
       [{ text: "🔑 Admin Access", callback_data: "login_admin" }],
-      [{ text: "📝 Create New Account", callback_data: "register_new" }]
+      [{ text: "🚀 Quick Start (Recommended)", callback_data: "quick_register" }],
+      [{ text: "📝 Advanced Registration", callback_data: "register_new" }]
     ]
   } : {
     inline_keyboard: [
+      [{ text: "🚀 Quick Start (Recommended)", callback_data: "quick_register" }],
       [{ text: "🔐 Login to Existing Account", callback_data: "login_investor" }],
-      [{ text: "📝 Create New Shareholder Account", callback_data: "register_new" }],
+      [{ text: "📝 Advanced Registration", callback_data: "register_new" }],
       [{ text: "❓ Need Help?", callback_data: "help_access" }]
     ]
   };
 
   await ctx.replyWithMarkdown(welcomeMessage, { reply_markup: keyboard });
+}
+
+// PHASE 1: New terms acceptance flow functions
+async function startTermsAcceptanceFlow(ctx) {
+  const user = ctx.from;
+
+  const termsMessage = `📋 **TERMS & CONDITIONS REQUIRED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Welcome to **Aureus Alliance Holdings**, ${user.first_name}! 👋
+
+**⚖️ LEGAL REQUIREMENT:**
+Before you can register or access any features, you must review and accept our comprehensive terms and conditions.
+
+**📜 REQUIRED TERMS (6 Categories):**
+• General Terms & Conditions
+• Privacy Policy
+• Share Purchase Risk Disclosure
+• Mining Operations Agreement
+• NFT Terms & Conditions
+• Dividend Policy Agreement
+
+**🔒 YOUR PROTECTION:**
+These terms protect both you and Aureus Alliance Holdings by clearly defining rights, responsibilities, and investment risks.
+
+**⏱️ ESTIMATED TIME:** 5-10 minutes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Ready to review and accept all terms?**`;
+
+  await ctx.replyWithMarkdown(termsMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📋 Start Terms Review", callback_data: "start_terms_review" }],
+        [{ text: "❓ Why are terms required?", callback_data: "terms_info" }],
+        [{ text: "🔙 Exit", callback_data: "exit_bot" }]
+      ]
+    }
+  });
+}
+
+async function checkAllTermsAccepted(userId) {
+  const requiredTerms = ['general', 'privacy', 'investment_risks', 'mining_operations', 'nft_terms', 'dividend_policy'];
+
+  for (const termType of requiredTerms) {
+    const hasAccepted = await db.hasAcceptedTerms(userId, termType);
+    if (!hasAccepted) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function handleStartTermsReview(ctx) {
+  const user = ctx.from;
+
+  // Create a temporary user record if needed for terms tracking
+  let telegramUser = await db.getTelegramUser(user.id);
+  if (!telegramUser) {
+    // Create telegram user record for terms tracking
+    telegramUser = await db.createTelegramUser(user.id, {
+      username: user.username,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      is_registered: false
+    });
+  }
+
+  // Start with the first term
+  const requiredTerms = ['general', 'privacy', 'investment_risks', 'mining_operations', 'nft_terms', 'dividend_policy'];
+
+  // Set state to track terms acceptance progress
+  await setUserState(user.id, 'accepting_terms', {
+    currentTermIndex: 0,
+    requiredTerms: requiredTerms,
+    acceptedTerms: []
+  });
+
+  // Show the first term
+  await handleTermsSelection(ctx, `terms_${requiredTerms[0]}`);
+}
+
+async function handleTermsInfo(ctx) {
+  const infoMessage = `❓ **WHY TERMS ARE REQUIRED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🏛️ LEGAL COMPLIANCE:**
+• Required by South African financial regulations
+• Protects both investors and the company
+• Ensures transparent investment disclosure
+
+**🛡️ YOUR PROTECTION:**
+• Clear explanation of investment risks
+• Defined rights and responsibilities
+• Privacy protection guarantees
+• Dividend payment policies
+
+**⚖️ REGULATORY REQUIREMENTS:**
+• Mining operations compliance
+• NFT certificate terms
+• Anti-money laundering compliance
+• Investor protection standards
+
+**✅ ONE-TIME PROCESS:**
+Once accepted, you won't need to review terms again for future purchases.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(infoMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📋 Start Terms Review", callback_data: "start_terms_review" }],
+        [{ text: "🔙 Back", callback_data: "start_terms_review" }]
+      ]
+    }
+  });
+}
+
+async function handleExitBot(ctx) {
+  await ctx.replyWithMarkdown(`👋 **GOODBYE**
+
+Thank you for your interest in Aureus Alliance Holdings.
+
+**📞 CONTACT US:**
+If you have questions about our terms or investment opportunities, please contact our support team.
+
+You can return anytime by starting a new conversation with this bot.
+
+**🏆 Aureus Alliance Holdings**
+*Premium Gold Mining Investments*`);
 }
 
 // Text input handlers for authentication
@@ -517,7 +681,7 @@ Welcome back, **${user.first_name}**!
 Your Telegram account has been successfully linked to your shareholder account.
 
 **🏆 Access Granted to:**
-• Premium Mining Packages
+• Premium Share Purchases
 • Share Purchase Calculator
 • Portfolio Dashboard
 • Referral Program`;
@@ -1033,6 +1197,10 @@ bot.on('text', async (ctx) => {
         await handleWithdrawalWalletInput(ctx, text);
         break;
 
+      case 'awaiting_custom_amount':
+        await handleCustomAmountInput(ctx, text);
+        break;
+
       default:
         // Unknown state, restart authentication
         await startAuthenticationFlow(ctx);
@@ -1055,13 +1223,16 @@ bot.on('callback_query', async (ctx) => {
     const authCallbacks = [
       'login_investor', 'login_admin', 'register_new', 'help_access',
       'back_to_welcome', 'enter_email', 'sponsor_manual',
-      'sponsor_auto', 'back_to_password', 'back_to_sponsor_selection'
+      'sponsor_auto', 'back_to_password', 'back_to_sponsor_selection',
+      'start_terms_review', 'terms_info', 'exit_bot', 'quick_register'
     ];
 
-    // Check authentication for most actions (except auth flows)
+    // Check authentication for most actions (except auth flows and terms)
     if (!authCallbacks.includes(callbackData) &&
         !callbackData.startsWith('auth_') &&
-        !callbackData.startsWith('confirm_sponsor_')) {
+        !callbackData.startsWith('confirm_sponsor_') &&
+        !callbackData.startsWith('terms_') &&
+        !callbackData.startsWith('accept_')) {
       const isAuth = await isUserAuthenticated(user.id);
       if (!isAuth) {
         await ctx.answerCbQuery('Please complete authentication first');
@@ -1087,8 +1258,28 @@ bot.on('callback_query', async (ctx) => {
         await handleNewRegistration(ctx);
         break;
 
+      case 'quick_register':
+        await handleQuickRegistration(ctx);
+        break;
+
+      case 'sponsor_help':
+        await handleSponsorHelp(ctx);
+        break;
+
       case 'help_access':
         await handleAccessHelp(ctx);
+        break;
+
+      case 'start_terms_review':
+        await handleStartTermsReview(ctx);
+        break;
+
+      case 'terms_info':
+        await handleTermsInfo(ctx);
+        break;
+
+      case 'exit_bot':
+        await handleExitBot(ctx);
         break;
 
       case 'sponsor_manual':
@@ -1127,6 +1318,10 @@ bot.on('callback_query', async (ctx) => {
 
       case 'menu_packages':
         await handlePackagesMenu(ctx);
+        break;
+
+      case 'menu_purchase_shares':
+        await handleCustomAmountPurchase(ctx);
         break;
 
       case 'menu_custom':
@@ -1273,6 +1468,14 @@ bot.on('callback_query', async (ctx) => {
           await handleCancelPayment(ctx, callbackData);
         } else if (callbackData.startsWith('confirm_cancel_')) {
           await handleConfirmCancel(ctx, callbackData);
+        } else if (callbackData.startsWith('quick_amount_')) {
+          await handleQuickAmount(ctx, callbackData);
+        } else if (callbackData.startsWith('custom_pay_')) {
+          await handleCustomPayment(ctx, callbackData);
+        } else if (callbackData === 'back_to_custom_payment') {
+          await handleBackToCustomPayment(ctx);
+        } else if (callbackData.startsWith('custom_commission_')) {
+          await handleCustomCommissionPayment(ctx, callbackData);
         }
         break;
     }
@@ -1374,17 +1577,88 @@ Welcome, **Administrator ${user.first_name}**!
   });
 }
 
+// Quick Registration - Simplified for elderly users
+async function handleQuickRegistration(ctx) {
+  const user = ctx.from;
+
+  // Clear any existing session
+  await clearUserState(user.id);
+
+  const quickMessage = `🚀 **QUICK START REGISTRATION**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Hello **${user.first_name}**! 👋
+
+**✨ SIMPLE SETUP:**
+We'll create your account automatically using your Telegram information.
+
+**📋 YOUR ACCOUNT DETAILS:**
+• Name: ${user.first_name} ${user.last_name || ''}
+• Username: @${user.username || 'Not set'}
+• Account Type: Premium Shareholder
+
+**🎯 OPTIONAL: Do you have a sponsor?**
+(Someone who referred you to Aureus Alliance Holdings)`;
+
+  await ctx.replyWithMarkdown(quickMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "👤 Yes, I have a sponsor", callback_data: "sponsor_manual" }],
+        [{ text: "🚀 No sponsor, continue", callback_data: "sponsor_auto" }],
+        [{ text: "❓ What's a sponsor?", callback_data: "sponsor_help" }],
+        [{ text: "🔙 Back to Options", callback_data: "back_to_welcome" }]
+      ]
+    }
+  });
+}
+
+async function handleSponsorHelp(ctx) {
+  const helpMessage = `❓ **WHAT IS A SPONSOR?**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🤝 A sponsor is someone who:**
+• Referred you to Aureus Alliance Holdings
+• Introduced you to our gold mining shares
+• Will earn a small commission when you purchase shares
+
+**💡 BENEFITS:**
+• Your sponsor can help guide you
+• They earn 15% commission on your purchases
+• You get the same great share prices
+
+**🎯 DON'T HAVE A SPONSOR?**
+No problem! We'll automatically assign you to our founder for support.
+
+**👥 HAVE A SPONSOR?**
+Enter their Telegram username (like @john_doe)`;
+
+  await ctx.replyWithMarkdown(helpMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "👤 Enter Sponsor Username", callback_data: "sponsor_manual" }],
+        [{ text: "🚀 Continue Without Sponsor", callback_data: "sponsor_auto" }],
+        [{ text: "🔙 Back to Registration", callback_data: "quick_register" }]
+      ]
+    }
+  });
+}
+
 async function handleNewRegistration(ctx) {
   const user = ctx.from;
 
   // Set state to collect email for registration
   await setUserState(user.id, 'register_awaiting_email');
 
-  const registerMessage = `📝 **CREATE SHAREHOLDER ACCOUNT**
+  const registerMessage = `📝 **ADVANCED REGISTRATION**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Welcome to **Aureus Alliance Holdings**!
+
+**🔧 ADVANCED SETUP:**
+This option allows you to set a custom email and password.
 
 To create your premium shareholder account, please enter your **email address**:
 
@@ -1395,6 +1669,7 @@ To create your premium shareholder account, please enter your **email address**:
   await ctx.replyWithMarkdown(registerMessage, {
     reply_markup: {
       inline_keyboard: [
+        [{ text: "🚀 Use Quick Registration Instead", callback_data: "quick_register" }],
         [{ text: "🔙 Back to Welcome", callback_data: "back_to_welcome" }]
       ]
     }
@@ -1433,16 +1708,23 @@ async function handleAccessHelp(ctx) {
 async function handleManualSponsorInput(ctx) {
   const user = ctx.from;
 
-  // Get existing session data to preserve email and password
+  // Get existing session data or create for quick registration
   const session = await db.getUserSession(user.id);
-  if (!session || !session.session_data) {
-    await ctx.replyWithMarkdown('❌ **Session expired**\n\nPlease start registration again.');
-    await startAuthenticationFlow(ctx);
-    return;
+  let sessionData = {};
+
+  if (session && session.session_data) {
+    sessionData = session.session_data;
+  } else {
+    // Quick registration - create minimal session data
+    sessionData = {
+      email: `${user.username || user.id}@telegram.aureus`,
+      password: `telegram_${user.id}_${Date.now()}`, // Auto-generated password
+      quick_registration: true
+    };
   }
 
   // Set state to collect sponsor username while preserving session data
-  await setUserState(user.id, 'register_awaiting_sponsor_username', session.session_data);
+  await setUserState(user.id, 'register_awaiting_sponsor_username', sessionData);
 
   const sponsorInputMessage = `👤 **ENTER SPONSOR USERNAME**
 
@@ -1470,10 +1752,17 @@ async function handleAutoSponsorAssignment(ctx) {
   const user = ctx.from;
   const session = await db.getUserSession(user.id);
 
-  if (!session || !session.session_data) {
-    await ctx.replyWithMarkdown('❌ **Session expired**\n\nPlease start registration again.');
-    await startAuthenticationFlow(ctx);
-    return;
+  // For quick registration, we don't need session data
+  let sessionData = {};
+  if (session && session.session_data) {
+    sessionData = session.session_data;
+  } else {
+    // Quick registration - create minimal session data
+    sessionData = {
+      email: `${user.username || user.id}@telegram.aureus`,
+      password: `telegram_${user.id}_${Date.now()}`, // Auto-generated password
+      quick_registration: true
+    };
   }
 
   try {
@@ -1529,7 +1818,7 @@ async function handleAutoSponsorAssignment(ctx) {
       }
     }
 
-    await completeUserRegistration(ctx, session.session_data, sponsorInfo);
+    await completeUserRegistration(ctx, sessionData, sponsorInfo);
 
   } catch (error) {
     console.error('Auto sponsor assignment error:', error);
@@ -1798,7 +2087,31 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
       sponsorText = `\n👥 **Sponsor:** ${sponsorInfo.full_name || sponsorInfo.username}\n`;
     }
 
-    const successMessage = `🎉 **REGISTRATION SUCCESSFUL!**
+    // Create user-friendly success message
+    const isQuickRegistration = sessionData.quick_registration;
+
+    const successMessage = isQuickRegistration ?
+      `🎉 **WELCOME TO AUREUS ALLIANCE!**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Hello **${user.first_name}**! 👋
+
+✅ **Your account is ready!**
+
+👤 **Name:** ${user.first_name} ${user.last_name || ''}
+🆔 **Account ID:** #${newUser.id}${sponsorText}
+
+🎁 **What you can do now:**
+• Buy gold mining shares
+• Track your investments
+• Earn referral commissions
+• Get quarterly dividends
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🚀 Ready to start? Choose an option below:**` :
+      `🎉 **REGISTRATION SUCCESSFUL!**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1825,7 +2138,7 @@ Welcome to **Aureus Alliance Holdings**, ${user.first_name}!
       reply_markup: {
         inline_keyboard: [
           [{ text: "🏠 Enter Dashboard", callback_data: "main_menu" }],
-          [{ text: "⛏️ View Mining Packages", callback_data: "menu_packages" }]
+          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }]
         ]
       }
     });
@@ -2198,6 +2511,580 @@ Choose from our 8 premium mining equipment packages, each representing real mini
 
   await ctx.replyWithMarkdown(packagesMessage, {
     reply_markup: await createPackagesKeyboard(packages)
+  });
+}
+
+// PHASE 2: Custom Amount Purchase System
+async function handleCustomAmountPurchase(ctx) {
+  const user = ctx.from;
+
+  const customAmountMessage = `🛒 **PURCHASE SHARES**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 CUSTOM AMOUNT PURCHASE**
+
+Enter any amount between **$25** and **$50,000** to purchase Aureus Alliance Holdings shares.
+
+**📊 CURRENT PRICING:**`;
+
+  // Get current phase info
+  const currentPhase = await db.getCurrentPhase();
+
+  let pricingInfo = '';
+  if (currentPhase) {
+    pricingInfo = `
+• **Share Price:** ${formatCurrency(currentPhase.price_per_share)}
+• **Phase:** ${currentPhase.phase_name}
+• **Available:** ${(currentPhase.total_shares_available - currentPhase.shares_sold).toLocaleString()} shares`;
+  } else {
+    pricingInfo = '\n• Pricing information temporarily unavailable';
+  }
+
+  const fullMessage = customAmountMessage + pricingInfo + `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💡 EXAMPLES:**
+• $25 = Minimum purchase
+• $100 = Small investment
+• $1,000 = Medium investment
+• $10,000 = Large investment
+• $50,000 = Maximum per transaction
+
+**🔢 ENTER YOUR AMOUNT:**
+Type the dollar amount you want to invest (e.g., 500)`;
+
+  await ctx.replyWithMarkdown(fullMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "💡 Quick Amount: $100", callback_data: "quick_amount_100" }],
+        [{ text: "💡 Quick Amount: $500", callback_data: "quick_amount_500" }],
+        [{ text: "💡 Quick Amount: $1000", callback_data: "quick_amount_1000" }],
+        [{ text: "📊 View Old Packages", callback_data: "menu_packages" }],
+        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+
+  // Set user state to await custom amount input
+  await setUserState(user.id, 'awaiting_custom_amount');
+}
+
+// PHASE 2: Quick amount handlers
+async function handleQuickAmount(ctx, callbackData) {
+  const amount = parseInt(callbackData.split('_')[2]);
+  await processCustomAmount(ctx, amount);
+}
+
+async function handleCustomAmountInput(ctx, text) {
+  const amount = parseFloat(text.replace(/[$,\s]/g, ''));
+
+  if (isNaN(amount)) {
+    await ctx.replyWithMarkdown('❌ **Invalid amount**\n\nPlease enter a valid number (e.g., 500)');
+    return;
+  }
+
+  await processCustomAmount(ctx, amount);
+}
+
+async function processCustomAmount(ctx, amount) {
+  const user = ctx.from;
+
+  // Validate amount range
+  if (amount < 25) {
+    await ctx.replyWithMarkdown('❌ **Amount too low**\n\nMinimum purchase amount is **$25**.\n\nPlease enter a higher amount.');
+    return;
+  }
+
+  if (amount > 50000) {
+    await ctx.replyWithMarkdown('❌ **Amount too high**\n\nMaximum purchase amount is **$50,000** per transaction.\n\nPlease enter a lower amount or make multiple purchases.');
+    return;
+  }
+
+  // Clear the awaiting state
+  await clearUserState(user.id);
+
+  // Get current phase info to calculate shares
+  const currentPhase = await db.getCurrentPhase();
+
+  if (!currentPhase) {
+    await ctx.replyWithMarkdown('❌ **Pricing unavailable**\n\nShare pricing is temporarily unavailable. Please try again later.');
+    return;
+  }
+
+  const sharePrice = currentPhase.price_per_share;
+  const sharesAmount = Math.floor(amount / sharePrice);
+  const exactCost = sharesAmount * sharePrice;
+
+  // Check if there are enough shares available
+  const availableShares = currentPhase.total_shares_available - currentPhase.shares_sold;
+
+  if (sharesAmount > availableShares) {
+    await ctx.replyWithMarkdown(`❌ **Insufficient shares available**\n\nYou requested ${sharesAmount.toLocaleString()} shares, but only ${availableShares.toLocaleString()} shares are available in the current phase.\n\nMaximum purchase amount: ${formatCurrency(availableShares * sharePrice)}`);
+    return;
+  }
+
+  // Start the purchase flow with custom amount
+  await startCustomAmountPurchaseFlow(ctx, amount, sharesAmount, exactCost, currentPhase);
+}
+
+async function startCustomAmountPurchaseFlow(ctx, requestedAmount, sharesAmount, exactCost, currentPhase) {
+  const user = ctx.from;
+
+  // Check authentication
+  const telegramUser = await db.getTelegramUser(user.id);
+  if (!telegramUser || !telegramUser.user_id) {
+    await ctx.replyWithMarkdown('❌ **Authentication required**\n\nPlease log in first.');
+    return;
+  }
+
+  const userId = telegramUser.user_id;
+
+  // PHASE 3: Get user's commission balance
+  const { data: commissionBalance, error: balanceError } = await db.client
+    .from('commission_balances')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+
+  const availableUSDT = commissionBalance?.usdt_balance || 0;
+  const canUseCommission = availableUSDT > 0;
+
+  // Check for existing pending payments (same as package flow)
+  const { data: pendingPayments, error: pendingError } = await db.client
+    .from('crypto_payment_transactions')
+    .select('id, amount, network, created_at, status')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  if (pendingError) {
+    console.error('Error checking pending payments:', pendingError);
+  } else if (pendingPayments && pendingPayments.length > 0) {
+    // User has pending payments - show management options
+    const pendingPayment = pendingPayments[0];
+    const paymentDate = new Date(pendingPayment.created_at).toLocaleDateString();
+
+    const pendingMessage = `⚠️ **PENDING PAYMENT DETECTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚨 **You have an existing pending payment:**
+
+💰 **Amount:** $${pendingPayment.amount}
+🌐 **Network:** ${pendingPayment.network}
+📅 **Submitted:** ${paymentDate}
+⏳ **Status:** Pending Admin Approval
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⚠️ IMPORTANT:**
+You cannot make new purchases while you have pending payments.
+
+**🔧 CHOOSE AN OPTION:**`;
+
+    await ctx.replyWithMarkdown(pendingMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⏳ Wait for Current Payment", callback_data: "wait_pending" }],
+          [{ text: "❌ Cancel Pending Payment", callback_data: `cancel_payment_${pendingPayment.id}` }],
+          [{ text: "📊 View Payment Status", callback_data: "view_portfolio" }],
+          [{ text: "🔙 Back to Purchase", callback_data: "menu_purchase_shares" }]
+        ]
+      }
+    });
+    return;
+  }
+
+  // PHASE 3: Show purchase confirmation with commission balance options
+  let confirmationMessage = `🛒 **CONFIRM SHARE PURCHASE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 PURCHASE DETAILS:**
+
+• **Requested Amount:** ${formatCurrency(requestedAmount)}
+• **Exact Cost:** ${formatCurrency(exactCost)}
+• **Shares:** ${sharesAmount.toLocaleString()}
+• **Price per Share:** ${formatCurrency(currentPhase.price_per_share)}
+• **Phase:** ${currentPhase.phase_name}`;
+
+  // Add commission balance info
+  if (canUseCommission) {
+    const maxCommissionUsage = Math.min(availableUSDT, exactCost);
+    const remainingAfterCommission = exactCost - maxCommissionUsage;
+
+    confirmationMessage += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 COMMISSION BALANCE AVAILABLE:**
+
+• **Available Balance:** ${formatCurrency(availableUSDT)}
+• **Can Use:** ${formatCurrency(maxCommissionUsage)}`;
+
+    if (remainingAfterCommission > 0) {
+      confirmationMessage += `
+• **Remaining to Pay:** ${formatCurrency(remainingAfterCommission)}`;
+    }
+  }
+
+  confirmationMessage += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 PAYMENT OPTIONS:**`;
+
+  // Create keyboard with commission options
+  const keyboard = [];
+
+  if (canUseCommission) {
+    const maxCommissionUsage = Math.min(availableUSDT, exactCost);
+    const remainingAfterCommission = exactCost - maxCommissionUsage;
+
+    if (remainingAfterCommission <= 0) {
+      // Can pay entirely with commission
+      keyboard.push([{ text: "💰 Pay with Commission Balance", callback_data: `custom_commission_full_${exactCost}` }]);
+    } else {
+      // Can pay partially with commission
+      keyboard.push([{ text: `💰 Use Commission (${formatCurrency(maxCommissionUsage)}) + Crypto`, callback_data: `custom_commission_partial_${exactCost}` }]);
+    }
+
+    keyboard.push([{ text: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", callback_data: "separator" }]);
+  }
+
+  // Add crypto payment options
+  keyboard.push(
+    [{ text: "💳 BSC USDT", callback_data: `custom_pay_bsc_${exactCost}` }],
+    [{ text: "💳 Polygon USDT", callback_data: `custom_pay_pol_${exactCost}` }],
+    [{ text: "💳 TRON USDT", callback_data: `custom_pay_tron_${exactCost}` }],
+    [{ text: "🔙 Change Amount", callback_data: "menu_purchase_shares" }],
+    [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+  );
+
+  await ctx.replyWithMarkdown(confirmationMessage, {
+    reply_markup: {
+      inline_keyboard: keyboard
+    }
+  });
+
+  // Store the custom purchase details in session
+  await setUserState(user.id, 'custom_purchase_confirmed', {
+    amount: exactCost,
+    shares: sharesAmount,
+    phase_id: currentPhase.id,
+    requested_amount: requestedAmount
+  });
+}
+
+// PHASE 2: Custom payment handler
+async function handleCustomPayment(ctx, callbackData) {
+  const parts = callbackData.split('_');
+  const network = parts[2].toUpperCase(); // BSC, POL, or TRON
+  const amount = parseFloat(parts[3]);
+
+  const user = ctx.from;
+  const session = await db.getUserSession(user.id);
+
+  if (!session || session.session_state !== 'custom_purchase_confirmed') {
+    await ctx.replyWithMarkdown('❌ **Session expired**\n\nPlease start the purchase process again.');
+    await handleCustomAmountPurchase(ctx);
+    return;
+  }
+
+  const { shares, phase_id, requested_amount } = session.session_data;
+
+  // Get wallet address for the network
+  const walletData = await db.getWalletByNetwork(network);
+  if (!walletData) {
+    await ctx.replyWithMarkdown(`❌ **${network} wallet not available**\n\nPlease try a different payment method.`);
+    return;
+  }
+
+  const paymentMessage = `💳 **${network} USDT PAYMENT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 PAYMENT DETAILS:**
+
+💰 **Amount:** ${formatCurrency(amount)}
+📊 **Shares:** ${shares.toLocaleString()}
+🌐 **Network:** ${network}
+📍 **Wallet Address:**
+
+\`${walletData.wallet_address}\`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⚠️ IMPORTANT INSTRUCTIONS:**
+
+1. **Send EXACTLY** ${formatCurrency(amount)} USDT
+2. **Use ${network} network only**
+3. **Copy wallet address carefully**
+4. **Take screenshot of transaction**
+5. **Upload screenshot below**
+
+**🚨 WARNING:**
+• Wrong amount = Payment rejected
+• Wrong network = Funds lost
+• No screenshot = No verification
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📸 UPLOAD PAYMENT SCREENSHOT:**`;
+
+  await ctx.replyWithMarkdown(paymentMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📋 Copy Wallet Address", callback_data: `copy_wallet_${network}` }],
+        [{ text: "🔙 Change Payment Method", callback_data: "back_to_custom_payment" }],
+        [{ text: "❌ Cancel Purchase", callback_data: "menu_purchase_shares" }]
+      ]
+    }
+  });
+
+  // Set state for payment verification (compatible with existing payment flow)
+  await setUserState(user.id, 'payment_verification', {
+    network: network,
+    packageId: 'custom', // Use 'custom' instead of actual package ID
+    step: 'screenshot',
+    walletAddress: walletData.wallet_address,
+    amount: amount,
+    shares: shares,
+    phase_id: phase_id,
+    custom_purchase: true,
+    requested_amount: requested_amount
+  });
+}
+
+async function handleBackToCustomPayment(ctx) {
+  const user = ctx.from;
+  const session = await db.getUserSession(user.id);
+
+  if (!session || !session.session_data || !session.session_data.custom_purchase) {
+    await ctx.replyWithMarkdown('❌ **Session expired**\n\nPlease start the purchase process again.');
+    await handleCustomAmountPurchase(ctx);
+    return;
+  }
+
+  const { amount, shares, phase_id, requested_amount } = session.session_data;
+
+  // Get current phase info
+  const currentPhase = await db.getCurrentPhase();
+
+  if (!currentPhase || currentPhase.id !== phase_id) {
+    await ctx.replyWithMarkdown('❌ **Pricing has changed**\n\nPlease start the purchase process again with current pricing.');
+    await handleCustomAmountPurchase(ctx);
+    return;
+  }
+
+  // Restart the custom purchase flow
+  await startCustomAmountPurchaseFlow(ctx, requested_amount, shares, amount, currentPhase);
+}
+
+// PHASE 3: Commission payment handler for custom amounts
+async function handleCustomCommissionPayment(ctx, callbackData) {
+  const user = ctx.from;
+  const parts = callbackData.split('_');
+  const paymentType = parts[2]; // 'full' or 'partial'
+  const amount = parseFloat(parts[3]);
+
+  const session = await db.getUserSession(user.id);
+
+  if (!session || session.session_state !== 'custom_purchase_confirmed') {
+    await ctx.replyWithMarkdown('❌ **Session expired**\n\nPlease start the purchase process again.');
+    await handleCustomAmountPurchase(ctx);
+    return;
+  }
+
+  const { shares, phase_id, requested_amount } = session.session_data;
+
+  // Get user authentication
+  const telegramUser = await db.getTelegramUser(user.id);
+  if (!telegramUser || !telegramUser.user_id) {
+    await ctx.replyWithMarkdown('❌ **Authentication required**\n\nPlease log in first.');
+    return;
+  }
+
+  const userId = telegramUser.user_id;
+
+  // Get commission balance
+  const { data: commissionBalance, error: balanceError } = await db.client
+    .from('commission_balances')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+
+  const availableUSDT = commissionBalance?.usdt_balance || 0;
+
+  if (availableUSDT <= 0) {
+    await ctx.replyWithMarkdown('❌ **No commission balance available**\n\nPlease choose a crypto payment method.');
+    return;
+  }
+
+  const commissionToUse = Math.min(availableUSDT, amount);
+  const remainingAmount = amount - commissionToUse;
+
+  if (paymentType === 'full' && remainingAmount > 0) {
+    await ctx.replyWithMarkdown('❌ **Insufficient commission balance**\n\nPlease choose partial payment or crypto payment.');
+    return;
+  }
+
+  // Process the commission payment
+  await processCustomCommissionPayment(ctx, userId, amount, shares, commissionToUse, remainingAmount, phase_id);
+}
+
+async function processCustomCommissionPayment(ctx, userId, totalAmount, sharesAmount, commissionUsed, remainingAmount, phaseId) {
+  try {
+    // Create share purchase record
+    const sharePurchaseData = {
+      user_id: userId,
+      package_name: 'Custom Amount Purchase',
+      total_amount: totalAmount,
+      shares_purchased: sharesAmount,
+      status: remainingAmount > 0 ? 'pending_payment' : 'pending',
+      payment_method: remainingAmount > 0 ? 'commission_partial' : 'commission_full',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: sharePurchase, error: purchaseError } = await db.client
+      .from('aureus_share_purchases')
+      .insert([sharePurchaseData])
+      .select()
+      .single();
+
+    if (purchaseError) {
+      console.error('Share purchase creation error:', purchaseError);
+      await ctx.replyWithMarkdown('❌ **Error creating share purchase**\n\nPlease try again later.');
+      return;
+    }
+
+    // Record commission usage
+    if (commissionUsed > 0) {
+      const commissionUsageData = {
+        user_id: userId,
+        share_purchase_id: sharePurchase.id,
+        commission_amount_used: commissionUsed,
+        remaining_payment_amount: remainingAmount
+      };
+
+      await db.client
+        .from('commission_usage')
+        .insert([commissionUsageData]);
+
+      // Update commission balance (deduct used amount)
+      const { data: currentBalance } = await db.client
+        .from('commission_balances')
+        .select('usdt_balance')
+        .eq('user_id', userId)
+        .single();
+
+      const currentUSDT = currentBalance?.usdt_balance || 0;
+
+      await db.client
+        .from('commission_balances')
+        .update({
+          usdt_balance: currentUSDT - commissionUsed,
+          last_updated: new Date().toISOString()
+        })
+        .eq('user_id', userId);
+    }
+
+    // Clear user state
+    await clearUserState(ctx.from.id);
+
+    if (remainingAmount > 0) {
+      // Partial payment - show crypto payment options for remaining amount
+      await showCustomPartialCommissionPayment(ctx, totalAmount, sharesAmount, commissionUsed, remainingAmount, sharePurchase.id);
+    } else {
+      // Full commission payment - show success message
+      await showCustomCommissionPaymentSuccess(ctx, totalAmount, sharesAmount, commissionUsed);
+
+      // Create commission for sponsor (full amount, not just cash portion)
+      await createCommissionForInvestment(sharePurchase.id, userId, totalAmount);
+    }
+
+  } catch (error) {
+    console.error('Custom commission payment processing error:', error);
+    await ctx.replyWithMarkdown('❌ **Error processing payment**\n\nPlease try again later.');
+  }
+}
+
+async function showCustomPartialCommissionPayment(ctx, totalAmount, sharesAmount, commissionUsed, remainingAmount, sharePurchaseId) {
+  const partialPaymentMessage = `💰 **PARTIAL COMMISSION PAYMENT COMPLETE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ **Commission Applied Successfully**
+
+**📋 PAYMENT BREAKDOWN:**
+• **Total Purchase:** ${formatCurrency(totalAmount)}
+• **Commission Used:** ${formatCurrency(commissionUsed)}
+• **Remaining to Pay:** ${formatCurrency(remainingAmount)}
+• **Shares:** ${sharesAmount.toLocaleString()}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💳 COMPLETE PAYMENT WITH CRYPTO:**
+
+Choose your preferred network to pay the remaining ${formatCurrency(remainingAmount)}:`;
+
+  await ctx.replyWithMarkdown(partialPaymentMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "💳 BSC USDT", callback_data: `custom_pay_bsc_${remainingAmount}` }],
+        [{ text: "💳 Polygon USDT", callback_data: `custom_pay_pol_${remainingAmount}` }],
+        [{ text: "💳 TRON USDT", callback_data: `custom_pay_tron_${remainingAmount}` }],
+        [{ text: "🔙 Back to Purchase", callback_data: "menu_purchase_shares" }]
+      ]
+    }
+  });
+
+  // Set state for partial payment completion
+  await setUserState(ctx.from.id, 'custom_partial_payment', {
+    share_purchase_id: sharePurchaseId,
+    remaining_amount: remainingAmount,
+    total_amount: totalAmount,
+    shares: sharesAmount,
+    commission_used: commissionUsed
+  });
+}
+
+async function showCustomCommissionPaymentSuccess(ctx, totalAmount, sharesAmount, commissionUsed) {
+  const successMessage = `🎉 **COMMISSION PAYMENT COMPLETE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ **Share Purchase Successful**
+
+**📋 PURCHASE DETAILS:**
+• **Total Amount:** ${formatCurrency(totalAmount)}
+• **Commission Used:** ${formatCurrency(commissionUsed)}
+• **Shares Purchased:** ${sharesAmount.toLocaleString()}
+• **Payment Method:** Commission Balance
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⏳ NEXT STEPS:**
+• Your purchase is pending admin approval
+• You'll receive a notification once approved
+• Shares will be added to your portfolio
+• Your sponsor will receive full commission
+
+**📱 CONFIRMATION:**
+A confirmation message will be sent to this app once approved.`;
+
+  await ctx.replyWithMarkdown(successMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📊 View Portfolio", callback_data: "view_portfolio" }],
+        [{ text: "💰 Check Commission Balance", callback_data: "menu_referrals" }],
+        [{ text: "🛒 Make Another Purchase", callback_data: "menu_purchase_shares" }],
+        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+      ]
+    }
   });
 }
 
@@ -3369,26 +4256,8 @@ You cannot make new purchases while you have pending payments.
     return;
   }
 
-  const requiredTerms = ['general', 'privacy', 'investment_risks', 'mining_operations', 'nft_terms', 'dividend_policy'];
-
-  // Check which terms haven't been accepted
-  const unacceptedTerms = [];
-  for (const termType of requiredTerms) {
-    const hasAccepted = await db.hasAcceptedTerms(userId, termType);
-    console.log(`📋 Terms check - ${termType}: ${hasAccepted}`);
-    if (!hasAccepted) {
-      unacceptedTerms.push(termType);
-    }
-  }
-
-  console.log(`📝 Unaccepted terms: ${unacceptedTerms.length > 0 ? unacceptedTerms.join(', ') : 'None'}`);
-
-  // If any terms are not accepted, redirect to terms acceptance
-  if (unacceptedTerms.length > 0) {
-    console.log(`🚫 Redirecting to terms acceptance for: ${unacceptedTerms.join(', ')}`);
-    await showTermsAcceptanceRequired(ctx, packageId, unacceptedTerms);
-    return;
-  }
+  // PHASE 1: Terms checking removed - terms are now required before registration
+  console.log(`✅ Terms check skipped - user authenticated means terms already accepted`);
 
   const currentPhase = await db.getCurrentPhase();
 
@@ -5281,14 +6150,47 @@ async function handleTermsRequired(ctx, callbackData) {
 
 async function handleTermsAcceptance(ctx, callbackData) {
   const termType = callbackData.replace('accept_', '');
+  const user = ctx.from;
 
-  const telegramUser = await db.getTelegramUser(ctx.from.id);
-  if (!telegramUser || !telegramUser.user_id) {
-    await ctx.replyWithMarkdown('❌ **Authentication required**\n\nPlease log in first.');
-    return;
+  // For new terms flow, create a temporary user record if needed
+  let telegramUser = await db.getTelegramUser(user.id);
+  let userId = null;
+
+  if (!telegramUser) {
+    // Create telegram user record for terms tracking
+    telegramUser = await db.createTelegramUser(user.id, {
+      username: user.username,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      is_registered: false
+    });
   }
 
-  const userId = telegramUser.user_id;
+  // If user doesn't have a main user record yet, create a temporary one for terms
+  if (!telegramUser.user_id) {
+    // Create a temporary user record for terms acceptance
+    const tempUser = await db.createUser({
+      username: user.username || `temp_${user.id}`,
+      email: `temp_${user.id}@telegram.aureus`,
+      password_hash: 'temp_password_hash',
+      full_name: `${user.first_name} ${user.last_name || ''}`.trim(),
+      is_active: false, // Mark as inactive until full registration
+      is_verified: false
+    });
+
+    if (tempUser) {
+      userId = tempUser.id;
+      // Link telegram user to temp user
+      await db.updateTelegramUser(user.id, { user_id: userId });
+    }
+  } else {
+    userId = telegramUser.user_id;
+  }
+
+  if (!userId) {
+    await ctx.replyWithMarkdown('❌ **Error creating user record**\n\nPlease try again.');
+    return;
+  }
 
   // Record terms acceptance
   const success = await db.acceptTerms(userId, termType);
@@ -5332,7 +6234,11 @@ async function handleTermsAcceptance(ctx, callbackData) {
         }, 1500);
       }
     } else {
-      // Not in purchase flow, check if there are more terms to accept for general browsing
+      // Check if user is in the initial terms acceptance flow
+      const session = await db.getUserSession(ctx.from.id);
+      const isInitialTermsFlow = session && session.session_state === 'accepting_terms';
+
+      // Check if there are more terms to accept
       const requiredTerms = ['general', 'privacy', 'investment_risks', 'mining_operations', 'nft_terms', 'dividend_policy'];
       const unacceptedTerms = [];
 
@@ -5346,14 +6252,38 @@ async function handleTermsAcceptance(ctx, callbackData) {
       if (unacceptedTerms.length > 0) {
         // Show next unaccepted term
         const nextTerm = unacceptedTerms[0];
-        await ctx.replyWithMarkdown(`⏭️ **Next Term**\n\nYou have ${unacceptedTerms.length} more terms to review.\n\nShowing next term automatically...`);
+        const remainingCount = unacceptedTerms.length;
+
+        await ctx.replyWithMarkdown(`⏭️ **Progress: ${6 - remainingCount}/6 Terms Completed**\n\nYou have ${remainingCount} more terms to review.\n\nShowing next term automatically...`);
 
         setTimeout(() => {
           handleTermsSelection(ctx, `terms_${nextTerm}`);
         }, 1500);
       } else {
-        // All terms accepted
-        await ctx.replyWithMarkdown('🎉 **ALL TERMS ACCEPTED!**\n\nYou have successfully accepted all required terms and conditions.');
+        // All terms accepted!
+        await clearUserState(ctx.from.id);
+
+        if (isInitialTermsFlow) {
+          // Initial terms flow completed - redirect to authentication
+          await ctx.replyWithMarkdown(`🎉 **ALL TERMS ACCEPTED!**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**✅ CONGRATULATIONS!**
+You have successfully accepted all required terms and conditions.
+
+**🚀 NEXT STEP:**
+You can now proceed to create your account or log in to start purchasing gold mining shares.
+
+**⏱️ REDIRECTING TO REGISTRATION...**`);
+
+          setTimeout(() => {
+            showAuthenticationOptions(ctx);
+          }, 2000);
+        } else {
+          // General terms browsing completed
+          await ctx.replyWithMarkdown('🎉 **ALL TERMS ACCEPTED!**\n\nYou have successfully accepted all required terms and conditions.');
+        }
       }
     }
   } else {
@@ -5791,15 +6721,27 @@ async function handlePaymentScreenshot(ctx) {
 
     console.log(`✅ Screenshot uploaded successfully:`, data);
 
-    // Update session with screenshot info
-    const { network, packageId, walletAddress } = session.session_data;
-    await setUserState(user.id, 'payment_verification', {
+    // Update session with screenshot info (handle both package and custom purchases)
+    const { network, packageId, walletAddress, custom_purchase, amount, shares, phase_id, requested_amount } = session.session_data;
+
+    const updatedSessionData = {
       network: network,
       packageId: packageId,
       step: 'transaction_hash',
       walletAddress: walletAddress,
       screenshotPath: filename
-    });
+    };
+
+    // Preserve custom purchase data if it exists
+    if (custom_purchase) {
+      updatedSessionData.custom_purchase = true;
+      updatedSessionData.amount = amount;
+      updatedSessionData.shares = shares;
+      updatedSessionData.phase_id = phase_id;
+      updatedSessionData.requested_amount = requested_amount;
+    }
+
+    await setUserState(user.id, 'payment_verification', updatedSessionData);
 
     const hashMessage = `**✅ SCREENSHOT UPLOADED**
 
@@ -5816,10 +6758,15 @@ Now please provide your **transaction hash**:
 
 **Type your transaction hash:**`;
 
+    // Create appropriate back button based on purchase type
+    const backButton = custom_purchase
+      ? { text: "🔙 Back to Purchase", callback_data: "menu_purchase_shares" }
+      : { text: "🔙 Back to Payment", callback_data: `pay_${network}_${packageId}` };
+
     await ctx.replyWithMarkdown(hashMessage, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "🔙 Back to Payment", callback_data: `pay_${network}_${packageId}` }]
+          [backButton]
         ]
       }
     });
@@ -5953,12 +6900,26 @@ async function completePaymentVerification(ctx, transactionHash) {
     return;
   }
 
-  const { network, packageId, walletAddress, screenshotPath } = session.session_data;
-  const pkg = await db.getPackageById(packageId);
+  const { network, packageId, walletAddress, screenshotPath, custom_purchase, amount, shares, phase_id } = session.session_data;
 
-  if (!pkg) {
-    await ctx.reply('❌ Package not found.');
-    return;
+  let pkg = null;
+  let packageCost = 0;
+  let sharesAmount = 0;
+
+  if (custom_purchase) {
+    // Custom purchase - use session data
+    packageCost = amount;
+    sharesAmount = shares;
+    console.log(`💰 Custom purchase: $${packageCost} for ${sharesAmount} shares`);
+  } else {
+    // Package purchase - get package data
+    pkg = await db.getPackageById(packageId);
+    if (!pkg) {
+      await ctx.reply('❌ Package not found.');
+      return;
+    }
+    packageCost = await calculatePackagePrice(pkg);
+    sharesAmount = pkg.shares;
   }
 
   // Get the actual user_id from the users table via telegram_users
@@ -5976,8 +6937,7 @@ async function completePaymentVerification(ctx, transactionHash) {
 
   const userId = telegramUserData.user_id;
 
-  // Calculate package cost with phase pricing
-  const packageCost = await calculatePackagePrice(pkg);
+  // Package cost already calculated above based on purchase type
 
   // Get company wallet for the network
   const walletData = await db.getWalletByNetwork(network.toUpperCase());
@@ -6088,12 +7048,12 @@ Our support team can help verify your transaction.`;
       return;
     }
 
-    // Create share purchase record
+    // Create share purchase record (handle both package and custom purchases)
     const investmentData = {
       user_id: userId,
-      package_name: pkg.name,
+      package_name: custom_purchase ? 'Custom Amount Purchase' : pkg.name,
       total_amount: packageCost,
-      shares_purchased: pkg.shares,
+      shares_purchased: sharesAmount,
       status: 'pending',
       payment_method: `${network.toUpperCase()} USDT`,
       created_at: new Date().toISOString(),
@@ -6124,13 +7084,15 @@ Our support team can help verify your transaction.`;
     // Clear user state
     await clearUserState(telegramUser.id);
 
+    const purchaseName = custom_purchase ? 'CUSTOM AMOUNT PURCHASE' : pkg.name.toUpperCase();
+
     const completionMessage = `**🎉 PAYMENT VERIFICATION COMPLETE**
 
-**SHARE PURCHASE:** ${pkg.name.toUpperCase()}
+**SHARE PURCHASE:** ${purchaseName}
 
 **📋 PAYMENT DETAILS:**
 • **Amount:** ${formatCurrency(packageCost)}
-• **Shares:** ${pkg.shares.toLocaleString()}
+• **Shares:** ${sharesAmount.toLocaleString()}
 • **Network:** ${network.toUpperCase()} USDT
 • **Transaction ID:** #${paymentRecord.id.substring(0, 8)}
 

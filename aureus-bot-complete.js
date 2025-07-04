@@ -6386,9 +6386,18 @@ async function handleTermsAcceptance(ctx, callbackData) {
   if (success) {
     await ctx.replyWithMarkdown(`✅ **${termType.toUpperCase().replace('_', ' ')} TERMS ACCEPTED**\n\nThank you for accepting the ${termType.replace('_', ' ')} terms.`);
 
+    // Small delay to ensure database write completes
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     // Verify the terms were actually saved
     const verification = await db.hasAcceptedTerms(userId, termType);
     console.log(`📋 Terms verification: ${termType} = ${verification}`);
+
+    if (!verification) {
+      console.error(`❌ Terms verification failed for ${termType}`);
+      await ctx.replyWithMarkdown(`⚠️ **Terms acceptance verification failed**\n\nPlease try accepting the terms again.`);
+      return;
+    }
 
     // Check if user was in the middle of a purchase
     const session = await db.getUserSession(ctx.from.id);
@@ -6449,18 +6458,11 @@ async function handleTermsAcceptance(ctx, callbackData) {
         const nextTerm = unacceptedTerms[0];
         const remainingCount = unacceptedTerms.length;
 
-        // Safety check to prevent infinite loops
-        const session = await db.getUserSession(ctx.from.id);
-        const lastShownTerm = session?.session_data?.last_shown_term;
-
-        if (lastShownTerm === nextTerm) {
-          console.error(`🚨 LOOP DETECTED: Same term ${nextTerm} shown twice in a row`);
-          await ctx.replyWithMarkdown(`❌ **Terms acceptance error detected**\n\nPlease restart the bot with /start to try again.`);
-          return;
-        }
-
-        // Update session to track the last shown term
-        await setUserState(ctx.from.id, 'accepting_terms', { last_shown_term: nextTerm });
+        // Simple progress tracking without aggressive loop detection
+        await setUserState(ctx.from.id, 'accepting_terms', {
+          current_term: nextTerm,
+          progress: `${6 - remainingCount}/6`
+        });
 
         await ctx.replyWithMarkdown(`⏭️ **Progress: ${6 - remainingCount}/6 Terms Completed**\n\nYou have ${remainingCount} more terms to review.\n\nShowing next term automatically...`);
 

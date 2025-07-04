@@ -921,9 +921,9 @@ async function checkUserTermsAndStart(ctx) {
     }
 
     if (unacceptedTerms.length > 0) {
-      // User needs to accept terms - start terms flow
+      // User needs to accept terms - show welcome first
       console.log(`🔒 User needs to accept ${unacceptedTerms.length} terms`);
-      await startTermsAcceptanceFlow(ctx);
+      await showWelcomeIntroduction(ctx);
     } else {
       // All terms accepted - check if user is registered
       if (telegramUser.user_id) {
@@ -940,6 +940,50 @@ async function checkUserTermsAndStart(ctx) {
     console.error('Error checking user terms and start:', error);
     await startAuthenticationFlow(ctx);
   }
+}
+
+async function showWelcomeIntroduction(ctx) {
+  const user = ctx.from;
+
+  const welcomeMessage = `🏆 **WELCOME TO AUREUS ALLIANCE HOLDINGS!**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Hello **${user.first_name}**! 👋
+
+**🌟 ABOUT AUREUS ALLIANCE HOLDINGS:**
+
+We are a **premium gold mining investment company** offering exclusive opportunities to own shares in real gold mining operations.
+
+**💎 WHAT WE OFFER:**
+• **Real Gold Mining Shares** - Own actual mining equipment
+• **Quarterly Dividends** - Earn from gold production
+• **NFT Share Certificates** - Digital proof of ownership
+• **Professional Management** - Expert mining operations
+• **Transparent Operations** - Real-time mining updates
+
+**🎯 INVESTMENT OPPORTUNITIES:**
+• **Flexible Amounts** - Invest $25 to $50,000
+• **Phase-Based Pricing** - Early investor advantages
+• **Referral Program** - Earn 15% commissions
+• **Secure Payments** - Multiple crypto networks
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 NEXT STEP:**
+To get started, you'll need to review and accept our terms and conditions. This ensures you understand the investment process and your rights as a shareholder.
+
+**Ready to begin?**`;
+
+  await ctx.replyWithMarkdown(welcomeMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🚀 Get Started - Review Terms", callback_data: "start_terms_review" }],
+        [{ text: "📖 Learn More About Us", callback_data: "terms_info" }],
+        [{ text: "❌ Exit", callback_data: "exit_bot" }]
+      ]
+    }
+  });
 }
 
 async function startTermsAcceptanceFlow(ctx) {
@@ -6309,10 +6353,16 @@ async function handleTermsAcceptance(ctx, callbackData) {
   }
 
   // Record terms acceptance
+  console.log(`📋 Attempting to accept terms: userId=${userId}, termType=${termType}`);
   const success = await db.acceptTerms(userId, termType);
+  console.log(`📋 Terms acceptance result: ${success}`);
 
   if (success) {
     await ctx.replyWithMarkdown(`✅ **${termType.toUpperCase().replace('_', ' ')} TERMS ACCEPTED**\n\nThank you for accepting the ${termType.replace('_', ' ')} terms.`);
+
+    // Verify the terms were actually saved
+    const verification = await db.hasAcceptedTerms(userId, termType);
+    console.log(`📋 Terms verification: ${termType} = ${verification}`);
 
     // Check if user was in the middle of a purchase
     const session = await db.getUserSession(ctx.from.id);
@@ -6360,15 +6410,31 @@ async function handleTermsAcceptance(ctx, callbackData) {
 
       for (const termType of requiredTerms) {
         const hasAccepted = await db.hasAcceptedTerms(userId, termType);
+        console.log(`📋 Terms check: ${termType} = ${hasAccepted}`);
         if (!hasAccepted) {
           unacceptedTerms.push(termType);
         }
       }
 
+      console.log(`📋 Unaccepted terms: [${unacceptedTerms.join(', ')}]`);
+
       if (unacceptedTerms.length > 0) {
         // Show next unaccepted term
         const nextTerm = unacceptedTerms[0];
         const remainingCount = unacceptedTerms.length;
+
+        // Safety check to prevent infinite loops
+        const session = await db.getUserSession(ctx.from.id);
+        const lastShownTerm = session?.session_data?.last_shown_term;
+
+        if (lastShownTerm === nextTerm) {
+          console.error(`🚨 LOOP DETECTED: Same term ${nextTerm} shown twice in a row`);
+          await ctx.replyWithMarkdown(`❌ **Terms acceptance error detected**\n\nPlease restart the bot with /start to try again.`);
+          return;
+        }
+
+        // Update session to track the last shown term
+        await setUserState(ctx.from.id, 'accepting_terms', { last_shown_term: nextTerm });
 
         await ctx.replyWithMarkdown(`⏭️ **Progress: ${6 - remainingCount}/6 Terms Completed**\n\nYou have ${remainingCount} more terms to review.\n\nShowing next term automatically...`);
 

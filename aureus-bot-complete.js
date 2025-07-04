@@ -7086,7 +7086,7 @@ async function completePaymentVerification(ctx, transactionHash) {
     return;
   }
 
-  const { network, packageId, walletAddress, screenshotPath, custom_purchase, amount, shares, phase_id } = session.session_data;
+  const { network, packageId, sender_wallet_address, screenshotPath, custom_purchase, amount, shares, phase_id } = session.session_data;
 
   let pkg = null;
   let packageCost = 0;
@@ -7185,7 +7185,7 @@ Contact support with your transaction details.`;
       amount: packageCost,
       currency: 'USDT',
       network: network.toUpperCase(),
-      sender_wallet: walletAddress,
+      sender_wallet: sender_wallet_address,
       receiver_wallet: receiverWallet,
       transaction_hash: transactionHash,
       screenshot_url: screenshotUrl,

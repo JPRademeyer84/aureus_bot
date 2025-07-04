@@ -1713,6 +1713,13 @@ Welcome, **Administrator ${user.first_name}**!
 // Quick Registration - Simplified for elderly users
 async function handleQuickRegistration(ctx) {
   const user = ctx.from;
+  console.log(`🚀 Starting quick registration for user: ${user.id}`);
+  console.log(`📋 User details:`, {
+    id: user.id,
+    username: user.username,
+    first_name: user.first_name,
+    last_name: user.last_name
+  });
 
   // Clear any existing session
   await clearUserState(user.id);
@@ -2185,7 +2192,10 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
 
     // Update telegram user record to mark as registered (no main user needed)
     let telegramUser = await db.getTelegramUser(user.id);
+    console.log('📋 Current telegram user before update:', telegramUser);
+
     if (!telegramUser) {
+      console.log('📝 Creating new telegram user record');
       telegramUser = await db.createTelegramUser(user.id, {
         username: user.username,
         first_name: user.first_name,
@@ -2193,7 +2203,7 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
         user_id: user.id, // Use telegram ID as user ID
         is_registered: true
       });
-      console.log('✅ Created new telegram user record');
+      console.log('✅ Created new telegram user record:', telegramUser);
     } else {
       console.log('📝 Updating existing telegram user with:', {
         user_id: user.id, // Use telegram ID as user ID
@@ -2207,6 +2217,10 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
 
       console.log('✅ Update result:', updateResult);
       console.log('✅ Updated existing telegram user record');
+
+      // Verify the update worked
+      const verifyUpdate = await db.getTelegramUser(user.id);
+      console.log('📋 Telegram user after update:', verifyUpdate);
     }
 
     // Verify the telegram user was updated correctly

@@ -33,6 +33,7 @@ async function createDatabaseSchema() {
     await createUsersTable(client);
     await createTelegramUsersTable(client);
     await createTelegramSessionsTable(client);
+    await createTermsAcceptanceTable(client);
     await createInvestmentPackagesTable(client);
     await createInvestmentsTable(client);
     await createPaymentsTable(client);
@@ -108,7 +109,7 @@ async function createTelegramUsersTable(client) {
 
 async function createTelegramSessionsTable(client) {
   console.log('🏗️ Creating telegram_sessions table...');
-  
+
   const createTelegramSessionsSQL = `
     CREATE TABLE IF NOT EXISTS telegram_sessions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -118,13 +119,40 @@ async function createTelegramSessionsTable(client) {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
-    
+
     CREATE INDEX IF NOT EXISTS idx_telegram_sessions_telegram_id ON telegram_sessions(telegram_id);
     CREATE INDEX IF NOT EXISTS idx_telegram_sessions_expires_at ON telegram_sessions(expires_at);
   `;
-  
+
   await client.query(createTelegramSessionsSQL);
   console.log('✅ Telegram sessions table created');
+}
+
+async function createTermsAcceptanceTable(client) {
+  console.log('🏗️ Creating terms_acceptance table...');
+
+  const createTermsAcceptanceSQL = `
+    CREATE TABLE IF NOT EXISTS terms_acceptance (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      telegram_id BIGINT REFERENCES telegram_users(telegram_id) ON DELETE CASCADE,
+      terms_type VARCHAR(100) NOT NULL,
+      version VARCHAR(20) DEFAULT '1.0',
+      accepted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+      CONSTRAINT unique_user_terms UNIQUE(user_id, terms_type),
+      CONSTRAINT unique_telegram_terms UNIQUE(telegram_id, terms_type)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_terms_acceptance_user_id ON terms_acceptance(user_id);
+    CREATE INDEX IF NOT EXISTS idx_terms_acceptance_telegram_id ON terms_acceptance(telegram_id);
+    CREATE INDEX IF NOT EXISTS idx_terms_acceptance_terms_type ON terms_acceptance(terms_type);
+  `;
+
+  await client.query(createTermsAcceptanceSQL);
+  console.log('✅ Terms acceptance table created');
 }
 
 async function createInvestmentPackagesTable(client) {

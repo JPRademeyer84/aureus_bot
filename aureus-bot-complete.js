@@ -6364,8 +6364,9 @@ async function handleTermsAcceptance(ctx, callbackData) {
   // Record terms acceptance using telegram ID
   console.log(`📋 Attempting to accept terms: telegramId=${userId}, termType=${termType}`);
 
+  let success = false;
   try {
-    const success = await db.acceptTermsTelegram(userId, termType);
+    success = await db.acceptTermsTelegram(userId, termType);
     console.log(`📋 Terms acceptance result: ${success}`);
 
     if (!success) {

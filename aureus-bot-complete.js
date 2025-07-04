@@ -6841,11 +6841,17 @@ async function handlePaymentVerificationInput(ctx, text) {
 
   if (step === 'wallet_address') {
     // Store sender wallet address and move to step 2 (no validation - admin will verify)
-    await setUserState(user.id, 'payment_verification', {
+    console.log(`💳 Storing wallet address: ${text}`);
+    console.log(`📋 Current session data:`, session.session_data);
+
+    const updatedSessionData = {
       ...session.session_data, // Keep existing data
       step: 'screenshot',
       sender_wallet_address: text // Store sender's wallet address
-    });
+    };
+
+    console.log(`📋 Updated session data:`, updatedSessionData);
+    await setUserState(user.id, 'payment_verification', updatedSessionData);
 
     // Skip package lookup for custom purchases
     const screenshotMessage = `**✅ WALLET ADDRESS CONFIRMED**
@@ -7099,6 +7105,17 @@ async function completePaymentVerification(ctx, transactionHash) {
   }
 
   const { network, packageId, sender_wallet_address, screenshotPath, custom_purchase, amount, shares, phase_id } = session.session_data;
+
+  console.log(`🔍 Payment completion data:`, {
+    network,
+    packageId,
+    sender_wallet_address,
+    screenshotPath,
+    custom_purchase,
+    amount,
+    shares,
+    phase_id
+  });
 
   let pkg = null;
   let packageCost = 0;

@@ -477,6 +477,47 @@ bot.on('callback_query', async (ctx) => {
         await handleSupportCenter(ctx);
         break;
 
+      // Gold Chart Handler
+      case 'view_gold_chart':
+        await ctx.answerCbQuery('Opening gold chart...');
+        await ctx.replyWithPhoto('https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/chart.png', {
+          caption: '📊 *AUREUS ALLIANCE HOLDINGS*\n*Gold Price Performance Chart*\n\n📈 Historical gold price trends and market analysis for informed investment decisions.',
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔙 Back to Presentation", callback_data: "menu_presentation" }],
+              [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+            ]
+          }
+        });
+        break;
+
+      // Mining Operations Handlers
+      case 'mining_excavation':
+        await showExcavationVideos(ctx);
+        break;
+
+      case 'mining_geology':
+        await showGeologicalEvidence(ctx);
+        break;
+
+      case 'mining_overview':
+        await showProjectOverview(ctx);
+        break;
+
+      case 'mining_executive':
+        await showExecutiveAssessment(ctx);
+        break;
+
+      // Community Relations Handlers
+      case 'community_meetings':
+        await showCommunityMeetings(ctx);
+        break;
+
+      case 'community_development':
+        await showDevelopmentPlans(ctx);
+        break;
+
       default:
         await ctx.answerCbQuery("🚧 Feature coming soon!");
         break;
@@ -520,6 +561,226 @@ async function handleSupportCenter(ctx) {
         [{ text: "📧 Email Support", url: "mailto:support@aureusalliance.com" }],
         [{ text: "🌐 Visit Website", url: "https://aureusalliance.com" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+// Multimedia Documentation Functions
+async function showExcavationVideos(ctx) {
+  const videosMessage = `🎬 *EXCAVATION VIDEOS*
+⛏️ *AUREUS ALLIANCE HOLDINGS*
+*Live Mining Operations Documentation*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎥 **PRIMARY PIT EXCAVATION:**
+• Video: Active washplant operations
+• Location: Main excavation site
+• Equipment: 200 tons/hour processing capacity
+
+🎬 **SOIL PROCESSING OPERATIONS:**
+• Video: Real-time gold extraction process
+• Method: Environmentally responsible mining
+• Output: Continuous gold recovery operations
+
+📹 **SECONDARY SITE DOCUMENTATION:**
+• Video: Additional excavation activities
+• Scope: Comprehensive operational coverage
+• Quality: Professional documentation standards
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(videosMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🎥 Primary Pit Video", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/pits.mp4" }],
+        [{ text: "⚒️ Processing Video", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/digging.mp4" }],
+        [{ text: "📹 Secondary Site", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/digging%202.mp4" }],
+        [{ text: "🔙 Back to Mining Operations", callback_data: "menu_mining_operations" }]
+      ]
+    }
+  });
+}
+
+async function showGeologicalEvidence(ctx) {
+  const evidenceMessage = `🔬 *GEOLOGICAL EVIDENCE*
+⛏️ *AUREUS ALLIANCE HOLDINGS*
+*Scientific Gold Discovery Documentation*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🏔️ **GOLD PARTICLES IN SAND:**
+• Analysis: Visible gold particles in processed sand
+• Concentration: High-grade alluvial deposits
+• Verification: Professional geological assessment
+
+💎 **GOLD VEINS IN ROCK SAMPLES:**
+• Discovery: Natural gold veins in rock formations
+• Quality: Premium grade ore samples
+• Significance: Substantial mineral reserves confirmed
+
+🔍 **TECHNICAL ANALYSIS:**
+• Method: Professional geological surveying
+• Results: Confirmed gold-bearing formations
+• Potential: Extensive mineral resource base
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(evidenceMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🏖️ Gold in Sand", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldinsand.jpg" }],
+        [{ text: "💎 Gold in Rock", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/goldinrock.JPG" }],
+        [{ text: "🔙 Back to Mining Operations", callback_data: "menu_mining_operations" }]
+      ]
+    }
+  });
+}
+
+async function showProjectOverview(ctx) {
+  const overviewMessage = `📊 *PROJECT OVERVIEW*
+⛏️ *AUREUS ALLIANCE HOLDINGS*
+*Comprehensive Mining Project Scope*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🏞️ **PROJECT SCALE:**
+• Total Area: 300 hectares of mining concessions
+• Operations: 10 washplants (200 tons/hour each)
+• Capacity: 48,000 tons daily processing potential
+• Target: 3,200 KG annual gold production
+
+🌍 **LOCATION ADVANTAGES:**
+• Region: Mpumalanga Province, South Africa
+• Access: Established infrastructure and logistics
+• Resources: Abundant water and power supply
+• Community: Strong local partnerships
+
+📈 **DEVELOPMENT TIMELINE:**
+• Phase 1: Equipment deployment and site preparation
+• Phase 2: Full operational capacity by June 2026
+• Phase 3: Expansion and optimization programs
+• Long-term: Sustainable 20-year operation plan
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(overviewMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔙 Back to Mining Operations", callback_data: "menu_mining_operations" }],
+        [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+async function showExecutiveAssessment(ctx) {
+  const executiveMessage = `👔 *EXECUTIVE ASSESSMENT*
+⛏️ *AUREUS ALLIANCE HOLDINGS*
+*Leadership Team & Strategic Vision*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👨‍💼 **JP RADEMEYER - CEO & FOUNDER:**
+• Experience: 15+ years in mining operations
+• Expertise: Gold extraction and processing
+• Vision: Sustainable and profitable mining
+• Leadership: Community-focused development
+
+🎯 **STRATEGIC OBJECTIVES:**
+• Operational Excellence: Maximum efficiency standards
+• Environmental Responsibility: Eco-friendly practices
+• Community Development: Local economic growth
+• Investor Returns: Consistent dividend payments
+
+📊 **PERFORMANCE METRICS:**
+• Safety Record: Zero-incident operational standards
+• Environmental Compliance: 100% regulatory adherence
+• Community Relations: Active stakeholder engagement
+• Financial Transparency: Regular investor reporting
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(executiveMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔙 Back to Mining Operations", callback_data: "menu_mining_operations" }],
+        [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+async function showCommunityMeetings(ctx) {
+  const meetingsMessage = `🏘️ *COMMUNITY MEETINGS*
+⛏️ *AUREUS ALLIANCE HOLDINGS*
+*Stakeholder Engagement & Communication*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📅 **REGULAR MEETINGS SCHEDULE:**
+• Monthly: Community liaison meetings
+• Quarterly: Stakeholder progress reports
+• Annually: Comprehensive impact assessments
+• Ad-hoc: Issue resolution and feedback sessions
+
+🤝 **ENGAGEMENT TOPICS:**
+• Employment Opportunities: Local hiring priorities
+• Environmental Impact: Monitoring and mitigation
+• Infrastructure Development: Community improvements
+• Economic Benefits: Revenue sharing programs
+
+👥 **STAKEHOLDER GROUPS:**
+• Local Communities: Direct engagement programs
+• Traditional Leaders: Respect for cultural values
+• Government Officials: Regulatory compliance
+• Environmental Groups: Sustainability partnerships
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(meetingsMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔙 Back to Community Relations", callback_data: "menu_community" }],
+        [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+async function showDevelopmentPlans(ctx) {
+  const developmentMessage = `🏗️ *DEVELOPMENT PLANS*
+⛏️ *AUREUS ALLIANCE HOLDINGS*
+*Long-term Community Development Initiatives*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🏫 **EDUCATION INITIATIVES:**
+• School Infrastructure: Classroom construction
+• Scholarship Programs: Student support funding
+• Technical Training: Mining skills development
+• Adult Education: Literacy and numeracy programs
+
+🏥 **HEALTHCARE DEVELOPMENT:**
+• Medical Facilities: Clinic establishment
+• Health Programs: Preventive care initiatives
+• Emergency Services: First aid and ambulance
+• Community Health: Wellness and nutrition
+
+🚧 **INFRASTRUCTURE PROJECTS:**
+• Road Construction: Improved transportation
+• Water Systems: Clean water access
+• Electricity: Power grid connections
+• Communication: Internet and mobile coverage
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(developmentMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔙 Back to Community Relations", callback_data: "menu_community" }],
+        [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
       ]
     }
   });

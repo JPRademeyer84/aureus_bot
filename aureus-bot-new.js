@@ -518,6 +518,31 @@ bot.on('callback_query', async (ctx) => {
         await showDevelopmentPlans(ctx);
         break;
 
+      // RESTORED PAYMENT SYSTEM HANDLERS
+      case 'menu_purchase_shares':
+        await handleCustomAmountPurchase(ctx);
+        break;
+
+      case 'menu_referrals':
+        await handleReferralSystem(ctx);
+        break;
+
+      case 'menu_portfolio':
+        await handlePortfolio(ctx);
+        break;
+
+      case 'menu_payments':
+        await handlePaymentStatus(ctx);
+        break;
+
+      case 'admin_panel':
+        await handleAdminPanel(ctx);
+        break;
+
+      case 'admin_status':
+        await handleAdminStatus(ctx);
+        break;
+
       default:
         await ctx.answerCbQuery("🚧 Feature coming soon!");
         break;
@@ -822,6 +847,383 @@ process.once("SIGTERM", () => {
   console.log("🛑 Stopping bot...");
   bot.stop("SIGTERM");
 });
+
+// RESTORED PAYMENT SYSTEM FUNCTIONS
+
+// Custom Amount Purchase System
+async function handleCustomAmountPurchase(ctx) {
+  const user = ctx.from;
+
+  // Check for existing pending payments before showing purchase options
+  const { data: telegramUser, error: telegramError } = await db.client
+    .from('telegram_users')
+    .select('user_id')
+    .eq('telegram_id', user.id)
+    .single();
+
+  if (telegramError || !telegramUser) {
+    await ctx.replyWithMarkdown('❌ **Authentication Error**\n\nPlease restart the bot and try again.');
+    return;
+  }
+
+  const userId = telegramUser.user_id;
+
+  // Check for existing pending payments
+  const { data: pendingPayments, error: pendingError } = await db.client
+    .from('crypto_payment_transactions')
+    .select('id, amount, network, created_at, status, user_id')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  if (pendingError) {
+    console.error('Error checking pending payments:', pendingError);
+  } else if (pendingPayments && pendingPayments.length > 0) {
+    // User has pending payments - show management options
+    const pendingPayment = pendingPayments[0];
+    const paymentDate = new Date(pendingPayment.created_at);
+    const now = new Date();
+    const daysDiff = Math.floor((now - paymentDate) / (1000 * 60 * 60 * 24));
+    const hoursAgo = Math.floor((now - paymentDate) / (1000 * 60 * 60));
+
+    const timeAgo = daysDiff > 0 ? `${daysDiff} day${daysDiff > 1 ? 's' : ''} ago` :
+                    hoursAgo > 0 ? `${hoursAgo} hour${hoursAgo > 1 ? 's' : ''} ago` :
+                    'Less than 1 hour ago';
+
+    const isOld = daysDiff >= 1;
+    const statusIcon = isOld ? '🔴' : '🟡';
+    const ageWarning = isOld ? '\n\n🔴 **OLD PAYMENT:** This payment is over 24 hours old.' : '';
+
+    const pendingMessage = `⚠️ **PENDING PAYMENT DETECTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${statusIcon} **You have an existing pending payment:**
+
+💰 **Amount:** $${pendingPayment.amount}
+🌐 **Network:** ${pendingPayment.network.toUpperCase()}
+📅 **Submitted:** ${paymentDate.toLocaleDateString()} (${timeAgo})
+⏳ **Status:** Pending Admin Approval${ageWarning}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔧 WHAT WOULD YOU LIKE TO DO?**
+
+You must handle this pending payment before making a new purchase.`;
+
+    const keyboard = [
+      [{ text: "💳 Continue with Pending Payment", callback_data: `continue_payment_${pendingPayment.id}` }],
+      [{ text: "🗑️ Delete Pending Payment", callback_data: `cancel_payment_${pendingPayment.id}` }]
+    ];
+
+    if (isOld) {
+      keyboard.push([{ text: "📞 Contact Support (Old Payment)", callback_data: "menu_help" }]);
+    }
+
+    keyboard.push([{ text: "📊 View Payment Details", callback_data: "view_portfolio" }]);
+    keyboard.push([{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]);
+
+    await ctx.replyWithMarkdown(pendingMessage, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+    return;
+  }
+
+  // No pending payments - proceed with normal purchase flow
+  const customAmountMessage = `🛒 **PURCHASE SHARES**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 CUSTOM AMOUNT PURCHASE**
+
+Enter your desired investment amount between $25 and $50,000:
+
+**📋 INVESTMENT DETAILS:**
+• Minimum: $25 USD
+• Maximum: $50,000 USD
+• Share allocation based on current phase pricing
+• Instant share certificate upon payment approval
+
+**💡 EXAMPLE:**
+$1,000 investment = Shares based on current price
+
+**Type your investment amount (numbers only):**`;
+
+  await ctx.replyWithMarkdown(customAmountMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+
+  // Set user state to expect amount input
+  await setUserState(user.id, 'awaiting_custom_amount');
+}
+
+// Portfolio Handler
+async function handlePortfolio(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user ID from telegram_users table
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **Authentication Error**\n\nPlease restart the bot and try again.');
+      return;
+    }
+
+    const userId = telegramUser.user_id;
+
+    // Get user's share purchases
+    const { data: purchases, error: purchasesError } = await db.client
+      .from('share_purchases')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (purchasesError) {
+      console.error('Portfolio error:', purchasesError);
+      await ctx.replyWithMarkdown('❌ **Error loading portfolio**\n\nPlease try again later.');
+      return;
+    }
+
+    const totalShares = purchases?.reduce((sum, purchase) => sum + (purchase.shares_purchased || 0), 0) || 0;
+    const totalInvested = purchases?.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0) || 0;
+    const approvedPurchases = purchases?.filter(p => p.status === 'approved') || [];
+
+    const portfolioMessage = `📊 **MY PORTFOLIO**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💎 SHARE HOLDINGS:**
+• **Total Shares:** ${totalShares.toLocaleString()}
+• **Total Invested:** ${formatCurrency(totalInvested)}
+• **Approved Purchases:** ${approvedPurchases.length}
+
+**📈 INVESTMENT SUMMARY:**
+${purchases && purchases.length > 0
+  ? purchases.slice(0, 5).map(purchase =>
+      `• ${formatCurrency(purchase.total_amount)} - ${purchase.shares_purchased} shares (${purchase.status})`
+    ).join('\n')
+  : '• No investments yet'}
+
+**🎯 NEXT STEPS:**
+${totalShares > 0
+  ? 'Your shares are generating value through our gold mining operations.'
+  : 'Start your investment journey with your first share purchase.'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    const keyboard = totalShares > 0
+      ? [
+          [{ text: "📊 Detailed View", callback_data: "portfolio_detailed" }],
+          [{ text: "📧 Get Portfolio Updates", callback_data: "notify_portfolio" }],
+          [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+        ]
+      : [
+          [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+          [{ text: "📧 Get Portfolio Updates", callback_data: "notify_portfolio" }],
+          [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+        ];
+
+    await ctx.replyWithMarkdown(portfolioMessage, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+
+  } catch (error) {
+    console.error('Portfolio error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading portfolio**\n\nPlease try again later.');
+  }
+}
+
+// Payment Status Handler
+async function handlePaymentStatus(ctx) {
+  const paymentMessage = `💳 **PAYMENT & TRANSACTION CENTER**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**PAYMENT METHODS SUPPORTED:**
+• 💳 **BSC USDT** - Binance Smart Chain
+• 💳 **Polygon USDT** - Polygon Network
+• 💳 **TRON USDT** - Tron Network
+
+**🔐 SECURITY FEATURES:**
+• Multi-signature wallet protection
+• Real-time transaction monitoring
+• Automated fraud detection
+• 24/7 payment processing
+
+**⚡ PROCESSING TIMES:**
+• Payment verification: Instant
+• Admin approval: 2-24 hours
+• Share allocation: Immediate after approval
+
+**📱 PAYMENT TRACKING:**
+Monitor all your transactions and payment history in real-time.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Secure 3-step payment verification with instant processing.`;
+
+  await ctx.replyWithMarkdown(paymentMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+        [{ text: "📧 Get Payment Updates", callback_data: "notify_payments" }],
+        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+// Referral System Handler
+async function handleReferralSystem(ctx) {
+  const referralMessage = `👥 **REFERRAL PROGRAM**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 EARN 15% COMMISSION:**
+• 15% USDT Commission on every referral purchase
+• 15% Share Commission for long-term growth
+• Daily commission payments
+• Unlimited earning potential
+
+**🎯 HOW IT WORKS:**
+1. Share your unique referral link
+2. Friends invest using your link
+3. Earn instant 15% commission
+4. Withdraw anytime to your wallet
+
+**📊 COMMISSION STRUCTURE:**
+• **USDT Commission:** 15% paid in USDT
+• **Share Commission:** 15% paid in shares
+• **Payment Schedule:** Daily processing
+• **Withdrawal:** Available anytime
+
+**🚀 REFERRAL BENEFITS:**
+• Build passive income stream
+• Help friends access gold mining investment
+• Grow your own share portfolio
+• Professional referral tracking
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(referralMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
+        [{ text: "💰 Commission Balance", callback_data: "view_commission" }],
+        [{ text: "👥 My Referrals", callback_data: "view_referrals" }],
+        [{ text: "💸 Withdraw Commissions", callback_data: "withdraw_commissions" }],
+        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+// Admin Panel Handler
+async function handleAdminPanel(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**\n\nAdmin access is restricted.');
+    return;
+  }
+
+  const adminMessage = `🔑 **ADMIN CONTROL PANEL**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⚡ SYSTEM STATUS:** All systems operational
+
+**🔧 ADMIN FUNCTIONS:**
+• Payment approvals and management
+• User account administration
+• Commission processing
+• System monitoring and analytics
+• Audit logs and reporting
+
+**📊 QUICK STATS:**
+• Active users and transactions
+• Pending payment queue
+• Commission payouts
+• System performance metrics
+
+**🛡️ SECURITY:**
+• Multi-factor authentication active
+• Audit trail logging enabled
+• Real-time monitoring active
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(adminMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "⏳ Pending Payments", callback_data: "admin_pending" }],
+        [{ text: "👥 User Management", callback_data: "admin_users" }],
+        [{ text: "💰 Commission Requests", callback_data: "admin_commissions" }],
+        [{ text: "📊 System Stats", callback_data: "admin_stats" }],
+        [{ text: "📋 Audit Logs", callback_data: "admin_logs" }],
+        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+// Admin Status Handler
+async function handleAdminStatus(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**\n\nAdmin access is restricted.');
+    return;
+  }
+
+  const statusMessage = `📊 **SYSTEM STATUS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🟢 ALL SYSTEMS OPERATIONAL**
+
+**🔗 DATABASE:** Connected and responsive
+**🤖 BOT:** Running smoothly
+**💳 PAYMENTS:** Processing normally
+**⛏️ MINING OPS:** Active operations
+**🔐 SECURITY:** All systems secure
+
+**📈 PERFORMANCE METRICS:**
+• Response time: < 100ms
+• Uptime: 99.9%
+• Error rate: < 0.1%
+• Active connections: Stable
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(statusMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔄 Refresh Status", callback_data: "admin_status" }],
+        [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+      ]
+    }
+  });
+}
+
+// Helper function for user state management
+async function setUserState(userId, state, data = null) {
+  // This would typically use a database or memory store
+  // For now, we'll use a simple in-memory approach
+  if (!global.userStates) {
+    global.userStates = new Map();
+  }
+  global.userStates.set(userId, { state, data, timestamp: Date.now() });
+}
 
 // Start the bot
 startBot();

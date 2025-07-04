@@ -2588,6 +2588,83 @@ Keep sharing your referral link to earn more commissions! 🚀`;
 async function handleCustomAmountPurchase(ctx) {
   const user = ctx.from;
 
+  // FIRST: Check for existing pending payments before showing purchase options
+  const { data: telegramUser, error: telegramError } = await db.client
+    .from('telegram_users')
+    .select('user_id')
+    .eq('telegram_id', user.id)
+    .single();
+
+  if (telegramError || !telegramUser) {
+    await ctx.replyWithMarkdown('❌ **Authentication Error**\n\nPlease restart the bot and try again.');
+    return;
+  }
+
+  const userId = telegramUser.user_id;
+
+  // Check for existing pending payments
+  const { data: pendingPayments, error: pendingError } = await db.client
+    .from('crypto_payment_transactions')
+    .select('id, amount, network, created_at, status')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  if (pendingError) {
+    console.error('Error checking pending payments:', pendingError);
+  } else if (pendingPayments && pendingPayments.length > 0) {
+    // User has pending payments - show enhanced management options
+    const pendingPayment = pendingPayments[0];
+    const paymentDate = new Date(pendingPayment.created_at);
+    const now = new Date();
+    const daysDiff = Math.floor((now - paymentDate) / (1000 * 60 * 60 * 24));
+    const hoursAgo = Math.floor((now - paymentDate) / (1000 * 60 * 60));
+
+    const timeAgo = daysDiff > 0 ? `${daysDiff} day${daysDiff > 1 ? 's' : ''} ago` :
+                    hoursAgo > 0 ? `${hoursAgo} hour${hoursAgo > 1 ? 's' : ''} ago` :
+                    'Less than 1 hour ago';
+
+    const isOld = daysDiff >= 1; // Consider payment old if 1+ days
+    const statusIcon = isOld ? '🔴' : '🟡';
+    const ageWarning = isOld ? '\n\n🔴 **OLD PAYMENT:** This payment is over 24 hours old.' : '';
+
+    const pendingMessage = `⚠️ **PENDING PAYMENT DETECTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${statusIcon} **You have an existing pending payment:**
+
+💰 **Amount:** $${pendingPayment.amount}
+🌐 **Network:** ${pendingPayment.network.toUpperCase()}
+📅 **Submitted:** ${paymentDate.toLocaleDateString()} (${timeAgo})
+⏳ **Status:** Pending Admin Approval${ageWarning}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔧 WHAT WOULD YOU LIKE TO DO?**
+
+You must handle this pending payment before making a new purchase.`;
+
+    const keyboard = [
+      [{ text: "💳 Continue with Pending Payment", callback_data: `continue_payment_${pendingPayment.id}` }],
+      [{ text: "🗑️ Delete Pending Payment", callback_data: `cancel_payment_${pendingPayment.id}` }]
+    ];
+
+    // Add additional options based on payment age
+    if (isOld) {
+      keyboard.push([{ text: "📞 Contact Support (Old Payment)", callback_data: "menu_help" }]);
+    }
+
+    keyboard.push([{ text: "📊 View Payment Details", callback_data: "view_portfolio" }]);
+    keyboard.push([{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]);
+
+    await ctx.replyWithMarkdown(pendingMessage, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+    return;
+  }
+
+  // No pending payments - proceed with normal purchase flow
   const customAmountMessage = `🛒 **PURCHASE SHARES**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2713,67 +2790,7 @@ async function startCustomAmountPurchaseFlow(ctx, requestedAmount, sharesAmount,
   const availableUSDT = commissionBalance?.usdt_balance || 0;
   const canUseCommission = availableUSDT > 0;
 
-  // Check for existing pending payments (same as package flow)
-  const { data: pendingPayments, error: pendingError } = await db.client
-    .from('crypto_payment_transactions')
-    .select('id, amount, network, created_at, status')
-    .eq('user_id', userId)
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false });
-
-  if (pendingError) {
-    console.error('Error checking pending payments:', pendingError);
-  } else if (pendingPayments && pendingPayments.length > 0) {
-    // User has pending payments - show enhanced management options
-    const pendingPayment = pendingPayments[0];
-    const paymentDate = new Date(pendingPayment.created_at);
-    const now = new Date();
-    const daysDiff = Math.floor((now - paymentDate) / (1000 * 60 * 60 * 24));
-    const hoursAgo = Math.floor((now - paymentDate) / (1000 * 60 * 60));
-
-    const timeAgo = daysDiff > 0 ? `${daysDiff} day${daysDiff > 1 ? 's' : ''} ago` :
-                    hoursAgo > 0 ? `${hoursAgo} hour${hoursAgo > 1 ? 's' : ''} ago` :
-                    'Less than 1 hour ago';
-
-    const isOld = daysDiff >= 1; // Consider payment old if 1+ days
-    const statusIcon = isOld ? '🔴' : '🟡';
-    const ageWarning = isOld ? '\n\n🔴 **OLD PAYMENT:** This payment is over 24 hours old.' : '';
-
-    const pendingMessage = `⚠️ **PENDING PAYMENT DETECTED**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-${statusIcon} **You have an existing pending payment:**
-
-💰 **Amount:** $${pendingPayment.amount}
-🌐 **Network:** ${pendingPayment.network.toUpperCase()}
-📅 **Submitted:** ${paymentDate.toLocaleDateString()} (${timeAgo})
-⏳ **Status:** Pending Admin Approval${ageWarning}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**🔧 WHAT WOULD YOU LIKE TO DO?**
-
-You must handle this pending payment before making a new purchase.`;
-
-    const keyboard = [
-      [{ text: "💳 Continue with Pending Payment", callback_data: `continue_payment_${pendingPayment.id}` }],
-      [{ text: "🗑️ Delete Pending Payment", callback_data: `cancel_payment_${pendingPayment.id}` }]
-    ];
-
-    // Add additional options based on payment age
-    if (isOld) {
-      keyboard.push([{ text: "📞 Contact Support (Old Payment)", callback_data: "menu_help" }]);
-    }
-
-    keyboard.push([{ text: "📊 View Payment Details", callback_data: "view_portfolio" }]);
-    keyboard.push([{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]);
-
-    await ctx.replyWithMarkdown(pendingMessage, {
-      reply_markup: { inline_keyboard: keyboard }
-    });
-    return;
-  }
+  // Pending payment check already handled at entry point - proceed with purchase flow
 
   // PHASE 3: Show purchase confirmation with commission balance options
   let confirmationMessage = `🛒 **CONFIRM SHARE PURCHASE**

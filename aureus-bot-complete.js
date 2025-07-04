@@ -26,28 +26,7 @@ function formatCurrency(amount) {
   }).format(amount);
 }
 
-function formatPackageDetails(pkg, currentPhase) {
-  const bonusList = Array.isArray(pkg.bonuses)
-    ? pkg.bonuses.map(bonus => `    ✓ ${bonus}`).join('\n')
-    : '    ✓ Standard shareholder benefits';
-
-  const phaseInfo = currentPhase
-    ? `\n\n**📈 CURRENT PHASE:** ${currentPhase.phase_name}\n**💰 Price per Share:** ${formatCurrency(currentPhase.price_per_share)}`
-    : '';
-
-  return `**⛏️ ${pkg.name.toUpperCase()} MINING PACKAGE**
-
-**📝 DESCRIPTION:**
-${pkg.description}
-
-**💰 SHARE PURCHASE DETAILS:**
-• **Package Cost:** ${formatCurrency(pkg.price)}
-• **Aureus Shares:** ${pkg.shares.toLocaleString()} shares
-• **Quarterly Dividends:** Based on mining operations performance${phaseInfo}
-
-**🎁 PACKAGE BENEFITS:**
-${bonusList}`;
-}
+// Package formatting function removed - using custom amounts only
 
 function createMainMenuKeyboard(isAdmin = false) {
   const keyboard = [
@@ -75,40 +54,7 @@ function createMainMenuKeyboard(isAdmin = false) {
   return { inline_keyboard: keyboard };
 }
 
-async function createPackagesKeyboard(packages) {
-  const keyboard = [];
-
-  // Create rows of 2 packages each with professional formatting
-  for (let i = 0; i < packages.length; i += 2) {
-    const row = [];
-
-    // Calculate dynamic price for first package
-    const price1 = await calculatePackagePrice(packages[i]);
-    row.push({
-      text: `⛏️ ${packages[i].name.toUpperCase()} - ${formatCurrency(price1)}`,
-      callback_data: `package_${packages[i].id}`
-    });
-
-    if (i + 1 < packages.length) {
-      // Calculate dynamic price for second package
-      const price2 = await calculatePackagePrice(packages[i + 1]);
-      row.push({
-        text: `⛏️ ${packages[i + 1].name.toUpperCase()} - ${formatCurrency(price2)}`,
-        callback_data: `package_${packages[i + 1].id}`
-      });
-    }
-
-    keyboard.push(row);
-  }
-
-  keyboard.push([
-    { text: "💰 Custom Share Purchase", callback_data: "menu_custom" },
-    { text: "📊 Calculator", callback_data: "menu_calculator" }
-  ]);
-  keyboard.push([{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]);
-
-  return { inline_keyboard: keyboard };
-}
+// Package keyboard function removed - using custom amounts only
 
 function createTermsKeyboard() {
   return {
@@ -249,26 +195,7 @@ async function getCurrentPhaseInfo() {
   }
 }
 
-// Calculate package price based on current phase
-async function calculatePackagePrice(pkg) {
-  try {
-    const currentPhase = await getCurrentPhaseInfo();
-    if (!currentPhase) {
-      console.error('❌ No active phase found, using base package price');
-      return pkg.price;
-    }
-
-    // Package price = shares × current phase price per share
-    const dynamicPrice = pkg.shares * currentPhase.price_per_share;
-
-    console.log(`💰 Package ${pkg.name}: ${pkg.shares} shares × $${currentPhase.price_per_share} = $${dynamicPrice}`);
-
-    return dynamicPrice;
-  } catch (error) {
-    console.error('❌ Error calculating package price:', error);
-    return pkg.price; // Fallback to base price
-  }
-}
+// Package price calculation function removed - using custom amounts only
 
 async function getUserState(telegramId) {
   const session = await db.getUserSession(telegramId);
@@ -1014,8 +941,7 @@ bot.help(async (ctx) => {
 /logs - View audit logs
 
 🔹 **System Features:**
-📦 **Share Packages** - 8 mining equipment packages
-💰 **Custom Share Purchase** - $25-$10,000 flexible amounts
+💰 **Custom Share Purchase** - $25-$50,000 flexible amounts
 📊 **Mining Calculator** - Dividend projections
 👥 **Referral System** - 15% commission tracking
 📱 **Portfolio** - Share purchase tracking
@@ -1179,7 +1105,7 @@ bot.on('photo', async (ctx) => {
       const authStatus = await getUserAuthStatus(user.id);
 
       if (authStatus === 'authenticated') {
-        await ctx.replyWithMarkdown('📷 **Image received**\n\nTo upload payment screenshots, please use the **Share Purchase** process from the main menu.\n\n💡 **Tip:** Go to Main Menu → Mining Packages → Select Package → Payment Verification');
+        await ctx.replyWithMarkdown('📷 **Image received**\n\nTo upload payment screenshots, please use the **Share Purchase** process from the main menu.\n\n💡 **Tip:** Go to Main Menu → Purchase Shares → Enter Amount → Payment Verification');
       } else {
         await ctx.replyWithMarkdown('📷 **Image received**\n\nPlease complete authentication first to access payment features.');
         await startAuthenticationFlow(ctx);
@@ -1216,7 +1142,7 @@ bot.on('document', async (ctx) => {
         const authStatus = await getUserAuthStatus(user.id);
 
         if (authStatus === 'authenticated') {
-          await ctx.replyWithMarkdown('📄 **Document received**\n\nTo upload payment screenshots, please use the **Share Purchase** process from the main menu.\n\n💡 **Tip:** Go to Main Menu → Mining Packages → Select Package → Payment Verification');
+          await ctx.replyWithMarkdown('📄 **Document received**\n\nTo upload payment screenshots, please use the **Share Purchase** process from the main menu.\n\n💡 **Tip:** Go to Main Menu → Purchase Shares → Enter Amount → Payment Verification');
         } else {
           await ctx.replyWithMarkdown('📄 **Document received**\n\nPlease complete authentication first to access payment features.');
           await startAuthenticationFlow(ctx);
@@ -2275,7 +2201,7 @@ Welcome to **Aureus Alliance Holdings**, ${user.first_name}!
 🆔 **Account ID:** #${newUser.id}${sponsorText}
 
 🎁 **Account Benefits:**
-• Access to 8 mining equipment packages
+• Access to custom share purchases
 • Real-time mining operation updates
 • Quarterly dividend payments
 • NFT share certificates
@@ -3494,7 +3420,7 @@ async function handleAdminUsers(ctx) {
 • View all users
 • Search users by email/username
 • Manage user accounts
-• View user investments
+• View user share purchases
 • Reset user passwords
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
@@ -3588,7 +3514,7 @@ async function handleAdminSettings(ctx) {
 
 **Available Settings:**
 • Share Purchase phases
-• Package configurations
+• Custom amount limits
 • Wallet addresses
 • System parameters
 • Security settings
@@ -4058,33 +3984,21 @@ async function handleConfirmApproval(ctx, callbackData) {
 
     try {
       // Define package mapping based on amount (since share_packages table doesn't exist)
-      const packageMapping = {
-        25: { name: 'Shovel', shares: 25, roi: 12 },
-        75: { name: 'Miner', shares: 75, roi: 15 },
-        250: { name: 'Excavator', shares: 250, roi: 18 },
-        500: { name: 'Crusher', shares: 500, roi: 20 },
-        750: { name: 'Refinery', shares: 750, roi: 22 },
-        1000: { name: 'Aureus', shares: 1000, roi: 25 },
-        2500: { name: 'Titan', shares: 2500, roi: 28 },
-        5000: { name: 'Empire', shares: 5000, roi: 30 }
-      };
-
-      // Get package details based on payment amount
+      // Calculate shares based on current phase price
       const amount = parseFloat(updatedPayment.amount);
-      const packageInfo = packageMapping[amount] || {
-        name: 'Custom Package',
-        shares: Math.floor(amount), // 1 share per dollar as fallback
-        roi: 20 // Default 20% ROI
-      };
+      const currentPhase = await getCurrentPhaseInfo();
+      const sharesAmount = currentPhase
+        ? Math.floor(amount / currentPhase.price_per_share)
+        : Math.floor(amount); // Fallback to 1 share per dollar
 
-      console.log(`📦 Package determined: ${packageInfo.name} (${packageInfo.shares} shares)`);
+      console.log(`💰 Custom purchase: $${amount} = ${sharesAmount} shares`);
 
       // Create the share purchase record
       const investmentData = {
         user_id: updatedPayment.user_id,
-        package_name: packageInfo.name,
+        package_name: 'Custom Amount Purchase',
         total_amount: amount,
-        shares_purchased: packageInfo.shares,
+        shares_purchased: sharesAmount,
         status: 'active',
         payment_method: `${updatedPayment.network} ${updatedPayment.currency}`,
         created_at: new Date().toISOString(),
@@ -4111,7 +4025,7 @@ async function handleConfirmApproval(ctx, callbackData) {
         console.log('🔗 Payment linked to share purchase');
 
         // Update investment phases with shares purchased (only when approved)
-        await updateInvestmentPhases(packageInfo.shares);
+        await updateInvestmentPhases(sharesAmount);
 
         // Create commission for referrer if exists
         await createCommissionForInvestment(investmentRecord.id, updatedPayment.user_id, updatedPayment.amount);
@@ -5350,7 +5264,7 @@ async function handlePortfolio(ctx) {
         portfolioMessage += `\n\n... and ${investments.length - 5} more share purchases`;
       }
     } else {
-      portfolioMessage += '\n\n**SHARE PURCHASE HISTORY:**\nNo share purchases yet. Start with our mining packages!';
+      portfolioMessage += '\n\n**SHARE PURCHASE HISTORY:**\nNo share purchases yet. Start with custom share purchases!';
     }
 
     portfolioMessage += `
@@ -5402,7 +5316,7 @@ async function handlePaymentStatus(ctx) {
 • **TRON USDT** - Tron Network
 
 **PAYMENT PROCESS:**
-1. **Select Package** - Choose your share purchase
+1. **Enter Amount** - Choose your share purchase amount
 2. **Payment Method** - Select crypto network
 3. **Wallet Address** - Get company wallet
 4. **Upload Proof** - Screenshot verification
@@ -5606,7 +5520,7 @@ By accepting these terms, you acknowledge the operational nature of mining and a
     nft_terms: `🏆 **NFT SHARE CERTIFICATE TERMS**
 
 **1. NFT SHARE CERTIFICATES**
-• Each share package includes NFT certificate
+• Each share purchase includes NFT certificate
 • Represents legal ownership of company shares
 • Stored on secure blockchain network
 • Unique digital asset with guaranteed minimum value

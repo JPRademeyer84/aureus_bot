@@ -2588,12 +2588,16 @@ Keep sharing your referral link to earn more commissions! 🚀`;
 async function handleCustomAmountPurchase(ctx) {
   const user = ctx.from;
 
+  console.log(`🚨 CRITICAL DEBUG: handleCustomAmountPurchase called for telegram_id: ${user.id}, username: ${user.username}`);
+
   // FIRST: Check for existing pending payments before showing purchase options
   const { data: telegramUser, error: telegramError } = await db.client
     .from('telegram_users')
     .select('user_id')
     .eq('telegram_id', user.id)
     .single();
+
+  console.log(`🚨 CRITICAL DEBUG: Telegram user lookup result:`, { telegramUser, telegramError });
 
   if (telegramError || !telegramUser) {
     await ctx.replyWithMarkdown('❌ **Authentication Error**\n\nPlease restart the bot and try again.');
@@ -2602,19 +2606,42 @@ async function handleCustomAmountPurchase(ctx) {
 
   const userId = telegramUser.user_id;
 
-  // Check for existing pending payments - DEBUG VERSION
-  console.log(`🔍 DEBUGGING: Checking pending payments for user_id: ${userId}`);
+  // COMPREHENSIVE DEBUG: Check for existing pending payments
+  console.log(`🔍 DEBUGGING: Starting pending payment check for telegram_id: ${user.id}`);
+  console.log(`🔍 DEBUGGING: Found user_id: ${userId} for telegram_id: ${user.id}`);
 
-  // First, let's see ALL payments for this user
+  // First, let's verify the user exists in the users table
+  const { data: userRecord, error: userError } = await db.client
+    .from('users')
+    .select('id, email, full_name')
+    .eq('id', userId)
+    .single();
+
+  console.log(`🔍 USER RECORD CHECK:`, { userRecord, userError });
+
+  // Check ALL crypto payment transactions in the database
+  const { data: allTransactions, error: allTransError } = await db.client
+    .from('crypto_payment_transactions')
+    .select('id, amount, network, created_at, status, user_id')
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  console.log(`🔍 ALL RECENT TRANSACTIONS (any user):`, { allTransactions, allTransError });
+
+  // Check ALL payments for this specific user_id
   const { data: allPayments, error: allPaymentsError } = await db.client
     .from('crypto_payment_transactions')
     .select('id, amount, network, created_at, status, user_id')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
-  console.log(`🔍 ALL PAYMENTS for user ${userId}:`, { allPayments, allPaymentsError });
+  console.log(`🔍 ALL PAYMENTS for user_id ${userId}:`, {
+    allPayments,
+    allPaymentsError,
+    count: allPayments?.length || 0
+  });
 
-  // Now check specifically for pending
+  // Check specifically for pending status
   const { data: pendingPayments, error: pendingError } = await db.client
     .from('crypto_payment_transactions')
     .select('id, amount, network, created_at, status, user_id')
@@ -2622,21 +2649,25 @@ async function handleCustomAmountPurchase(ctx) {
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
 
-  console.log(`🔍 PENDING PAYMENTS for user ${userId}:`, {
+  console.log(`🔍 PENDING PAYMENTS for user_id ${userId}:`, {
     pendingPayments,
     pendingError,
     paymentCount: pendingPayments?.length || 0
   });
 
-  // Also check for other possible status values
+  // Check for other possible status values that might be used
   const { data: otherStatusPayments, error: otherError } = await db.client
     .from('crypto_payment_transactions')
     .select('id, amount, network, created_at, status, user_id')
     .eq('user_id', userId)
-    .in('status', ['Pending', 'PENDING', 'awaiting_approval', 'submitted'])
+    .in('status', ['Pending', 'PENDING', 'awaiting_approval', 'submitted', 'unconfirmed'])
     .order('created_at', { ascending: false });
 
-  console.log(`🔍 OTHER STATUS PAYMENTS for user ${userId}:`, { otherStatusPayments, otherError });
+  console.log(`🔍 OTHER STATUS PAYMENTS for user_id ${userId}:`, {
+    otherStatusPayments,
+    otherError,
+    count: otherStatusPayments?.length || 0
+  });
 
   if (pendingError) {
     console.error('Error checking pending payments:', pendingError);
@@ -2687,11 +2718,14 @@ You must handle this pending payment before making a new purchase.`;
     keyboard.push([{ text: "📊 View Payment Details", callback_data: "view_portfolio" }]);
     keyboard.push([{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]);
 
+    console.log(`🚨 CRITICAL DEBUG: Showing pending payment management screen and returning`);
     await ctx.replyWithMarkdown(pendingMessage, {
       reply_markup: { inline_keyboard: keyboard }
     });
     return;
   }
+
+  console.log(`🚨 CRITICAL DEBUG: No pending payments found, proceeding with normal purchase flow`);
 
   // No pending payments - proceed with normal purchase flow
   const customAmountMessage = `🛒 **PURCHASE SHARES**

@@ -177,47 +177,7 @@ class SupabaseDB {
     }
   }
 
-  // Investment package functions
-  async getInvestmentPackages() {
-    try {
-      const { data, error } = await this.client
-        .from('investment_packages')
-        .select('*')
-        .eq('is_active', true)
-        .order('price', { ascending: true });
-      
-      if (error) {
-        console.error('Error getting investment packages:', error);
-        return [];
-      }
-      
-      return data || [];
-    } catch (error) {
-      console.error('Error getting investment packages:', error);
-      return [];
-    }
-  }
-
-  async getPackageById(packageId) {
-    try {
-      const { data, error } = await this.client
-        .from('investment_packages')
-        .select('*')
-        .eq('id', packageId)
-        .eq('is_active', true)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error getting package by ID:', error);
-        return null;
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Error getting package by ID:', error);
-      return null;
-    }
-  }
+  // Package functions removed - using custom amounts only
 
   // Investment functions
   async getUserInvestments(userId) {

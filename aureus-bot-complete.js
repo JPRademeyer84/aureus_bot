@@ -52,23 +52,15 @@ ${bonusList}`;
 function createMainMenuKeyboard(isAdmin = false) {
   const keyboard = [
     [
-      { text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" },
-      { text: "💰 Custom Share Purchase", callback_data: "menu_custom" }
+      { text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }
     ],
     [
-      { text: "📊 Mining Calculator", callback_data: "menu_calculator" },
-      { text: "👥 Referral Program", callback_data: "menu_referrals" }
+      { text: "👥 Referral Program", callback_data: "menu_referrals" },
+      { text: "📱 My Portfolio", callback_data: "menu_portfolio" }
     ],
     [
-      { text: "📱 My Portfolio", callback_data: "menu_portfolio" },
-      { text: "💳 Payment Status", callback_data: "menu_payments" }
-    ],
-    [
-      { text: "📋 Legal Documents", callback_data: "menu_terms" },
+      { text: "💳 Payment Status", callback_data: "menu_payments" },
       { text: "🆘 Support Center", callback_data: "menu_help" }
-    ],
-    [
-      { text: "🚪 Logout", callback_data: "user_logout" }
     ]
   ];
 
@@ -1464,10 +1456,6 @@ bot.on('callback_query', async (ctx) => {
         await handleCustomAmountPurchase(ctx);
         break;
 
-      case 'menu_custom':
-        await handleCustomInvestment(ctx);
-        break;
-
       case 'menu_calculator':
         await handleMiningCalculator(ctx);
         break;
@@ -1562,30 +1550,14 @@ bot.on('callback_query', async (ctx) => {
         break;
 
       default:
-        if (callbackData.startsWith('package_')) {
-          await handlePackageSelection(ctx, callbackData);
-        } else if (callbackData.startsWith('terms_required_')) {
+        if (callbackData.startsWith('terms_required_')) {
           await handleTermsRequired(ctx, callbackData);
         } else if (callbackData.startsWith('terms_')) {
           await handleTermsSelection(ctx, callbackData);
         } else if (callbackData.startsWith('accept_')) {
           await handleTermsAcceptance(ctx, callbackData);
-        } else if (callbackData.startsWith('purchase_')) {
-          await handlePurchaseFlow(ctx, callbackData);
-        } else if (callbackData.startsWith('pay_commission_')) {
-          await handleCommissionPayment(ctx, callbackData);
-        } else if (callbackData.startsWith('calculate_')) {
-          await handleCalculateReturns(ctx, callbackData);
-        } else if (callbackData.startsWith('pay_bsc_')) {
-          await handleBSCPayment(ctx, callbackData);
-        } else if (callbackData.startsWith('pay_pol_')) {
-          await handlePOLPayment(ctx, callbackData);
-        } else if (callbackData.startsWith('pay_tron_')) {
-          await handleTRONPayment(ctx, callbackData);
         } else if (callbackData.startsWith('copy_')) {
           await handleCopyWallet(ctx, callbackData);
-        } else if (callbackData.startsWith('verify_')) {
-          await handlePaymentVerification(ctx, callbackData);
         } else if (callbackData.startsWith('approve_payment_')) {
           await handlePaymentApproval(ctx, callbackData);
         } else if (callbackData.startsWith('reject_payment_')) {
@@ -2673,41 +2645,7 @@ Keep sharing your referral link to earn more commissions! 🚀`;
   }
 }
 
-async function handlePackagesMenu(ctx) {
-  const packages = await db.getInvestmentPackages();
-  const currentPhase = await db.getCurrentPhase();
-
-  if (packages.length === 0) {
-    await ctx.replyWithMarkdown('⛏️ **Mining packages temporarily unavailable.**\n\nPlease contact support for assistance.');
-    return;
-  }
-
-  let packagesMessage = `⛏️ **MINING EQUIPMENT PACKAGES**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**PROFESSIONAL MINING EQUIPMENT INVESTMENTS**
-
-Choose from our 8 premium mining equipment packages, each representing real mining equipment and operations:
-
-`;
-
-  for (let index = 0; index < packages.length; index++) {
-    const pkg = packages[index];
-    const dynamicPrice = await calculatePackagePrice(pkg);
-    packagesMessage += `**${index + 1}. ${pkg.name.toUpperCase()}** - ${formatCurrency(dynamicPrice)}\n   └ ${pkg.shares.toLocaleString()} equity shares\n\n`;
-  }
-
-  if (currentPhase) {
-    packagesMessage += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📈 **CURRENT PHASE:** ${currentPhase.phase_name}\n💰 **Share Price:** ${formatCurrency(currentPhase.price_per_share)}\n📊 **Available:** ${(currentPhase.total_shares_available - currentPhase.shares_sold).toLocaleString()} shares\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-  }
-
-  packagesMessage += '\n\n**Select a package to view detailed information:**';
-
-  await ctx.replyWithMarkdown(packagesMessage, {
-    reply_markup: await createPackagesKeyboard(packages)
-  });
-}
+// Package menu function removed - using custom amounts only
 
 // PHASE 2: Custom Amount Purchase System
 async function handleCustomAmountPurchase(ctx) {
@@ -3304,29 +3242,7 @@ A confirmation message will be sent to this app once approved.`;
   });
 }
 
-async function handlePackageSelection(ctx, callbackData) {
-  const packageId = callbackData.split('_')[1];
-  const pkg = await db.getPackageById(packageId);
-  const currentPhase = await db.getCurrentPhase();
-
-  if (!pkg) {
-    await ctx.replyWithMarkdown('❌ **PACKAGE NOT FOUND**\n\nPlease try again or contact support.');
-    return;
-  }
-
-  const packageDetails = formatPackageDetails(pkg, currentPhase);
-
-  await ctx.replyWithMarkdown(packageDetails, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: `🛒 PURCHASE ${pkg.name.toUpperCase()}`, callback_data: `purchase_${pkg.id}` }],
-        [{ text: "📊 Calculate Returns", callback_data: `calculate_${pkg.id}` }],
-        [{ text: "🔙 Back to Packages", callback_data: "menu_packages" }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
+// Package selection function removed - using custom amounts only
 
 // Enhanced support and admin handlers
 async function handleSupportCenter(ctx) {
@@ -3420,7 +3336,6 @@ async function handleAdminStatus(ctx) {
   }
 
   // Get system statistics
-  const packages = await db.getInvestmentPackages();
   const currentPhase = await db.getCurrentPhase();
 
   const statusMessage = `📊 **SYSTEM STATUS DASHBOARD**
@@ -3432,7 +3347,7 @@ async function handleAdminStatus(ctx) {
 **BOT STATUS:** ✅ Active
 
 **SHARE PURCHASE DATA:**
-• **Packages Available:** ${packages.length}
+• **Purchase Method:** Custom Amounts Only
 • **Current Phase:** ${currentPhase ? currentPhase.phase_name : 'Loading...'}
 • **Share Price:** ${currentPhase ? formatCurrency(currentPhase.price_per_share) : 'Loading...'}
 
@@ -4406,362 +4321,13 @@ async function handleAdminAuditLogs(ctx) {
 }
 
 // Enhanced feature handlers
-async function handlePurchaseFlow(ctx, callbackData) {
-  const packageId = callbackData.split('_')[1];
-  const pkg = await db.getPackageById(packageId);
+// Purchase flow function removed - using custom amounts only
 
-  if (!pkg) {
-    await ctx.replyWithMarkdown('❌ **PACKAGE NOT FOUND**');
-    return;
-  }
+// Package commission payment function removed - using custom amounts only
 
-  // Check if user has accepted all required terms
-  const telegramUser = await db.getTelegramUser(ctx.from.id);
-  console.log(`🔍 Purchase flow - Telegram user:`, telegramUser);
-  if (!telegramUser || !telegramUser.user_id) {
-    await ctx.replyWithMarkdown('❌ **Authentication required**\n\nPlease log in first.');
-    return;
-  }
+// Package commission processing function removed - using custom amounts only
 
-  const userId = telegramUser.user_id;
-  console.log(`👤 Purchase flow - User ID: ${userId}`);
-
-  // Check for existing pending payments
-  const { data: pendingPayments, error: pendingError } = await db.client
-    .from('crypto_payment_transactions')
-    .select('id, amount, network, created_at, status')
-    .eq('user_id', userId)
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false });
-
-  if (pendingError) {
-    console.error('Error checking pending payments:', pendingError);
-  } else if (pendingPayments && pendingPayments.length > 0) {
-    // User has pending payments - show management options
-    const pendingPayment = pendingPayments[0]; // Most recent pending payment
-    const paymentDate = new Date(pendingPayment.created_at).toLocaleDateString();
-
-    const pendingMessage = `⚠️ **PENDING PAYMENT DETECTED**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🚨 **You have an existing pending payment:**
-
-💰 **Amount:** $${pendingPayment.amount}
-🌐 **Network:** ${pendingPayment.network}
-📅 **Submitted:** ${paymentDate}
-⏳ **Status:** Pending Admin Approval
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**⚠️ IMPORTANT:**
-You cannot make new purchases while you have pending payments.
-
-**🔧 CHOOSE AN OPTION:**`;
-
-    await ctx.replyWithMarkdown(pendingMessage, {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "⏳ Wait for Current Payment", callback_data: "wait_pending" }],
-          [{ text: "❌ Cancel Pending Payment", callback_data: `cancel_payment_${pendingPayment.id}` }],
-          [{ text: "📊 View Payment Status", callback_data: "view_portfolio" }],
-          [{ text: "🔙 Back to Packages", callback_data: "menu_packages" }]
-        ]
-      }
-    });
-    return;
-  }
-
-  // PHASE 1: Terms checking removed - terms are now required before registration
-  console.log(`✅ Terms check skipped - user authenticated means terms already accepted`);
-
-  const currentPhase = await db.getCurrentPhase();
-
-  // Calculate package cost based on current phase pricing
-  const packageCost = await calculatePackagePrice(pkg);
-
-  // Get user's commission balance
-  const { data: commissionBalance, error: balanceError } = await db.client
-    .from('commission_balances')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
-
-  const availableUSDT = commissionBalance?.usdt_balance || 0;
-  const totalCost = packageCost;
-  const canUseCommission = availableUSDT > 0;
-  const maxCommissionUsage = Math.min(availableUSDT, totalCost);
-  const remainingAfterCommission = Math.max(0, totalCost - availableUSDT);
-
-  let purchaseMessage = `**🛒 BUY SHARES - ${pkg.name.toUpperCase()}**
-
-**SHARE PURCHASE DETAILS:**
-
-💰 **Total Cost:** ${formatCurrency(totalCost)}
-📊 **Aureus Shares:** ${pkg.shares.toLocaleString()}
-💎 **Current Share Price:** ${currentPhase ? formatCurrency(currentPhase.price_per_share) : 'N/A'}
-📈 **Current Phase:** ${currentPhase ? currentPhase.phase_name : 'N/A'}`;
-
-  // Add commission balance information if available
-  if (canUseCommission) {
-    purchaseMessage += `
-
-**💰 COMMISSION BALANCE AVAILABLE:**
-• **Available USDT:** ${formatCurrency(availableUSDT)}
-• **Can Use:** ${formatCurrency(maxCommissionUsage)}
-• **Remaining to Pay:** ${formatCurrency(remainingAfterCommission)}`;
-  }
-
-  purchaseMessage += `
-
-**🏆 WHAT YOU GET:**
-• ${pkg.shares.toLocaleString()} equity shares in Aureus Alliance Holdings
-• Quarterly dividend payments from gold mining operations
-• NFT share certificate (12-month trading restriction, $1000 minimum value)
-• Real-time mining operation updates
-
-**💳 PAYMENT OPTIONS:**`;
-
-  if (canUseCommission) {
-    purchaseMessage += `
-Choose how you want to pay:`;
-  } else {
-    purchaseMessage += `
-Choose your preferred cryptocurrency network:`;
-  }
-
-  // Create keyboard based on commission balance availability
-  const keyboard = [];
-
-  if (canUseCommission) {
-    // Add commission usage options
-    if (availableUSDT >= totalCost) {
-      // Can pay entirely with commission
-      keyboard.push([{ text: "💰 Pay with Commission Balance", callback_data: `pay_commission_full_${pkg.id}` }]);
-    } else {
-      // Can pay partially with commission
-      keyboard.push([{ text: `💰 Use Commission ($${maxCommissionUsage.toFixed(2)}) + Crypto`, callback_data: `pay_commission_partial_${pkg.id}` }]);
-    }
-
-    // Add separator
-    keyboard.push([{ text: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", callback_data: "separator" }]);
-  }
-
-  // Add crypto payment options
-  keyboard.push([{ text: "🟡 BSC USDT", callback_data: `pay_bsc_${pkg.id}` }]);
-  keyboard.push([{ text: "🟣 POL USDT", callback_data: `pay_pol_${pkg.id}` }]);
-  keyboard.push([{ text: "🔴 TRON USDT", callback_data: `pay_tron_${pkg.id}` }]);
-
-  // Add navigation options
-  keyboard.push([{ text: "🔙 Back to Package", callback_data: `package_${pkg.id}` }]);
-  keyboard.push([{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]);
-
-  await ctx.replyWithMarkdown(purchaseMessage, {
-    reply_markup: {
-      inline_keyboard: keyboard
-    }
-  });
-}
-
-async function handleCommissionPayment(ctx, callbackData) {
-  const user = ctx.from;
-
-  try {
-    await ctx.answerCbQuery();
-
-    const parts = callbackData.split('_');
-    const paymentType = parts[2]; // 'full' or 'partial'
-    const packageId = parts[3];
-
-    const pkg = await db.getPackageById(packageId);
-    if (!pkg) {
-      await ctx.replyWithMarkdown('❌ **PACKAGE NOT FOUND**');
-      return;
-    }
-
-    // Get user data
-    const telegramUser = await db.getTelegramUser(user.id);
-    if (!telegramUser || !telegramUser.user_id) {
-      await ctx.replyWithMarkdown('❌ **Authentication required**\n\nPlease log in first.');
-      return;
-    }
-
-    const userId = telegramUser.user_id;
-
-    // Get commission balance
-    const { data: commissionBalance, error: balanceError } = await db.client
-      .from('commission_balances')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    if (balanceError || !commissionBalance) {
-      await ctx.replyWithMarkdown('❌ **No commission balance found**');
-      return;
-    }
-
-    const availableUSDT = parseFloat(commissionBalance.usdt_balance || 0);
-    const packageCost = pkg.price;
-
-    if (paymentType === 'full') {
-      // Full payment with commission
-      if (availableUSDT < packageCost) {
-        await ctx.replyWithMarkdown(`❌ **Insufficient commission balance**\n\nRequired: $${packageCost.toFixed(2)}\nAvailable: $${availableUSDT.toFixed(2)}`);
-        return;
-      }
-
-      await processCommissionPayment(ctx, userId, pkg, packageCost, 0);
-
-    } else if (paymentType === 'partial') {
-      // Partial payment with commission + crypto
-      const commissionUsage = Math.min(availableUSDT, packageCost);
-      const remainingAmount = packageCost - commissionUsage;
-
-      if (remainingAmount <= 0) {
-        // Actually can pay in full
-        await processCommissionPayment(ctx, userId, pkg, packageCost, 0);
-      } else {
-        // Show crypto payment options for remaining amount
-        await showPartialCommissionPayment(ctx, pkg, commissionUsage, remainingAmount);
-      }
-    }
-
-  } catch (error) {
-    console.error('Commission payment error:', error);
-    await ctx.replyWithMarkdown('❌ **Error processing commission payment**\n\nPlease try again later.');
-  }
-}
-
-async function processCommissionPayment(ctx, userId, pkg, commissionAmount, remainingAmount) {
-  try {
-    // Create share purchase record
-    const sharePurchaseData = {
-      user_id: userId,
-      package_id: pkg.id,
-      package_name: pkg.name,
-      shares_purchased: pkg.shares,
-      total_amount: pkg.price,
-      commission_used: commissionAmount,
-      remaining_payment: remainingAmount,
-      payment_method: remainingAmount > 0 ? 'commission_partial' : 'commission_full',
-      status: remainingAmount > 0 ? 'pending_payment' : 'pending_approval'
-    };
-
-    const { data: sharePurchase, error: purchaseError } = await db.client
-      .from('aureus_share_purchases')
-      .insert([sharePurchaseData])
-      .select()
-      .single();
-
-    if (purchaseError) {
-      console.error('Share purchase creation error:', purchaseError);
-      await ctx.replyWithMarkdown('❌ **Error creating share purchase**\n\nPlease try again later.');
-      return;
-    }
-
-    // Record commission usage
-    if (commissionAmount > 0) {
-      const commissionUsageData = {
-        user_id: userId,
-        share_purchase_id: sharePurchase.id,
-        commission_amount_used: commissionAmount,
-        remaining_payment_amount: remainingAmount
-      };
-
-      await db.client
-        .from('commission_usage')
-        .insert([commissionUsageData]);
-
-      // Update commission balance
-      await db.client
-        .from('commission_balances')
-        .update({
-          usdt_balance: db.client.raw('usdt_balance - ?', [commissionAmount]),
-          last_updated: new Date().toISOString()
-        })
-        .eq('user_id', userId);
-    }
-
-    // Note: Investment phases will be updated when purchase is approved by admin
-
-    if (remainingAmount > 0) {
-      // Show crypto payment options for remaining amount
-      await showPartialCommissionPayment(ctx, pkg, commissionAmount, remainingAmount, sharePurchase.id);
-    } else {
-      // Full payment with commission - show success message
-      const successMessage = `✅ **SHARE PURCHASE COMPLETED**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**PURCHASE DETAILS:**
-📦 **Package:** ${pkg.name}
-📊 **Shares:** ${pkg.shares.toLocaleString()}
-💰 **Total Cost:** $${pkg.price.toFixed(2)}
-💳 **Payment Method:** Commission Balance
-
-**PAYMENT BREAKDOWN:**
-💰 **Commission Used:** $${commissionAmount.toFixed(2)}
-✅ **Status:** Pending Admin Approval
-
-**NEXT STEPS:**
-1. Admin will review your purchase
-2. Shares will be added to your portfolio
-3. You'll receive confirmation notification
-4. Quarterly dividends will begin
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Thank you for your share purchase!`;
-
-      await ctx.replyWithMarkdown(successMessage, {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "📊 View Portfolio", callback_data: "menu_portfolio" }],
-            [{ text: "💰 Check Commission Balance", callback_data: "menu_referrals" }],
-            [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-          ]
-        }
-      });
-    }
-
-  } catch (error) {
-    console.error('Commission payment processing error:', error);
-    await ctx.replyWithMarkdown('❌ **Error processing payment**\n\nPlease try again later.');
-  }
-}
-
-async function showPartialCommissionPayment(ctx, pkg, commissionUsed, remainingAmount, sharePurchaseId = null) {
-  const partialPaymentMessage = `💰 **PARTIAL COMMISSION PAYMENT**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**SHARE PURCHASE:** ${pkg.name}
-📊 **Total Shares:** ${pkg.shares.toLocaleString()}
-💰 **Total Cost:** $${pkg.price.toFixed(2)}
-
-**PAYMENT BREAKDOWN:**
-✅ **Commission Used:** $${commissionUsed.toFixed(2)}
-💳 **Remaining to Pay:** $${remainingAmount.toFixed(2)}
-
-**CRYPTO PAYMENT OPTIONS:**
-Choose your preferred network for the remaining amount:
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-  const keyboard = [
-    [{ text: `🟡 BSC USDT ($${remainingAmount.toFixed(2)})`, callback_data: `pay_partial_bsc_${pkg.id}_${sharePurchaseId || 'new'}` }],
-    [{ text: `🟣 POL USDT ($${remainingAmount.toFixed(2)})`, callback_data: `pay_partial_pol_${pkg.id}_${sharePurchaseId || 'new'}` }],
-    [{ text: `🔴 TRON USDT ($${remainingAmount.toFixed(2)})`, callback_data: `pay_partial_tron_${pkg.id}_${sharePurchaseId || 'new'}` }],
-    [{ text: "🔙 Back to Package", callback_data: `package_${pkg.id}` }],
-    [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-  ];
-
-  await ctx.replyWithMarkdown(partialPaymentMessage, {
-    reply_markup: {
-      inline_keyboard: keyboard
-    }
-  });
-}
+// Package partial commission payment function removed - using custom amounts only
 
 async function calculateWashplantDividends(shares) {
   // Washplant operational data
@@ -4819,121 +4385,9 @@ async function calculateWashplantDividends(shares) {
   return results;
 }
 
-async function handleCalculateReturns(ctx, callbackData) {
-  const packageId = callbackData.split('_')[1];
-  const pkg = await db.getPackageById(packageId);
+// Package calculate returns function removed - using custom amounts only
 
-  if (!pkg) {
-    await ctx.replyWithMarkdown('❌ **PACKAGE NOT FOUND**');
-    return;
-  }
-
-  // Calculate washplant-based dividends
-  const dividendProjections = await calculateWashplantDividends(pkg.shares);
-
-  const calculationMessage = `📊 **MINING DIVIDEND CALCULATOR - ${pkg.name.toUpperCase()}**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**SHARE PURCHASE BREAKDOWN:**
-
-💰 **Initial Share Purchase:** ${formatCurrency(pkg.price)}
-📊 **Equity Shares:** ${pkg.shares.toLocaleString()}
-⛏️ **Commission Rate:** 15% (not ROI)
-
-**WASHPLANT-BASED DIVIDEND PROJECTIONS:**
-
-**YEAR 1 (${dividendProjections.year1.washplants} Washplants):**
-🏭 Production: ${dividendProjections.year1.annualTons.toLocaleString()} tons/year
-🥇 Gold Output: ${dividendProjections.year1.annualGoldKg} kg/year
-💰 Your Annual Dividend: ${formatCurrency(dividendProjections.year1.userAnnualDividend)}
-📅 Quarterly Dividend: ${formatCurrency(dividendProjections.year1.userQuarterlyDividend)}
-
-**YEAR 2 (${dividendProjections.year2.washplants} Washplants):**
-🏭 Production: ${dividendProjections.year2.annualTons.toLocaleString()} tons/year
-🥇 Gold Output: ${dividendProjections.year2.annualGoldKg} kg/year
-💰 Your Annual Dividend: ${formatCurrency(dividendProjections.year2.userAnnualDividend)}
-
-**YEAR 3 (${dividendProjections.year3.washplants} Washplants):**
-🏭 Production: ${dividendProjections.year3.annualTons.toLocaleString()} tons/year
-🥇 Gold Output: ${dividendProjections.year3.annualGoldKg} kg/year
-💰 Your Annual Dividend: ${formatCurrency(dividendProjections.year3.userAnnualDividend)}
-
-**YEAR 4 (${dividendProjections.year4.washplants} Washplants):**
-🏭 Production: ${dividendProjections.year4.annualTons.toLocaleString()} tons/year
-🥇 Gold Output: ${dividendProjections.year4.annualGoldKg} kg/year
-💰 Your Annual Dividend: ${formatCurrency(dividendProjections.year4.userAnnualDividend)}
-
-**YEAR 5 (${dividendProjections.year5.washplants} Washplants):**
-🏭 Production: ${dividendProjections.year5.annualTons.toLocaleString()} tons/year
-🥇 Gold Output: ${dividendProjections.year5.annualGoldKg} kg/year
-💰 Your Annual Dividend: ${formatCurrency(dividendProjections.year5.userAnnualDividend)}
-
-**5-YEAR TOTAL DIVIDENDS:** ${formatCurrency(
-  dividendProjections.year1.userAnnualDividend +
-  dividendProjections.year2.userAnnualDividend +
-  dividendProjections.year3.userAnnualDividend +
-  dividendProjections.year4.userAnnualDividend +
-  dividendProjections.year5.userAnnualDividend
-)}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**OPERATIONAL BASIS:**
-• 25 hectares per 200 tons/hour washplant
-• 10 hours daily operation per washplant
-• 0.8g gold per ton of material processed
-• Current gold price: ~$107/gram
-• 45% operational costs (fuel, maintenance, labor)
-
-*Projections based on actual mining operations and washplant capacity. Actual returns depend on gold content, weather, and operational factors.*`;
-
-  await ctx.replyWithMarkdown(calculationMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: `🛒 PURCHASE ${pkg.name.toUpperCase()}`, callback_data: `purchase_${pkg.id}` }],
-        [{ text: "🔙 Back to Package", callback_data: `package_${pkg.id}` }],
-        [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
-
-async function handleCustomInvestment(ctx) {
-  const customMessage = `💰 **CUSTOM SHARE PURCHASE BUILDER**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**FLEXIBLE SHARE PURCHASE AMOUNTS**
-
-Buy Shares any amount from **$25 to $10,000** with our smart package optimization system.
-
-**HOW IT WORKS:**
-1. Enter your desired share purchase amount
-2. Our algorithm finds the optimal package combination
-3. Maximize your shares and benefits
-4. Complete secure payment process
-
-**EXAMPLE OPTIMIZATIONS:**
-• $275 = 1× Excavator ($250) + 1× Shovel ($25)
-• $575 = 1× Crusher ($500) + 1× Miner ($75)
-• $1,825 = 1× Aureus ($1,000) + 1× Refinery ($750) + 1× Miner ($75)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🔧 **COMING SOON**
-Advanced custom share purchase calculator with real-time optimization.`;
-
-  await ctx.replyWithMarkdown(customMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📧 Get Notified When Ready", callback_data: "notify_custom" }],
-        [{ text: "⛏️ View Standard Packages", callback_data: "menu_packages" }],
-        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
-      ]
-    }
-  });
-}
+// Custom investment function removed - using direct custom amounts only
 
 async function handleMiningCalculator(ctx) {
   const calculatorMessage = `📊 **MINING PRODUCTION CALCULATOR**
@@ -6691,152 +6145,7 @@ async function startBot() {
   }
 }
 
-// Payment handlers
-async function handleBSCPayment(ctx, callbackData) {
-  const packageId = callbackData.split('_')[2];
-  const pkg = await db.getPackageById(packageId);
-
-  if (!pkg) {
-    await ctx.reply('❌ Package not found.');
-    return;
-  }
-
-  const packageCost = await calculatePackagePrice(pkg);
-
-  const paymentMessage = `**💳 BSC USDT PAYMENT**
-
-**SHARE PURCHASE:** ${pkg.name.toUpperCase()}
-
-**Payment Amount:** ${formatCurrency(packageCost)}
-**Network:** Binance Smart Chain (BSC)
-**Token:** USDT
-
-**COMPANY WALLET ADDRESS:**
-\`0x742d35Cc6634C0532925a3b8D4C9db96C4b4d4d4\`
-
-**PAYMENT INSTRUCTIONS:**
-1. Send exactly ${formatCurrency(packageCost)} USDT to the wallet above
-2. Take a screenshot of your transaction
-3. Copy the transaction hash
-4. Return here to complete verification
-
-**⚠️ IMPORTANT:**
-• Send only USDT on BSC network
-• Double-check the wallet address
-• Keep your transaction hash safe`;
-
-  await ctx.replyWithMarkdown(paymentMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📋 Copy Wallet Address", callback_data: `copy_bsc_${packageId}` }],
-        [{ text: "✅ I've Sent Payment", callback_data: `verify_bsc_${packageId}` }],
-        [{ text: "🔙 Back to Payment Options", callback_data: `purchase_${packageId}` }]
-      ]
-    }
-  });
-}
-
-async function handlePOLPayment(ctx, callbackData) {
-  const packageId = callbackData.split('_')[2];
-  const pkg = await db.getPackageById(packageId);
-
-  if (!pkg) {
-    await ctx.reply('❌ Package not found.');
-    return;
-  }
-
-  const currentPhase = await db.getCurrentPhase();
-  let packageCost = pkg.price;
-  if (currentPhase && currentPhase.phase_name !== 'Pre Sale') {
-    const phaseNumber = parseInt(currentPhase.phase_name.replace('Phase ', '')) || 0;
-    if (phaseNumber > 0) {
-      packageCost = pkg.price * Math.pow(2, phaseNumber);
-    }
-  }
-
-  const paymentMessage = `**💳 POL USDT PAYMENT**
-
-**SHARE PURCHASE:** ${pkg.name.toUpperCase()}
-
-**Payment Amount:** ${formatCurrency(packageCost)}
-**Network:** Polygon (POL)
-**Token:** USDT
-
-**COMPANY WALLET ADDRESS:**
-\`0x742d35Cc6634C0532925a3b8D4C9db96C4b4d4d4\`
-
-**PAYMENT INSTRUCTIONS:**
-1. Send exactly ${formatCurrency(packageCost)} USDT to the wallet above
-2. Take a screenshot of your transaction
-3. Copy the transaction hash
-4. Return here to complete verification
-
-**⚠️ IMPORTANT:**
-• Send only USDT on Polygon network
-• Double-check the wallet address
-• Keep your transaction hash safe`;
-
-  await ctx.replyWithMarkdown(paymentMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📋 Copy Wallet Address", callback_data: `copy_pol_${packageId}` }],
-        [{ text: "✅ I've Sent Payment", callback_data: `verify_pol_${packageId}` }],
-        [{ text: "🔙 Back to Payment Options", callback_data: `purchase_${packageId}` }]
-      ]
-    }
-  });
-}
-
-async function handleTRONPayment(ctx, callbackData) {
-  const packageId = callbackData.split('_')[2];
-  const pkg = await db.getPackageById(packageId);
-
-  if (!pkg) {
-    await ctx.reply('❌ Package not found.');
-    return;
-  }
-
-  const currentPhase = await db.getCurrentPhase();
-  let packageCost = pkg.price;
-  if (currentPhase && currentPhase.phase_name !== 'Pre Sale') {
-    const phaseNumber = parseInt(currentPhase.phase_name.replace('Phase ', '')) || 0;
-    if (phaseNumber > 0) {
-      packageCost = pkg.price * Math.pow(2, phaseNumber);
-    }
-  }
-
-  const paymentMessage = `**💳 TRON USDT PAYMENT**
-
-**SHARE PURCHASE:** ${pkg.name.toUpperCase()}
-
-**Payment Amount:** ${formatCurrency(packageCost)}
-**Network:** TRON (TRX)
-**Token:** USDT
-
-**COMPANY WALLET ADDRESS:**
-\`TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE\`
-
-**PAYMENT INSTRUCTIONS:**
-1. Send exactly ${formatCurrency(packageCost)} USDT to the wallet above
-2. Take a screenshot of your transaction
-3. Copy the transaction hash
-4. Return here to complete verification
-
-**⚠️ IMPORTANT:**
-• Send only USDT on TRON network
-• Double-check the wallet address
-• Keep your transaction hash safe`;
-
-  await ctx.replyWithMarkdown(paymentMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📋 Copy Wallet Address", callback_data: `copy_tron_${packageId}` }],
-        [{ text: "✅ I've Sent Payment", callback_data: `verify_tron_${packageId}` }],
-        [{ text: "🔙 Back to Payment Options", callback_data: `purchase_${packageId}` }]
-      ]
-    }
-  });
-}
+// Package payment handlers removed - using custom amounts only
 
 async function handlePaymentVerificationInput(ctx, text) {
   const user = ctx.from;
@@ -6857,14 +6166,31 @@ async function handlePaymentVerificationInput(ctx, text) {
   console.log(`📋 Session data - Network: ${network}, Package: ${packageId}, Step: ${step}`);
 
   if (step === 'wallet_address') {
+    // Validate wallet address format (basic check)
+    const trimmedAddress = text.trim();
+    if (trimmedAddress.length < 10) {
+      await ctx.replyWithMarkdown(`❌ **Invalid wallet address format**
+
+Please provide a valid wallet address:
+• BSC/Polygon: Should start with 0x (42 characters)
+• TRON: Should start with T (34 characters)
+
+**Example formats:**
+• BSC/POL: 0x1234567890abcdef1234567890abcdef12345678
+• TRON: T1234567890abcdef1234567890abcdef123456
+
+**Please enter your wallet address again:**`);
+      return;
+    }
+
     // Store sender wallet address and move to step 2 (no validation - admin will verify)
-    console.log(`💳 Storing wallet address: ${text}`);
+    console.log(`💳 Storing wallet address: ${trimmedAddress}`);
     console.log(`📋 Current session data:`, session.session_data);
 
     const updatedSessionData = {
       ...session.session_data, // Keep existing data
       step: 'screenshot',
-      sender_wallet_address: text // Store sender's wallet address
+      sender_wallet_address: trimmedAddress // Store sender's wallet address
     };
 
     console.log(`📋 Updated session data:`, updatedSessionData);
@@ -6911,6 +6237,23 @@ async function handlePaymentScreenshot(ctx) {
 
   if (!session || !session.session_data) {
     await ctx.reply('❌ Please start the payment verification process first.');
+    return;
+  }
+
+  // Check if sender wallet address is missing - this is the key issue
+  if (!session.session_data.sender_wallet_address) {
+    await ctx.replyWithMarkdown(`🚨 **WALLET ADDRESS REQUIRED FIRST!** 🚨
+
+❌ **You cannot upload screenshots yet!**
+
+**📍 STEP 1: Enter your wallet address as TEXT first**
+
+Please type your sender wallet address (the address you're sending payment FROM) before uploading any screenshots.
+
+🔄 **Current Step:** Wallet Address Collection
+📷 **Next Step:** Screenshot Upload (after wallet address)
+
+**Type your wallet address now:**`);
     return;
   }
 
@@ -7134,6 +6477,8 @@ async function completePaymentVerification(ctx, transactionHash) {
     phase_id
   });
 
+  console.log(`🔍 DEBUGGING: custom_purchase = ${custom_purchase}, packageId = ${packageId}`);
+
   if (!sender_wallet_address) {
     console.warn(`⚠️ WARNING: Missing sender wallet address for user ${telegramUser.id}`);
   }
@@ -7142,21 +6487,16 @@ async function completePaymentVerification(ctx, transactionHash) {
   let packageCost = 0;
   let sharesAmount = 0;
 
-  if (custom_purchase) {
-    // Custom purchase - use session data
-    packageCost = amount;
-    sharesAmount = shares;
-    console.log(`💰 Custom purchase: $${packageCost} for ${sharesAmount} shares`);
-  } else {
-    // Package purchase - get package data
-    pkg = await db.getPackageById(packageId);
-    if (!pkg) {
-      await ctx.reply('❌ Package not found.');
-      return;
-    }
-    packageCost = await calculatePackagePrice(pkg);
-    sharesAmount = pkg.shares;
+  // All purchases are now custom purchases only
+  if (!amount || !shares) {
+    console.error('❌ Missing custom purchase data:', { amount, shares });
+    await ctx.reply('❌ Custom purchase data missing. Please start the payment process again.');
+    return;
   }
+
+  packageCost = amount;
+  sharesAmount = shares;
+  console.log(`💰 Custom purchase: $${packageCost} for ${sharesAmount} shares`);
 
   // Get the actual user_id from the users table via telegram_users
   const { data: telegramUserData, error: telegramUserError } = await db.client
@@ -7286,10 +6626,10 @@ Our support team can help verify your transaction.`;
       return;
     }
 
-    // Create share purchase record (handle both package and custom purchases)
+    // Create share purchase record (custom purchases only)
     const investmentData = {
       user_id: userId,
-      package_name: custom_purchase ? 'Custom Amount Purchase' : pkg.name,
+      package_name: 'Custom Amount Purchase',
       total_amount: packageCost,
       shares_purchased: sharesAmount,
       status: 'pending',
@@ -7322,7 +6662,7 @@ Our support team can help verify your transaction.`;
     // Clear user state
     await clearUserState(telegramUser.id);
 
-    const purchaseName = custom_purchase ? 'CUSTOM AMOUNT PURCHASE' : pkg.name.toUpperCase();
+    const purchaseName = 'CUSTOM AMOUNT PURCHASE';
 
     const completionMessage = `**🎉 PAYMENT VERIFICATION COMPLETE**
 
@@ -7399,51 +6739,7 @@ async function handleCopyWallet(ctx, callbackData) {
 The wallet address has been copied. You can now paste it in your crypto wallet app to send the payment.`);
 }
 
-async function handlePaymentVerification(ctx, callbackData) {
-  console.log(`🔍 Payment verification callback: ${callbackData}`);
-  const parts = callbackData.split('_');
-  const network = parts[1];
-  const packageId = parts[2];
-  console.log(`📋 Parsed - Network: ${network}, Package: ${packageId}`);
-
-  const pkg = await db.getPackageById(packageId);
-  if (!pkg) {
-    await ctx.reply('❌ Package not found.');
-    return;
-  }
-
-  const user = ctx.from;
-  await setUserState(user.id, 'payment_verification', {
-    network: network,
-    packageId: packageId,
-    step: 'wallet_address'
-  });
-
-  const verificationMessage = `**✅ PAYMENT VERIFICATION**
-
-**SHARE PURCHASE:** ${pkg.name.toUpperCase()}
-**Network:** ${network.toUpperCase()} USDT
-
-**3-STEP VERIFICATION PROCESS:**
-
-**Step 1 of 3: Sender Wallet Address**
-
-Please provide the wallet address you sent the payment FROM:
-
-💡 **Example formats:**
-• BSC/POL: 0x1234...abcd
-• TRON: T1234...abcd
-
-Type your sender wallet address:`;
-
-  await ctx.replyWithMarkdown(verificationMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🔙 Back to Payment", callback_data: `pay_${network}_${packageId}` }]
-      ]
-    }
-  });
-}
+// Package payment verification function removed - using custom amounts only
 
 // Graceful shutdown
 process.once("SIGINT", () => {

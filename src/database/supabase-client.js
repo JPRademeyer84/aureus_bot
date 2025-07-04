@@ -378,6 +378,8 @@ class SupabaseDB {
 
   async acceptTermsTelegram(telegramId, termsType, version = '1.0') {
     try {
+      console.log(`🔍 Attempting to insert terms: telegramId=${telegramId}, termsType=${termsType}, version=${version}`);
+
       const { data, error } = await this.client
         .from('terms_acceptance')
         .insert([{
@@ -389,13 +391,15 @@ class SupabaseDB {
         .single();
 
       if (error) {
-        console.error('Error accepting telegram terms:', error);
+        console.error('❌ Error accepting telegram terms:', error);
+        console.error('❌ Error details:', JSON.stringify(error, null, 2));
         return false;
       }
 
+      console.log('✅ Terms accepted successfully:', data);
       return true;
     } catch (error) {
-      console.error('Error accepting telegram terms:', error);
+      console.error('❌ Exception accepting telegram terms:', error);
       return false;
     }
   }

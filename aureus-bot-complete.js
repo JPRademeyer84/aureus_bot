@@ -2602,19 +2602,41 @@ async function handleCustomAmountPurchase(ctx) {
 
   const userId = telegramUser.user_id;
 
-  // Check for existing pending payments
+  // Check for existing pending payments - DEBUG VERSION
+  console.log(`🔍 DEBUGGING: Checking pending payments for user_id: ${userId}`);
+
+  // First, let's see ALL payments for this user
+  const { data: allPayments, error: allPaymentsError } = await db.client
+    .from('crypto_payment_transactions')
+    .select('id, amount, network, created_at, status, user_id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  console.log(`🔍 ALL PAYMENTS for user ${userId}:`, { allPayments, allPaymentsError });
+
+  // Now check specifically for pending
   const { data: pendingPayments, error: pendingError } = await db.client
     .from('crypto_payment_transactions')
-    .select('id, amount, network, created_at, status')
+    .select('id, amount, network, created_at, status, user_id')
     .eq('user_id', userId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
 
-  console.log(`🔍 PENDING PAYMENT CHECK in handleCustomAmountPurchase for user ${userId}:`, {
+  console.log(`🔍 PENDING PAYMENTS for user ${userId}:`, {
     pendingPayments,
     pendingError,
     paymentCount: pendingPayments?.length || 0
   });
+
+  // Also check for other possible status values
+  const { data: otherStatusPayments, error: otherError } = await db.client
+    .from('crypto_payment_transactions')
+    .select('id, amount, network, created_at, status, user_id')
+    .eq('user_id', userId)
+    .in('status', ['Pending', 'PENDING', 'awaiting_approval', 'submitted'])
+    .order('created_at', { ascending: false });
+
+  console.log(`🔍 OTHER STATUS PAYMENTS for user ${userId}:`, { otherStatusPayments, otherError });
 
   if (pendingError) {
     console.error('Error checking pending payments:', pendingError);
@@ -2902,15 +2924,31 @@ async function handleCustomPayment(ctx, callbackData) {
 
   const userId = telegramUser.user_id;
 
-  // Check for existing pending payments
+  // Check for existing pending payments - DEBUG VERSION
+  console.log(`🔍 DEBUGGING handleCustomPayment: Checking pending payments for user_id: ${userId}`);
+
+  // First, let's see ALL payments for this user
+  const { data: allPayments, error: allPaymentsError } = await db.client
+    .from('crypto_payment_transactions')
+    .select('id, amount, network, created_at, status, user_id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  console.log(`🔍 handleCustomPayment - ALL PAYMENTS for user ${userId}:`, { allPayments, allPaymentsError });
+
+  // Now check specifically for pending
   const { data: pendingPayments, error: pendingError } = await db.client
     .from('crypto_payment_transactions')
-    .select('id, amount, network, created_at, status')
+    .select('id, amount, network, created_at, status, user_id')
     .eq('user_id', userId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
 
-  console.log(`🔍 PENDING PAYMENT CHECK for user ${userId}:`, { pendingPayments, pendingError });
+  console.log(`🔍 handleCustomPayment - PENDING PAYMENTS for user ${userId}:`, {
+    pendingPayments,
+    pendingError,
+    paymentCount: pendingPayments?.length || 0
+  });
 
   if (pendingError) {
     console.error('Error checking pending payments in handleCustomPayment:', pendingError);

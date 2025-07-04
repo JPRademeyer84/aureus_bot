@@ -1758,8 +1758,9 @@ async function handleAutoSponsorAssignment(ctx) {
     sessionData = session.session_data;
   } else {
     // Quick registration - create minimal session data
+    const emailPrefix = user.username || `user${user.id}`;
     sessionData = {
-      email: `${user.username || user.id}@telegram.aureus`,
+      email: `${emailPrefix}@telegram.aureus`,
       password: `telegram_${user.id}_${Date.now()}`, // Auto-generated password
       quick_registration: true
     };
@@ -2032,10 +2033,24 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
     console.log('Debug - Registration completion session data:', sessionData);
     console.log('Debug - Password exists:', !!sessionData.password);
 
+    // Check if user already exists
+    const existingTelegramUser = await db.getTelegramUser(user.id);
+    if (existingTelegramUser && existingTelegramUser.user_id) {
+      console.log('User already registered, redirecting to main menu');
+      await showMainMenu(ctx);
+      return;
+    }
+
     // Hash password
     const passwordHash = await bcrypt.hash(sessionData.password, 10);
 
-    // Create user in main users table
+    // Create user in main users table with better error handling
+    console.log('Creating user with data:', {
+      username: user.username || `user_${user.id}`,
+      email: sessionData.email,
+      full_name: `${user.first_name} ${user.last_name || ''}`.trim()
+    });
+
     const newUser = await db.createUser({
       username: user.username || `user_${user.id}`,
       email: sessionData.email,
@@ -2046,9 +2061,12 @@ async function completeUserRegistration(ctx, sessionData, sponsorInfo = null) {
     });
 
     if (!newUser) {
-      await ctx.replyWithMarkdown('❌ **Registration failed**\n\nPlease try again.');
+      console.error('❌ createUser returned null/undefined');
+      await ctx.replyWithMarkdown('❌ **Registration failed**\n\nDatabase error occurred. Please try again.');
       return;
     }
+
+    console.log('✅ User created successfully:', newUser.id);
 
     // Link Telegram account to user
     let telegramUser = await db.getTelegramUser(user.id);
@@ -2145,7 +2163,21 @@ Welcome to **Aureus Alliance Holdings**, ${user.first_name}!
 
   } catch (error) {
     console.error('Registration completion error:', error);
-    await ctx.replyWithMarkdown('❌ **Registration failed**\n\nPlease try again or contact support.');
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+
+    // Provide more specific error message
+    let errorMessage = '❌ **Registration failed**\n\n';
+
+    if (error.message && error.message.includes('duplicate')) {
+      errorMessage += 'This account may already be registered. Please try logging in instead.';
+    } else if (error.message && error.message.includes('email')) {
+      errorMessage += 'Email validation error. Please contact support.';
+    } else {
+      errorMessage += 'Database error occurred. Please try again or contact support.';
+    }
+
+    await ctx.replyWithMarkdown(errorMessage);
     await startAuthenticationFlow(ctx);
   }
 }
@@ -6264,7 +6296,7 @@ async function handleTermsAcceptance(ctx, callbackData) {
         await clearUserState(ctx.from.id);
 
         if (isInitialTermsFlow) {
-          // Initial terms flow completed - redirect to authentication
+          // Initial terms flow completed - redirect directly to sponsor selection
           await ctx.replyWithMarkdown(`🎉 **ALL TERMS ACCEPTED!**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -6273,12 +6305,12 @@ async function handleTermsAcceptance(ctx, callbackData) {
 You have successfully accepted all required terms and conditions.
 
 **🚀 NEXT STEP:**
-You can now proceed to create your account or log in to start purchasing gold mining shares.
+Now let's set up your account with sponsor selection.
 
-**⏱️ REDIRECTING TO REGISTRATION...**`);
+**⏱️ REDIRECTING TO ACCOUNT SETUP...**`);
 
           setTimeout(() => {
-            showAuthenticationOptions(ctx);
+            handleQuickRegistration(ctx);
           }, 2000);
         } else {
           // General terms browsing completed

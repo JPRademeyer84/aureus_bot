@@ -31,20 +31,26 @@ function formatCurrency(amount) {
 function createMainMenuKeyboard(isAdmin = false) {
   const keyboard = [
     [
-      { text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }
+      { text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }
     ],
     [
       { text: "👥 Referral Program", callback_data: "menu_referrals" },
-      { text: "📱 My Portfolio", callback_data: "menu_portfolio" }
+      { text: "📊 My Portfolio", callback_data: "menu_portfolio" }
     ],
     [
       { text: "💳 Payment Status", callback_data: "menu_payments" },
+      { text: "📋 Company Presentation", callback_data: "menu_presentation" }
+    ],
+    [
       { text: "🆘 Support Center", callback_data: "menu_help" }
     ]
   ];
 
   // Add admin options if user is admin
   if (isAdmin) {
+    keyboard.push([
+      { text: "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈", callback_data: "separator" }
+    ]);
     keyboard.push([
       { text: "🔑 Admin Panel", callback_data: "admin_panel" },
       { text: "📊 System Status", callback_data: "admin_status" }
@@ -708,25 +714,47 @@ async function showMainMenu(ctx) {
   const currentPhase = await db.getCurrentPhase();
   const isAdmin = user.username === ADMIN_USERNAME;
 
+  // Send actual Aureus Alliance Holdings company logo
+  try {
+    const logoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/logo.png';
+    await ctx.replyWithPhoto(logoUrl, {
+      caption: `🏆 **AUREUS ALLIANCE HOLDINGS** 🏆\n*Premium Gold Mining Investments*`,
+      parse_mode: 'Markdown'
+    });
+  } catch (logoError) {
+    console.log('Company logo not available, proceeding with text menu:', logoError.message);
+  }
+
   const phaseInfo = currentPhase
     ? `📈 **CURRENT PHASE:** ${currentPhase.phase_name}\n💰 **Share Price:** ${formatCurrency(currentPhase.price_per_share)}\n📊 **Available:** ${(currentPhase.total_shares_available - currentPhase.shares_sold).toLocaleString()} shares`
     : '📈 **PHASE:** Loading...';
 
-  const menuMessage = `🏆 **AUREUS ALLIANCE HOLDINGS**
-*Premium Gold Mining Share Purchase Dashboard*
+  const menuMessage = `╔══════════════════════════════════════╗
+║     🏆 **AUREUS ALLIANCE HOLDINGS** 🏆     ║
+╚══════════════════════════════════════╝
 
-Welcome back, **${user.first_name}**! 👋
+**Welcome back, ${user.first_name}!** 👋
+
+┌─────────────────────────────────────┐
+│         📊 **CURRENT INVESTMENT**         │
+└─────────────────────────────────────┘
 
 ${phaseInfo}
 
-⛏️ **MINING OPERATIONS STATUS:**
-• 🏭 **Washplants:** 10 units (200 tons/hour each)
-• 🥇 **Annual Target:** 3,200 KG gold production
-• 📅 **Full Capacity:** June 2026
-• 📊 **Total Shares:** 1,400,000 available
+┌─────────────────────────────────────┐
+│       ⛏️ **MINING OPERATIONS**        │
+└─────────────────────────────────────┘
 
-💎 **SHARE PURCHASE OPPORTUNITIES:**
-Choose your preferred method to buy shares in Aureus Alliance Holdings below.`;
+🏭 **Washplants:** 10 units (200 tons/hour each)
+🥇 **Annual Target:** 3,200 KG gold production
+📅 **Full Capacity:** June 2026
+📊 **Total Shares:** 1,400,000 available
+
+┌─────────────────────────────────────┐
+│      💎 **INVESTMENT DASHBOARD**       │
+└─────────────────────────────────────┘
+
+Choose your action below to manage your gold mining investments:`;
 
   await ctx.replyWithMarkdown(menuMessage, {
     reply_markup: createMainMenuKeyboard(isAdmin)
@@ -869,27 +897,46 @@ async function checkUserTermsAndStart(ctx) {
 async function showWelcomeIntroduction(ctx) {
   const user = ctx.from;
 
-  const welcomeMessage = `🏆 **WELCOME TO AUREUS ALLIANCE HOLDINGS!**
+  // Send company logo for new users
+  try {
+    const logoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/logo.png';
+    await ctx.replyWithPhoto(logoUrl, {
+      caption: `🏆 **WELCOME TO AUREUS ALLIANCE HOLDINGS** 🏆\n*Premium Gold Mining Investment Company*`,
+      parse_mode: 'Markdown'
+    });
+  } catch (logoError) {
+    console.log('Company logo not available for welcome:', logoError.message);
+  }
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const welcomeMessage = `╔══════════════════════════════════════╗
+║        🌟 **WELCOME** ${user.first_name}! 🌟        ║
+╚══════════════════════════════════════╝
 
-Hello **${user.first_name}**! 👋
+**Thank you for joining Aureus Alliance Holdings!** 👋
 
-**🌟 ABOUT AUREUS ALLIANCE HOLDINGS:**
+┌─────────────────────────────────────┐
+│      🏆 **ABOUT OUR COMPANY**        │
+└─────────────────────────────────────┘
 
 We are a **premium gold mining investment company** offering exclusive opportunities to own shares in real gold mining operations.
 
-**💎 WHAT WE OFFER:**
-• **Real Gold Mining Shares** - Own actual mining equipment
-• **Quarterly Dividends** - Earn from gold production
-• **NFT Share Certificates** - Digital proof of ownership
-• **Professional Management** - Expert mining operations
-• **Transparent Operations** - Real-time mining updates
+┌─────────────────────────────────────┐
+│        💎 **WHAT WE OFFER**          │
+└─────────────────────────────────────┘
 
-**🎯 INVESTMENT OPPORTUNITIES:**
-• **Flexible Amounts** - Invest $25 to $50,000
-• **Phase-Based Pricing** - Early investor advantages
-• **Referral Program** - Earn 15% commissions
+🥇 **Real Gold Mining Shares** - Own actual mining equipment
+💰 **Quarterly Dividends** - Earn from gold production
+🎫 **NFT Share Certificates** - Digital proof of ownership
+👨‍💼 **Professional Management** - Expert mining operations
+📊 **Transparent Operations** - Real-time mining updates
+
+┌─────────────────────────────────────┐
+│    🎯 **INVESTMENT OPPORTUNITIES**    │
+└─────────────────────────────────────┘
+
+💵 **Flexible Amounts** - Invest $25 to $50,000
+📈 **Phase-Based Pricing** - Early investor advantages
+🤝 **Referral Program** - Earn 15% commissions
 • **Secure Payments** - Multiple crypto networks
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1406,6 +1453,10 @@ bot.on('callback_query', async (ctx) => {
 
       case 'menu_terms':
         await handleTermsMenu(ctx);
+        break;
+
+      case 'menu_presentation':
+        await handleCompanyPresentation(ctx);
         break;
 
       case 'menu_help':
@@ -3332,6 +3383,97 @@ A confirmation message will be sent to this app once approved.`;
 }
 
 // Package selection function removed - using custom amounts only
+
+// Company presentation handler
+async function handleCompanyPresentation(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Send company logo first
+    const logoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/logo.png';
+    await ctx.replyWithPhoto(logoUrl, {
+      caption: `🏆 **AUREUS ALLIANCE HOLDINGS** 🏆\n*Company Presentation & Investment Overview*`,
+      parse_mode: 'Markdown'
+    });
+  } catch (logoError) {
+    console.log('Company logo not available for presentation:', logoError.message);
+  }
+
+  // Send the company presentation document
+  try {
+    const presentationUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/presentation.pdf';
+
+    await ctx.replyWithDocument(presentationUrl, {
+      caption: `📋 **COMPANY PRESENTATION**
+
+╔══════════════════════════════════════╗
+║    📊 **INVESTMENT OPPORTUNITY** 📊    ║
+╚══════════════════════════════════════╝
+
+**Complete overview of Aureus Alliance Holdings:**
+
+🏆 **What's Included:**
+• Company overview and mission
+• Gold mining operations details
+• Investment opportunities and packages
+• Financial projections and returns
+• Risk assessment and management
+• Contact information and next steps
+
+📈 **Perfect for:**
+• New investors exploring opportunities
+• Existing shareholders seeking details
+• Financial advisors and consultants
+• Anyone interested in gold mining investments
+
+💡 **Tip:** Download and review the presentation to make informed investment decisions.`,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛒 Purchase Shares Now", callback_data: "menu_purchase_shares" }],
+          [{ text: "📊 View My Portfolio", callback_data: "menu_portfolio" }],
+          [{ text: "💬 Contact Support", callback_data: "menu_help" }],
+          [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+    console.log(`📋 Company presentation sent to user ${user.id} (${user.first_name})`);
+
+  } catch (presentationError) {
+    console.error('Error sending company presentation:', presentationError);
+
+    // Fallback message with download link
+    await ctx.replyWithMarkdown(`📋 **COMPANY PRESENTATION**
+
+╔══════════════════════════════════════╗
+║    📊 **INVESTMENT OPPORTUNITY** 📊    ║
+╚══════════════════════════════════════╝
+
+**Download our complete company presentation:**
+
+🔗 **Direct Download Link:**
+[Click here to download presentation](https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/presentation.pdf)
+
+**What's Included:**
+🏆 Company overview and mission
+⛏️ Gold mining operations details
+💰 Investment opportunities and packages
+📈 Financial projections and returns
+🛡️ Risk assessment and management
+📞 Contact information and next steps
+
+💡 **Tip:** Right-click the link and select "Save As" to download the PDF to your device.`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛒 Purchase Shares Now", callback_data: "menu_purchase_shares" }],
+          [{ text: "📊 View My Portfolio", callback_data: "menu_portfolio" }],
+          [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+  }
+}
 
 // Enhanced support and admin handlers
 async function handleSupportCenter(ctx) {
@@ -5350,6 +5492,17 @@ async function handlePortfolio(ctx) {
   const user = ctx.from;
 
   try {
+    // Send gold price chart first
+    try {
+      const chartUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/chart.png';
+      await ctx.replyWithPhoto(chartUrl, {
+        caption: `📈 **GOLD PRICE PERFORMANCE** 📈\n*Real-time market data for your investment reference*`,
+        parse_mode: 'Markdown'
+      });
+    } catch (chartError) {
+      console.log('Gold price chart not available:', chartError.message);
+    }
+
     // Get user ID from telegram_users table
     const { data: telegramUser, error: telegramError } = await db.client
       .from('telegram_users')
@@ -5415,12 +5568,7 @@ async function handlePortfolio(ctx) {
 • **Total Investments:** ${investments?.length || 0}`;
 
     if (investments && investments.length > 0) {
-      portfolioMessage += `
-
-┌─────────────────────────────────────┐
-│     📋 **INVESTMENT HISTORY**        │
-└─────────────────────────────────────┘
-`;
+      portfolioMessage += '\n\n**SHARE PURCHASE HISTORY:**\n';
       investments.slice(0, 5).forEach((inv, index) => {
         const packageName = inv.package_name || 'Share Purchase';
         const statusIcon = inv.status === 'active' ? '✅' :
@@ -5430,28 +5578,18 @@ async function handlePortfolio(ctx) {
                           inv.status === 'pending_approval' ? 'Pending Approval' :
                           inv.status === 'pending' ? 'Pending' : inv.status;
 
-        portfolioMessage += `
-${index + 1}. ${statusIcon} **${packageName}**
-   💰 **Amount:** $${parseFloat(inv.total_amount || 0).toFixed(2)}
-   📊 **Shares:** ${parseInt(inv.shares_purchased || 0).toLocaleString()}
-   📅 **Date:** ${new Date(inv.created_at).toLocaleDateString()}
-   🔄 **Status:** ${statusText}`;
+        portfolioMessage += `\n${index + 1}. ${statusIcon} **${packageName}**
+   💰 Amount: $${parseFloat(inv.total_amount || 0).toFixed(2)}
+   📊 Shares: ${parseInt(inv.shares_purchased || 0).toLocaleString()}
+   📅 Date: ${new Date(inv.created_at).toLocaleDateString()}
+   🔄 Status: ${statusText}`;
       });
 
       if (investments.length > 5) {
-        portfolioMessage += `
-
-📋 **...and ${investments.length - 5} more investments**`;
+        portfolioMessage += `\n\n... and ${investments.length - 5} more share purchases`;
       }
     } else {
-      portfolioMessage += `
-
-┌─────────────────────────────────────┐
-│     📋 **INVESTMENT HISTORY**        │
-└─────────────────────────────────────┘
-
-🎯 **No investments yet!**
-Start your gold mining journey with custom share purchases.`;
+      portfolioMessage += '\n\n**SHARE PURCHASE HISTORY:**\nNo share purchases yet. Start with custom share purchases!';
     }
 
     portfolioMessage += `

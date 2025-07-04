@@ -142,8 +142,8 @@ function createTermsKeyboard() {
 
 // Authentication functions
 async function isUserAuthenticated(telegramId) {
-  const telegramUser = await db.getTelegramUser(telegramId);
-  return telegramUser && telegramUser.is_registered && telegramUser.user_id;
+  const authStatus = await getUserAuthStatus(telegramId);
+  return authStatus === 'authenticated';
 }
 
 // Investment phase management functions
@@ -303,17 +303,23 @@ async function getUserAuthStatus(telegramId) {
     return 'new_user'; // Never used the system
   }
 
-  // If user is registered and has a linked user_id, they are permanently authenticated
-  // No need to re-authenticate as long as they're using the same Telegram account
-  if (telegramUser.is_registered && telegramUser.user_id) {
-    return 'authenticated'; // Permanently authenticated via Telegram username
+  // Check if user has accepted all required terms - that's all we need for authentication
+  const requiredTerms = ['general', 'privacy', 'investment_risks', 'mining_operations', 'nft_terms', 'dividend_policy'];
+  let allTermsAccepted = true;
+
+  for (const termType of requiredTerms) {
+    const hasAccepted = await db.hasAcceptedTermsTelegram(telegramId, termType);
+    if (!hasAccepted) {
+      allTermsAccepted = false;
+      break;
+    }
   }
 
-  if (telegramUser.is_registered === false) {
-    return 'registration_incomplete'; // Started but not completed
+  if (allTermsAccepted) {
+    return 'authenticated'; // Authenticated via terms acceptance
   }
 
-  return 'needs_login'; // Exists but needs to login
+  return 'needs_terms'; // Needs to accept terms
 }
 
 // Ensure proper authentication state after login/registration
@@ -925,15 +931,9 @@ async function checkUserTermsAndStart(ctx) {
       console.log(`🔒 User needs to accept ${unacceptedTerms.length} terms`);
       await showWelcomeIntroduction(ctx);
     } else {
-      // All terms accepted - check if user is registered
-      if (telegramUser.user_id) {
-        // User is registered but not authenticated - show main menu
-        await showMainMenu(ctx);
-      } else {
-        // Terms accepted but not registered - go to sponsor selection
-        console.log('✅ Terms accepted, starting registration flow');
-        await handleQuickRegistration(ctx);
-      }
+      // All terms accepted - user is now authenticated!
+      console.log('✅ All terms accepted, user is authenticated');
+      await showMainMenu(ctx);
     }
 
   } catch (error) {
@@ -6473,7 +6473,7 @@ async function handleTermsAcceptance(ctx, callbackData) {
         await clearUserState(ctx.from.id);
 
         if (isInitialTermsFlow) {
-          // Initial terms flow completed - redirect directly to sponsor selection
+          // Initial terms flow completed - user is now authenticated!
           await ctx.replyWithMarkdown(`🎉 **ALL TERMS ACCEPTED!**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -6481,13 +6481,13 @@ async function handleTermsAcceptance(ctx, callbackData) {
 **✅ CONGRATULATIONS!**
 You have successfully accepted all required terms and conditions.
 
-**🚀 NEXT STEP:**
-Now let's set up your account with sponsor selection.
+**🚀 YOU'RE NOW AUTHENTICATED!**
+Welcome to Aureus Alliance Holdings dashboard.
 
-**⏱️ REDIRECTING TO ACCOUNT SETUP...**`);
+**⏱️ REDIRECTING TO MAIN DASHBOARD...**`);
 
           setTimeout(() => {
-            handleQuickRegistration(ctx);
+            showMainMenu(ctx);
           }, 2000);
         } else {
           // General terms browsing completed

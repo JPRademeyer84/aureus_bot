@@ -303,6 +303,11 @@ async function getUserAuthStatus(telegramId) {
     return 'new_user'; // Never used the system
   }
 
+  // Special handling for admin users - check if they have admin privileges
+  if (telegramUser.telegram_username === 'TTTFOUNDER' || telegramUser.user_id === 4) {
+    return 'authenticated'; // Admin users are always authenticated
+  }
+
   // Check if user has accepted all required terms - that's all we need for authentication
   const requiredTerms = ['general', 'privacy', 'investment_risks', 'mining_operations', 'nft_terms', 'dividend_policy'];
   let allTermsAccepted = true;
@@ -3047,8 +3052,15 @@ async function handleCustomPayment(ctx, callbackData) {
     requested_amount: requested_amount
   });
 
-  // Ask for sender's wallet address
-  await ctx.replyWithMarkdown(`**📍 STEP 1 OF 3: SENDER WALLET ADDRESS**
+  // Small delay to ensure state is set before asking for wallet address
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Ask for sender's wallet address with clear instructions
+  await ctx.replyWithMarkdown(`🚨 **WAIT! IMPORTANT STEP REQUIRED** 🚨
+
+**📍 STEP 1 OF 3: SENDER WALLET ADDRESS**
+
+⚠️ **BEFORE uploading any screenshots, you MUST provide your wallet address first!**
 
 Please enter your **wallet address** that you will send the payment from:
 
@@ -3057,7 +3069,9 @@ Please enter your **wallet address** that you will send the payment from:
 • Used for payment verification and tracking
 • Must match the sender address in your transaction
 
-💡 **Tip:** Copy the address from your wallet app to ensure accuracy.`);
+💡 **Tip:** Copy the address from your wallet app to ensure accuracy.
+
+🚫 **DO NOT upload screenshots yet - enter wallet address first!**`);
 }
 
 async function handleBackToCustomPayment(ctx) {

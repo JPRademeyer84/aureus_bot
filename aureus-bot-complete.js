@@ -6840,14 +6840,7 @@ async function handlePaymentVerificationInput(ctx, text) {
   console.log(`📋 Session data - Network: ${network}, Package: ${packageId}, Step: ${step}`);
 
   if (step === 'wallet_address') {
-    // Validate wallet address format
-    const isValidWallet = validateWalletAddress(text, network);
-    if (!isValidWallet) {
-      await ctx.replyWithMarkdown('❌ **Invalid wallet address format**\n\nPlease enter a valid wallet address for the selected network.');
-      return;
-    }
-
-    // Store sender wallet address and move to step 2
+    // Store sender wallet address and move to step 2 (no validation - admin will verify)
     await setUserState(user.id, 'payment_verification', {
       ...session.session_data, // Keep existing data
       step: 'screenshot',
@@ -6880,12 +6873,7 @@ Now please upload a **screenshot** of your payment transaction:
     });
 
   } else if (step === 'transaction_hash') {
-    // Validate transaction hash format
-    const isValidHash = validateTransactionHash(text, network);
-    if (!isValidHash) {
-      await ctx.replyWithMarkdown('❌ **Invalid transaction hash format**\n\nPlease enter a valid transaction hash.');
-      return;
-    }
+    // Store transaction hash (no validation - admin will verify)
 
     // Complete payment verification
     await completePaymentVerification(ctx, text);
@@ -7087,29 +7075,7 @@ Now please provide your **transaction hash**:
   }
 }
 
-function validateWalletAddress(address, network) {
-  switch(network) {
-    case 'bsc':
-    case 'pol':
-      return /^0x[a-fA-F0-9]{40}$/.test(address);
-    case 'tron':
-      return /^T[A-Za-z1-9]{33}$/.test(address);
-    default:
-      return false;
-  }
-}
-
-function validateTransactionHash(hash, network) {
-  switch(network) {
-    case 'bsc':
-    case 'pol':
-      return /^0x[a-fA-F0-9]{64}$/.test(hash);
-    case 'tron':
-      return /^[a-fA-F0-9]{64}$/.test(hash);
-    default:
-      return false;
-  }
-}
+// Validation functions removed - admin will verify transactions manually
 
 async function completePaymentVerification(ctx, transactionHash) {
   const telegramUser = ctx.from;

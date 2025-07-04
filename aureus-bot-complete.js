@@ -1098,6 +1098,9 @@ bot.on('photo', async (ctx) => {
     if (userState === 'payment_verification') {
       console.log(`✅ Processing payment screenshot for user ${user.id}`);
       await handlePaymentScreenshot(ctx);
+    } else if (userState === 'upload_screenshot_pending') {
+      console.log(`✅ Processing pending payment screenshot for user ${user.id}`);
+      await handlePendingPaymentScreenshot(ctx);
     } else {
       console.log(`❌ User ${user.id} not in payment_verification state, current state: ${userState}`);
 
@@ -1135,6 +1138,9 @@ bot.on('document', async (ctx) => {
       if (userState === 'payment_verification') {
         console.log(`✅ Processing payment screenshot document for user ${user.id}`);
         await handlePaymentScreenshotDocument(ctx);
+      } else if (userState === 'upload_screenshot_pending') {
+        console.log(`✅ Processing pending payment screenshot document for user ${user.id}`);
+        await handlePendingPaymentScreenshotDocument(ctx);
       } else {
         console.log(`❌ User ${user.id} not in payment_verification state, current state: ${userState}`);
 
@@ -1506,6 +1512,12 @@ bot.on('callback_query', async (ctx) => {
           await handleCancelPayment(ctx, callbackData);
         } else if (callbackData.startsWith('confirm_cancel_')) {
           await handleConfirmCancel(ctx, callbackData);
+        } else if (callbackData.startsWith('continue_payment_')) {
+          await handleContinuePayment(ctx, callbackData);
+        } else if (callbackData.startsWith('upload_screenshot_')) {
+          await handleUploadScreenshot(ctx, callbackData);
+        } else if (callbackData.startsWith('copy_wallet_')) {
+          await handleCopyWallet(ctx, callbackData);
         // Quick amount handlers removed
         } else if (callbackData.startsWith('custom_pay_')) {
           await handleCustomPayment(ctx, callbackData);
@@ -2712,37 +2724,53 @@ async function startCustomAmountPurchaseFlow(ctx, requestedAmount, sharesAmount,
   if (pendingError) {
     console.error('Error checking pending payments:', pendingError);
   } else if (pendingPayments && pendingPayments.length > 0) {
-    // User has pending payments - show management options
+    // User has pending payments - show enhanced management options
     const pendingPayment = pendingPayments[0];
-    const paymentDate = new Date(pendingPayment.created_at).toLocaleDateString();
+    const paymentDate = new Date(pendingPayment.created_at);
+    const now = new Date();
+    const daysDiff = Math.floor((now - paymentDate) / (1000 * 60 * 60 * 24));
+    const hoursAgo = Math.floor((now - paymentDate) / (1000 * 60 * 60));
+
+    const timeAgo = daysDiff > 0 ? `${daysDiff} day${daysDiff > 1 ? 's' : ''} ago` :
+                    hoursAgo > 0 ? `${hoursAgo} hour${hoursAgo > 1 ? 's' : ''} ago` :
+                    'Less than 1 hour ago';
+
+    const isOld = daysDiff >= 1; // Consider payment old if 1+ days
+    const statusIcon = isOld ? '🔴' : '🟡';
+    const ageWarning = isOld ? '\n\n🔴 **OLD PAYMENT:** This payment is over 24 hours old.' : '';
 
     const pendingMessage = `⚠️ **PENDING PAYMENT DETECTED**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🚨 **You have an existing pending payment:**
+${statusIcon} **You have an existing pending payment:**
 
 💰 **Amount:** $${pendingPayment.amount}
-🌐 **Network:** ${pendingPayment.network}
-📅 **Submitted:** ${paymentDate}
-⏳ **Status:** Pending Admin Approval
+🌐 **Network:** ${pendingPayment.network.toUpperCase()}
+📅 **Submitted:** ${paymentDate.toLocaleDateString()} (${timeAgo})
+⏳ **Status:** Pending Admin Approval${ageWarning}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**⚠️ IMPORTANT:**
-You cannot make new purchases while you have pending payments.
+**🔧 WHAT WOULD YOU LIKE TO DO?**
 
-**🔧 CHOOSE AN OPTION:**`;
+You must handle this pending payment before making a new purchase.`;
+
+    const keyboard = [
+      [{ text: "💳 Continue with Pending Payment", callback_data: `continue_payment_${pendingPayment.id}` }],
+      [{ text: "🗑️ Delete Pending Payment", callback_data: `cancel_payment_${pendingPayment.id}` }]
+    ];
+
+    // Add additional options based on payment age
+    if (isOld) {
+      keyboard.push([{ text: "📞 Contact Support (Old Payment)", callback_data: "menu_help" }]);
+    }
+
+    keyboard.push([{ text: "📊 View Payment Details", callback_data: "view_portfolio" }]);
+    keyboard.push([{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]);
 
     await ctx.replyWithMarkdown(pendingMessage, {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "⏳ Wait for Current Payment", callback_data: "wait_pending" }],
-          [{ text: "❌ Cancel Pending Payment", callback_data: `cancel_payment_${pendingPayment.id}` }],
-          [{ text: "📊 View Payment Status", callback_data: "view_portfolio" }],
-          [{ text: "🔙 Back to Purchase", callback_data: "menu_purchase_shares" }]
-        ]
-      }
+      reply_markup: { inline_keyboard: keyboard }
     });
     return;
   }
@@ -6689,30 +6717,396 @@ async function handleWaitPending(ctx) {
   });
 }
 
-async function handleCancelPayment(ctx, callbackData) {
+async function handleContinuePayment(ctx, callbackData) {
   const paymentId = callbackData.split('_')[2];
 
-  const confirmMessage = `⚠️ **CANCEL PENDING PAYMENT**
+  try {
+    // Get the pending payment details
+    const { data: payment, error } = await db.client
+      .from('crypto_payment_transactions')
+      .select('*')
+      .eq('id', paymentId)
+      .eq('status', 'pending')
+      .single();
+
+    if (error || !payment) {
+      await ctx.replyWithMarkdown('❌ **Payment not found or no longer pending.**\n\nIt may have been processed or cancelled.');
+      return;
+    }
+
+    // Get the wallet address for this network
+    const { data: walletData, error: walletError } = await db.client
+      .from('crypto_wallets')
+      .select('wallet_address')
+      .eq('network', payment.network.toLowerCase())
+      .eq('is_active', true)
+      .single();
+
+    if (walletError || !walletData) {
+      await ctx.replyWithMarkdown('❌ **Wallet configuration error.**\n\nPlease contact support.');
+      return;
+    }
+
+    const paymentDate = new Date(payment.created_at);
+    const timeAgo = Math.floor((new Date() - paymentDate) / (1000 * 60 * 60));
+    const displayTime = timeAgo < 24 ? `${timeAgo} hours ago` : `${Math.floor(timeAgo/24)} days ago`;
+
+    const continueMessage = `💳 **CONTINUE PENDING PAYMENT**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🚨 **ARE YOU SURE?**
+**📋 PAYMENT DETAILS:**
 
-This will permanently cancel your pending payment and allow you to make a new purchase.
+💰 **Amount:** $${payment.amount} USDT
+🌐 **Network:** ${payment.network.toUpperCase()}
+📅 **Created:** ${displayTime}
+⏳ **Status:** Waiting for your payment
 
-**⚠️ IMPORTANT WARNINGS:**
-• If you already sent payment, you'll need to contact support
+**🏦 SEND PAYMENT TO:**
+\`${walletData.wallet_address}\`
+
+**📱 NEXT STEPS:**
+1. Send exactly $${payment.amount} USDT to the address above
+2. Take a screenshot of your transaction
+3. Upload the screenshot using the button below
+4. Wait for admin approval
+
+**⚠️ IMPORTANT:**
+• Use ${payment.network.toUpperCase()} network only
+• Send exact amount: $${payment.amount} USDT
+• Keep your transaction screenshot ready`;
+
+    await ctx.replyWithMarkdown(continueMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📷 Upload Payment Screenshot", callback_data: `upload_screenshot_${paymentId}` }],
+          [{ text: "📋 Copy Wallet Address", callback_data: `copy_wallet_${payment.network}` }],
+          [{ text: "📊 Check Payment Status", callback_data: "view_portfolio" }],
+          [{ text: "🔙 Back to Purchase Options", callback_data: "menu_purchase_shares" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in handleContinuePayment:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading payment details.**\n\nPlease try again or contact support.');
+  }
+}
+
+async function handlePendingPaymentScreenshot(ctx) {
+  const user = ctx.from;
+  const session = await db.getUserSession(user.id);
+
+  if (!session || !session.session_data || !session.session_data.paymentId) {
+    await ctx.reply('❌ Session expired. Please start the screenshot upload process again.');
+    return;
+  }
+
+  const { paymentId } = session.session_data;
+
+  try {
+    // Get the largest photo size
+    const photos = ctx.message.photo;
+    const photo = photos[photos.length - 1];
+    const file = await ctx.telegram.getFile(photo.file_id);
+    const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+
+    console.log(`📷 Processing pending payment screenshot for payment ${paymentId}`);
+
+    // Download and upload to Supabase storage
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+    }
+
+    const buffer = await response.arrayBuffer();
+    const timestamp = Date.now();
+    const filename = `payment_${user.id}_${timestamp}.jpg`;
+
+    // Upload to Supabase storage bucket "proof"
+    const { data, error } = await db.client.storage
+      .from('proof')
+      .upload(filename, buffer, {
+        contentType: 'image/jpeg',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Storage upload error:', error);
+      await ctx.reply('❌ Failed to upload screenshot. Please try again.');
+      return;
+    }
+
+    // Update the payment record with screenshot
+    const { error: updateError } = await db.client
+      .from('crypto_payment_transactions')
+      .update({
+        screenshot_url: filename,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId);
+
+    if (updateError) {
+      console.error('Error updating payment with screenshot:', updateError);
+      await ctx.reply('❌ Failed to save screenshot. Please try again.');
+      return;
+    }
+
+    // Clear user state
+    await clearUserState(user.id);
+
+    const successMessage = `✅ **SCREENSHOT UPLOADED SUCCESSFULLY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📷 **Your payment screenshot has been uploaded and saved.**
+
+**📋 NEXT STEPS:**
+1. ✅ Screenshot uploaded
+2. ⏳ Waiting for admin review
+3. 🔔 You'll be notified when approved
+
+**⏱️ PROCESSING TIME:**
+• Typical approval: 2-24 hours
+• You'll receive a notification when processed
+
+**💡 TIP:** You can check your payment status anytime in your portfolio.`;
+
+    await ctx.replyWithMarkdown(successMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📊 View Portfolio", callback_data: "view_portfolio" }],
+          [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Pending payment screenshot processing error:', error);
+    await ctx.reply('❌ Failed to process screenshot. Please try again.');
+  }
+}
+
+async function handlePendingPaymentScreenshotDocument(ctx) {
+  const user = ctx.from;
+  const session = await db.getUserSession(user.id);
+
+  if (!session || !session.session_data || !session.session_data.paymentId) {
+    await ctx.reply('❌ Session expired. Please start the screenshot upload process again.');
+    return;
+  }
+
+  const { paymentId } = session.session_data;
+
+  try {
+    // Get the document file
+    const document = ctx.message.document;
+    const file = await ctx.telegram.getFile(document.file_id);
+    const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+
+    console.log(`📄 Processing pending payment screenshot document for payment ${paymentId}`);
+
+    // Download and upload to Supabase storage
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+    }
+
+    const buffer = await response.arrayBuffer();
+    const timestamp = Date.now();
+    const extension = document.file_name ? document.file_name.split('.').pop() : 'jpg';
+    const filename = `payment_${user.id}_${timestamp}.${extension}`;
+
+    // Upload to Supabase storage bucket "proof"
+    const { data, error } = await db.client.storage
+      .from('proof')
+      .upload(filename, buffer, {
+        contentType: document.mime_type || 'image/jpeg',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Storage upload error:', error);
+      await ctx.reply('❌ Failed to upload screenshot. Please try again.');
+      return;
+    }
+
+    // Update the payment record with screenshot
+    const { error: updateError } = await db.client
+      .from('crypto_payment_transactions')
+      .update({
+        screenshot_url: filename,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId);
+
+    if (updateError) {
+      console.error('Error updating payment with screenshot:', updateError);
+      await ctx.reply('❌ Failed to save screenshot. Please try again.');
+      return;
+    }
+
+    // Clear user state
+    await clearUserState(user.id);
+
+    const successMessage = `✅ **SCREENSHOT UPLOADED SUCCESSFULLY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 **Your payment screenshot document has been uploaded and saved.**
+
+**📋 NEXT STEPS:**
+1. ✅ Screenshot uploaded
+2. ⏳ Waiting for admin review
+3. 🔔 You'll be notified when approved
+
+**⏱️ PROCESSING TIME:**
+• Typical approval: 2-24 hours
+• You'll receive a notification when processed
+
+**💡 TIP:** You can check your payment status anytime in your portfolio.`;
+
+    await ctx.replyWithMarkdown(successMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📊 View Portfolio", callback_data: "view_portfolio" }],
+          [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Pending payment screenshot document processing error:', error);
+    await ctx.reply('❌ Failed to process screenshot. Please try again.');
+  }
+}
+
+async function handleUploadScreenshot(ctx, callbackData) {
+  const paymentId = callbackData.split('_')[2];
+
+  // Set user state to expect screenshot upload for this specific payment
+  await setUserState(ctx.from.id, 'upload_screenshot_pending', { paymentId });
+
+  const uploadMessage = `📷 **UPLOAD PAYMENT SCREENSHOT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 SCREENSHOT REQUIREMENTS:**
+
+✅ **Must Include:**
+• Transaction amount and recipient address
+• Transaction timestamp
+• Transaction hash/ID
+• Your wallet app interface
+
+❌ **Not Accepted:**
+• Blurry or unclear images
+• Screenshots without transaction details
+• Photos of computer screens
+
+**📱 HOW TO UPLOAD:**
+Simply send your screenshot as a photo or document in the next message.
+
+**⏳ WAITING FOR YOUR SCREENSHOT...**`;
+
+  await ctx.replyWithMarkdown(uploadMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "❌ Cancel Upload", callback_data: `continue_payment_${paymentId}` }],
+        [{ text: "📞 Need Help?", callback_data: "menu_help" }]
+      ]
+    }
+  });
+}
+
+async function handleCopyWallet(ctx, callbackData) {
+  const network = callbackData.split('_')[2];
+
+  // Get wallet address for the network
+  const { data: walletData, error } = await db.client
+    .from('crypto_wallets')
+    .select('wallet_address')
+    .eq('network', network.toLowerCase())
+    .eq('is_active', true)
+    .single();
+
+  if (error || !walletData) {
+    await ctx.replyWithMarkdown('❌ **Wallet address not found.**\n\nPlease contact support.');
+    return;
+  }
+
+  const copyMessage = `📋 **WALLET ADDRESS COPIED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🌐 Network:** ${network.toUpperCase()}
+
+**🏦 Wallet Address:**
+\`${walletData.wallet_address}\`
+
+**💡 TIP:** Tap the address above to copy it to your clipboard.
+
+**⚠️ IMPORTANT:**
+• Only send USDT on ${network.toUpperCase()} network
+• Double-check the address before sending
+• Send the exact amount shown in your payment details`;
+
+  await ctx.replyWithMarkdown(copyMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔙 Back to Payment", callback_data: "menu_purchase_shares" }],
+        [{ text: "📞 Need Help?", callback_data: "menu_help" }]
+      ]
+    }
+  });
+}
+
+async function handleCancelPayment(ctx, callbackData) {
+  const paymentId = callbackData.split('_')[2];
+
+  // Get payment details for confirmation
+  const { data: payment, error } = await db.client
+    .from('crypto_payment_transactions')
+    .select('amount, network, created_at')
+    .eq('id', paymentId)
+    .single();
+
+  if (error || !payment) {
+    await ctx.replyWithMarkdown('❌ **Payment not found or already processed.**');
+    return;
+  }
+
+  const paymentDate = new Date(payment.created_at);
+  const daysDiff = Math.floor((new Date() - paymentDate) / (1000 * 60 * 60 * 24));
+  const isOld = daysDiff >= 1;
+
+  const confirmMessage = `🗑️ **DELETE PENDING PAYMENT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚨 **CONFIRM DELETION**
+
+**Payment Details:**
+💰 Amount: $${payment.amount}
+🌐 Network: ${payment.network.toUpperCase()}
+📅 Created: ${paymentDate.toLocaleDateString()}
+
+**⚠️ IMPORTANT:**
+${isOld ?
+  '• This payment is old - safe to delete if you haven\'t sent crypto yet' :
+  '• Only delete if you haven\'t sent the crypto payment yet'}
+• If you already sent payment, contact support instead
 • This action cannot be undone
-• You'll lose your place in the payment queue
+• You can create a new purchase after deletion
 
-**🔧 CHOOSE CAREFULLY:**`;
+**🔧 ARE YOU SURE?**`;
 
   await ctx.replyWithMarkdown(confirmMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "✅ Yes, Cancel Payment", callback_data: `confirm_cancel_${paymentId}` }],
-        [{ text: "❌ No, Keep Payment", callback_data: "wait_pending" }],
-        [{ text: "📞 Contact Support", callback_data: "menu_help" }]
+        [{ text: "🗑️ Yes, Delete Payment", callback_data: `confirm_cancel_${paymentId}` }],
+        [{ text: "❌ No, Keep Payment", callback_data: "menu_purchase_shares" }],
+        [{ text: "📞 Contact Support First", callback_data: "menu_help" }]
       ]
     }
   });
@@ -6761,11 +7155,11 @@ Please contact support if you need assistance.`, {
       { amount: cancelledPayment.amount, network: cancelledPayment.network }
     );
 
-    const successMessage = `✅ **PAYMENT CANCELLED SUCCESSFULLY**
+    const successMessage = `✅ **PAYMENT DELETED SUCCESSFULLY**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🗑️ **Your pending payment has been cancelled:**
+🗑️ **Your pending payment has been deleted:**
 
 💰 **Amount:** $${cancelledPayment.amount}
 🌐 **Network:** ${cancelledPayment.network}

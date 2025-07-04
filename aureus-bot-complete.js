@@ -3032,18 +3032,30 @@ async function handleCustomPayment(ctx, callbackData) {
     }
   });
 
-  // Set state for payment verification (compatible with existing payment flow)
+  // Set state for payment verification - start with wallet address step
   await setUserState(user.id, 'payment_verification', {
     network: network,
     packageId: 'custom', // Use 'custom' instead of actual package ID
-    step: 'screenshot',
-    walletAddress: walletData.wallet_address,
+    step: 'wallet_address', // Start with wallet address collection
+    our_wallet_address: walletData.wallet_address, // Our receiving wallet
     amount: amount,
     shares: shares,
     phase_id: phase_id,
     custom_purchase: true,
     requested_amount: requested_amount
   });
+
+  // Ask for sender's wallet address
+  await ctx.replyWithMarkdown(`**📍 STEP 1 OF 3: SENDER WALLET ADDRESS**
+
+Please enter your **wallet address** that you will send the payment from:
+
+⚠️ **Important:**
+• This must be the exact address sending the ${formatCurrency(amount)} USDT
+• Used for payment verification and tracking
+• Must match the sender address in your transaction
+
+💡 **Tip:** Copy the address from your wallet app to ensure accuracy.`);
 }
 
 async function handleBackToCustomPayment(ctx) {
@@ -6835,12 +6847,11 @@ async function handlePaymentVerificationInput(ctx, text) {
       return;
     }
 
-    // Store wallet address and move to step 2
+    // Store sender wallet address and move to step 2
     await setUserState(user.id, 'payment_verification', {
-      network: network,
-      packageId: packageId,
+      ...session.session_data, // Keep existing data
       step: 'screenshot',
-      walletAddress: text
+      sender_wallet_address: text // Store sender's wallet address
     });
 
     const pkg = await db.getPackageById(packageId);

@@ -500,6 +500,26 @@ class SupabaseDB {
     }
   }
 
+  async getUserByUsername(username) {
+    try {
+      const { data, error } = await this.client
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error getting user by username:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error getting user by username:', error);
+      return null;
+    }
+  }
+
   async getUserInvestmentStats(userId) {
     try {
       const { data, error } = await this.client

@@ -224,6 +224,9 @@ async function authenticateUser(ctx, sponsorUsername = null) {
     // Handle sponsor assignment for new users
     if (isNewUser && sponsorUsername) {
       await assignSponsor(user.id, sponsorUsername);
+    } else if (isNewUser && !sponsorUsername) {
+      // New user without sponsor - will be prompted later
+      console.log(`🆕 New user ${user.username} registered without sponsor - will prompt for assignment`);
     }
 
     return user;
@@ -292,11 +295,11 @@ async function assignSponsor(userId, sponsorUsername) {
     console.log(`🤝 Assigning sponsor ${sponsorUsername} to user ${userId}`);
 
     // Get sponsor user record
-    const sponsor = await db.getUserByUsername(sponsorUsername);
+    let sponsor = await db.getUserByUsername(sponsorUsername);
     if (!sponsor) {
       console.log(`❌ Sponsor ${sponsorUsername} not found, using TTTFOUNDER`);
-      const fallbackSponsor = await db.getUserByUsername('TTTFOUNDER');
-      if (!fallbackSponsor) {
+      sponsor = await db.getUserByUsername('TTTFOUNDER');
+      if (!sponsor) {
         console.error('❌ TTTFOUNDER fallback sponsor not found!');
         return false;
       }
@@ -389,13 +392,15 @@ We'll assign TTTFOUNDER as your default sponsor.
 
 // Handle manual sponsor entry
 async function handleEnterSponsorManual(ctx) {
+  console.log('📝 handleEnterSponsorManual called');
   const user = ctx.from;
 
-  // Set user state for sponsor entry
-  await setUserState(user.id, {
-    state: 'awaiting_sponsor_username',
-    data: { timestamp: Date.now() }
-  });
+  try {
+    // Set user state for sponsor entry
+    await setUserState(user.id, {
+      state: 'awaiting_sponsor_username',
+      data: { timestamp: Date.now() }
+    });
 
   const instructionMessage = `✍️ **ENTER SPONSOR USERNAME**
 
@@ -410,15 +415,23 @@ async function handleEnterSponsorManual(ctx) {
 
 **🔙 To cancel, type:** cancel`;
 
-  await ctx.replyWithMarkdown(instructionMessage);
+    await ctx.replyWithMarkdown(instructionMessage);
+    console.log('✅ Manual sponsor entry instructions sent');
+
+  } catch (error) {
+    console.error('❌ Error in handleEnterSponsorManual:', error);
+    await ctx.reply('❌ Error setting up sponsor entry. Please try again.');
+  }
 }
 
 // Handle default sponsor assignment
 async function handleAssignDefaultSponsor(ctx) {
+  console.log('🤝 handleAssignDefaultSponsor called');
   const user = await authenticateUser(ctx);
   if (!user) return;
 
   try {
+    console.log(`🔧 Assigning TTTFOUNDER as sponsor for user ${user.id}`);
     const success = await assignSponsor(user.id, 'TTTFOUNDER');
 
     if (success) {
@@ -514,6 +527,18 @@ async function handleTermsAcceptance(ctx) {
 
 async function showMainMenu(ctx) {
   const user = ctx.from;
+
+  // Authenticate user first
+  const authenticatedUser = await authenticateUser(ctx);
+  if (!authenticatedUser) return;
+
+  // Check if user has a sponsor (required for new users)
+  const hasSponsor = await checkUserHasSponsor(authenticatedUser.id);
+  if (!hasSponsor) {
+    await promptSponsorAssignment(ctx);
+    return;
+  }
+
   const currentPhase = await db.getCurrentPhase();
   const isAdmin = user.username === ADMIN_USERNAME;
 
@@ -713,8 +738,8 @@ bot.on('callback_query', async (ctx) => {
     return;
   }
 
-  // Check if user has a sponsor (except for certain actions)
-  if (user && !['main_menu', 'accept_terms', 'menu_referrals', 'assign_sponsor', 'no_sponsor_choice'].includes(callbackData)) {
+  // Check if user has a sponsor (except for sponsor-related actions)
+  if (user && !['main_menu', 'accept_terms', 'menu_referrals', 'enter_sponsor_manual', 'assign_default_sponsor'].includes(callbackData)) {
     const hasSponsor = await checkUserHasSponsor(user.id);
     if (!hasSponsor) {
       await promptSponsorAssignment(ctx);
@@ -891,8 +916,12 @@ bot.on('callback_query', async (ctx) => {
         } else if (callbackData.startsWith('copy_referral_')) {
           await handleCopyReferral(ctx, callbackData);
         } else if (callbackData === 'enter_sponsor_manual') {
+          console.log('🔧 Handling enter_sponsor_manual callback');
+          await ctx.answerCbQuery("Setting up manual sponsor entry...");
           await handleEnterSponsorManual(ctx);
         } else if (callbackData === 'assign_default_sponsor') {
+          console.log('🔧 Handling assign_default_sponsor callback');
+          await ctx.answerCbQuery("Assigning default sponsor...");
           await handleAssignDefaultSponsor(ctx);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");

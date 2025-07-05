@@ -605,6 +605,16 @@ bot.on('callback_query', async (ctx) => {
           await handleViewScreenshot(ctx, callbackData);
         } else if (callbackData === 'view_portfolio') {
           await handlePortfolio(ctx);
+        } else if (callbackData === 'share_referral') {
+          await handleShareReferral(ctx);
+        } else if (callbackData === 'view_commission') {
+          await handleViewCommission(ctx);
+        } else if (callbackData === 'view_referrals') {
+          await handleViewReferrals(ctx);
+        } else if (callbackData === 'withdraw_commissions') {
+          await handleWithdrawCommissions(ctx);
+        } else if (callbackData.startsWith('copy_referral_')) {
+          await handleCopyReferral(ctx, callbackData);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");
         }
@@ -2765,6 +2775,350 @@ async function handleViewScreenshot(ctx, callbackData) {
     console.error('View screenshot error:', error);
     await ctx.answerCbQuery('❌ Error loading screenshot');
   }
+}
+
+// ENHANCED REFERRAL SYSTEM HANDLERS
+async function handleShareReferral(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user ID from telegram_users table
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id, username')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    const referralUsername = telegramUser.username || user.username || user.first_name;
+    const botLink = 'https://t.me/AureusAllianceBot';
+
+    // Enhanced sales pitch focused on investment opportunity
+    const shareMessage = `🏆 **EXCLUSIVE GOLD MINING INVESTMENT OPPORTUNITY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💎 **AUREUS ALLIANCE HOLDINGS**
+*South Africa's Premier Gold Mining Investment*
+
+🥇 **INVESTMENT HIGHLIGHTS:**
+• **10 Active Washplants** - 200 tons/hour capacity each
+• **3,200 KG Annual Gold Target** - Full production by June 2026
+• **1,400,000 Total Shares** - Limited availability
+• **$1 Per Share** - Current Phase 1 pricing
+• **Proven Gold Reserves** - Geological surveys completed
+
+⛏️ **MINING OPERATIONS:**
+• **Location:** Mpumalanga Province, South Africa
+• **Technology:** Modern washplant extraction systems
+• **Capacity:** 2,000 tons/hour total processing
+• **Timeline:** Scaling to full production over 24 months
+
+💰 **INVESTMENT BENEFITS:**
+• **Share Ownership** in active gold mining operations
+• **Dividend Potential** from gold production profits
+• **Transparent Operations** with regular updates
+• **Professional Management** team with mining expertise
+
+🚀 **HOW TO GET STARTED:**
+1. Click the link below to access the investment bot
+2. During registration, use referral username: **${referralUsername}**
+3. Choose your investment amount ($25 - $50,000)
+4. Complete secure payment verification
+5. Receive your share certificates
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 **START YOUR INVESTMENT:**
+${botLink}
+
+📝 **IMPORTANT:** When registering, enter this username as your referral:
+**${referralUsername}**
+
+⚠️ **INVESTMENT DISCLAIMER:**
+This is a high-risk investment opportunity. Past performance does not guarantee future results. Please invest responsibly and only what you can afford to lose.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+*Share this message with serious investors interested in gold mining opportunities*`;
+
+    await ctx.replyWithMarkdown(shareMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Copy Referral Username", callback_data: `copy_referral_${referralUsername}` }],
+          [{ text: "📤 Share Investment Link", url: `https://t.me/share/url?url=${encodeURIComponent(botLink)}&text=${encodeURIComponent('🏆 Exclusive Gold Mining Investment - Aureus Alliance Holdings')}` }],
+          [{ text: "👥 Back to Referral Dashboard", callback_data: "menu_referrals" }],
+          [{ text: "🔙 Back to Main Menu", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Share referral error:', error);
+    await ctx.replyWithMarkdown('❌ **Error generating referral content**\n\nPlease try again.');
+  }
+}
+
+async function handleViewCommission(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user ID from telegram_users table
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // Get commission balance
+    const { data: commissions, error: commissionError } = await db.client
+      .from('commissions')
+      .select('*')
+      .eq('referrer_id', telegramUser.user_id)
+      .eq('status', 'approved');
+
+    if (commissionError) {
+      console.error('Commission fetch error:', commissionError);
+      await ctx.replyWithMarkdown('❌ **Error loading commission data**\n\nPlease try again.');
+      return;
+    }
+
+    // Calculate totals
+    let totalUSDT = 0;
+    let totalShares = 0;
+    let availableUSDT = 0;
+    let pendingUSDT = 0;
+
+    if (commissions && commissions.length > 0) {
+      commissions.forEach(commission => {
+        totalUSDT += parseFloat(commission.usdt_amount || 0);
+        totalShares += parseFloat(commission.share_amount || 0);
+
+        if (commission.withdrawal_status === 'available') {
+          availableUSDT += parseFloat(commission.usdt_amount || 0);
+        } else if (commission.withdrawal_status === 'pending') {
+          pendingUSDT += parseFloat(commission.usdt_amount || 0);
+        }
+      });
+    }
+
+    const commissionMessage = `💰 **COMMISSION BALANCE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💵 USDT COMMISSIONS:**
+• **Total Earned:** $${totalUSDT.toFixed(2)} USDT
+• **Available for Withdrawal:** $${availableUSDT.toFixed(2)} USDT
+• **Pending Withdrawal:** $${pendingUSDT.toFixed(2)} USDT
+
+**📈 SHARE COMMISSIONS:**
+• **Total Shares Earned:** ${totalShares.toFixed(0)} shares
+• **Current Value:** $${totalShares.toFixed(2)} USD
+• **Status:** Active in portfolio
+
+**📊 COMMISSION SUMMARY:**
+• **Total Commission Value:** $${(totalUSDT + totalShares).toFixed(2)}
+• **Active Referrals:** ${commissions ? commissions.length : 0}
+• **Commission Rate:** 15% USDT + 15% Shares
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    const keyboard = [];
+
+    if (availableUSDT > 0) {
+      keyboard.push([{ text: "💸 Withdraw USDT", callback_data: "withdraw_commissions" }]);
+    }
+
+    keyboard.push(
+      [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
+      [{ text: "👥 View My Referrals", callback_data: "view_referrals" }],
+      [{ text: "🔙 Back to Referral Dashboard", callback_data: "menu_referrals" }]
+    );
+
+    await ctx.replyWithMarkdown(commissionMessage, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+
+  } catch (error) {
+    console.error('View commission error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading commission balance**\n\nPlease try again.');
+  }
+}
+
+async function handleViewReferrals(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user ID from telegram_users table
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // Get referral relationships
+    const { data: referrals, error: referralError } = await db.client
+      .from('referrals')
+      .select(`
+        id,
+        referred_id,
+        created_at,
+        status,
+        users!referrals_referred_id_fkey (
+          username,
+          full_name,
+          created_at
+        )
+      `)
+      .eq('referrer_id', telegramUser.user_id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
+
+    if (referralError) {
+      console.error('Referrals fetch error:', referralError);
+      await ctx.replyWithMarkdown('❌ **Error loading referral data**\n\nPlease try again.');
+      return;
+    }
+
+    // Get commission data for these referrals
+    const { data: commissions, error: commissionError } = await db.client
+      .from('commissions')
+      .select('*')
+      .eq('referrer_id', telegramUser.user_id);
+
+    let totalCommissions = 0;
+    if (commissions && commissions.length > 0) {
+      totalCommissions = commissions.reduce((sum, comm) =>
+        sum + parseFloat(comm.usdt_amount || 0) + parseFloat(comm.share_amount || 0), 0
+      );
+    }
+
+    let referralsList = '';
+    if (referrals && referrals.length > 0) {
+      referrals.forEach((referral, index) => {
+        const joinDate = new Date(referral.users.created_at).toLocaleDateString();
+        const username = referral.users.username || referral.users.full_name || 'Anonymous';
+        referralsList += `${index + 1}. **${username}**\n   📅 Joined: ${joinDate}\n   ✅ Status: Active\n\n`;
+      });
+    } else {
+      referralsList = '*No referrals yet. Start sharing your referral link!*';
+    }
+
+    const referralsMessage = `👥 **MY REFERRALS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📊 REFERRAL STATISTICS:**
+• **Total Referrals:** ${referrals ? referrals.length : 0}
+• **Active Referrals:** ${referrals ? referrals.length : 0}
+• **Total Commissions Earned:** $${totalCommissions.toFixed(2)}
+
+**👤 REFERRAL LIST:**
+${referralsList}
+
+**🚀 GROW YOUR NETWORK:**
+Share your referral link to earn 15% USDT + 15% shares commission on every investment your referrals make!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    await ctx.replyWithMarkdown(referralsMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
+          [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+          [{ text: "🔄 Refresh List", callback_data: "view_referrals" }],
+          [{ text: "🔙 Back to Referral Dashboard", callback_data: "menu_referrals" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('View referrals error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading referral list**\n\nPlease try again.');
+  }
+}
+
+async function handleWithdrawCommissions(ctx) {
+  await ctx.replyWithMarkdown(`💸 **COMMISSION WITHDRAWAL**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🚧 WITHDRAWAL SYSTEM COMING SOON**
+
+We're currently developing a secure commission withdrawal system with the following features:
+
+**🔐 SECURITY FEATURES:**
+• Multi-signature wallet verification
+• Two-factor authentication
+• Admin approval process
+• Anti-fraud protection
+
+**💳 SUPPORTED NETWORKS:**
+• BSC (Binance Smart Chain)
+• Polygon (MATIC)
+• TRON (TRC20)
+
+**📋 WITHDRAWAL PROCESS:**
+1. Select withdrawal network
+2. Enter wallet address
+3. Specify withdrawal amount
+4. Admin verification
+5. Secure payout processing
+
+**📧 GET NOTIFIED:**
+We'll notify all users when the withdrawal system goes live!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+        [{ text: "📤 Share More Referrals", callback_data: "share_referral" }],
+        [{ text: "🔙 Back to Referral Dashboard", callback_data: "menu_referrals" }]
+      ]
+    }
+  });
+}
+
+async function handleCopyReferral(ctx, callbackData) {
+  const referralCode = callbackData.replace('copy_referral_', '');
+
+  await ctx.answerCbQuery(`📋 Referral username copied: ${referralCode}`);
+
+  await ctx.replyWithMarkdown(`📋 **REFERRAL USERNAME COPIED**
+
+**Your Referral Username:** \`${referralCode}\`
+
+**📝 INSTRUCTIONS FOR NEW INVESTORS:**
+1. Click this link: https://t.me/AureusAllianceBot
+2. Start the bot and begin registration
+3. When asked for a referral/sponsor, enter: **${referralCode}**
+4. Complete their investment to earn your commission
+
+**💡 SHARING TIP:**
+Copy this message and send it directly to potential investors:
+
+*"Join Aureus Alliance Holdings gold mining investment! Use referral username '${referralCode}' when you register: https://t.me/AureusAllianceBot"*`, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📤 Share Full Investment Pitch", callback_data: "share_referral" }],
+        [{ text: "👥 Back to Referral Dashboard", callback_data: "menu_referrals" }]
+      ]
+    }
+  });
 }
 
 // Start the bot

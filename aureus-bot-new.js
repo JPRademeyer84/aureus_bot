@@ -9,6 +9,7 @@ console.log("📅 DEPLOYMENT: " + new Date().toISOString());
 console.log("🔧 FIXED: Share calculation using phase pricing + database wallet addresses");
 console.log("🚨 CRITICAL FIX DEPLOYED: $100 payment = 20 shares (not 100 shares)");
 console.log("💰 SHARE CALCULATION: amount ÷ phase_price = shares");
+console.log("🛠️ SCOPE FIX: sharesAmount variable moved to outer scope - ReferenceError resolved");
 
 // Bot configuration
 const BOT_TOKEN = "8015476800:AAGMH8HMXRurphYHRQDJdeHLO10ghZVzBt8";

@@ -3205,6 +3205,92 @@ async function handleApprovePayment(ctx, callbackData) {
           .eq('id', paymentId);
 
         console.log('🔗 Payment linked to share purchase');
+
+        // COMMISSION CREATION - Check for referral relationship and create commission
+        console.log('💰 Checking for referral relationship to create commission...');
+        const { data: referralData, error: referralError } = await db.client
+          .from('referrals')
+          .select('referrer_id, referred_id, commission_rate')
+          .eq('referred_id', updatedPayment.user_id)
+          .eq('status', 'active')
+          .single();
+
+        if (!referralError && referralData) {
+          console.log(`👥 Found referrer: User ${referralData.referrer_id} for referred user ${referralData.referred_id}`);
+
+          // Calculate commission (15% USDT + 15% shares)
+          const commissionAmount = amount * 0.15;
+          const shareCommission = sharesAmount * 0.15;
+
+          console.log(`💰 Calculating commission: ${commissionAmount} USDT + ${shareCommission} shares`);
+
+          // Create commission transaction
+          const commissionData = {
+            referrer_id: referralData.referrer_id,
+            referred_id: referralData.referred_id,
+            share_purchase_id: investmentRecord.id,
+            commission_rate: 15.00,
+            share_purchase_amount: amount,
+            usdt_commission: commissionAmount,
+            share_commission: shareCommission,
+            status: 'approved',
+            payment_date: new Date().toISOString(),
+            created_at: new Date().toISOString()
+          };
+
+          const { data: commissionRecord, error: commissionError } = await db.client
+            .from('commission_transactions')
+            .insert([commissionData])
+            .select()
+            .single();
+
+          if (commissionError) {
+            console.error('❌ Commission creation error:', commissionError);
+          } else {
+            console.log(`✅ Commission created: $${commissionAmount.toFixed(2)} USDT + ${shareCommission.toFixed(2)} shares`);
+
+            // Update commission balance (add to existing balance)
+            console.log('💳 Updating commission balance...');
+
+            // First, get existing balance
+            const { data: existingBalance, error: getBalanceError } = await db.client
+              .from('commission_balances')
+              .select('*')
+              .eq('user_id', referralData.referrer_id)
+              .single();
+
+            if (getBalanceError && getBalanceError.code !== 'PGRST116') {
+              console.error('❌ Error getting existing balance:', getBalanceError);
+            }
+
+            const currentUSDT = existingBalance?.usdt_balance || 0;
+            const currentShares = existingBalance?.share_balance || 0;
+            const totalEarnedUSDT = (existingBalance?.total_earned_usdt || 0) + commissionAmount;
+            const totalEarnedShares = (existingBalance?.total_earned_shares || 0) + shareCommission;
+
+            const { error: balanceError } = await db.client
+              .from('commission_balances')
+              .upsert({
+                user_id: referralData.referrer_id,
+                usdt_balance: currentUSDT + commissionAmount,
+                share_balance: currentShares + shareCommission,
+                total_earned_usdt: totalEarnedUSDT,
+                total_earned_shares: totalEarnedShares,
+                last_updated: new Date().toISOString(),
+                created_at: existingBalance?.created_at || new Date().toISOString()
+              }, {
+                onConflict: 'user_id'
+              });
+
+            if (balanceError) {
+              console.error('❌ Commission balance update error:', balanceError);
+            } else {
+              console.log(`✅ Commission balance updated: +$${commissionAmount} USDT, +${shareCommission} shares`);
+            }
+          }
+        } else {
+          console.log('ℹ️ No referrer found for this user - no commission to create');
+        }
       }
     } catch (shareError) {
       console.error('Error creating share purchase:', shareError);

@@ -2014,18 +2014,8 @@ async function handleContinuePayment(ctx, callbackData) {
       return;
     }
 
-    // Get the wallet address for this network
-    const { data: walletData, error: walletError } = await db.client
-      .from('crypto_wallets')
-      .select('wallet_address')
-      .eq('network', payment.network.toLowerCase())
-      .eq('is_active', true)
-      .single();
-
-    if (walletError || !walletData) {
-      await ctx.replyWithMarkdown('❌ **Wallet configuration error.**\n\nPlease contact support.');
-      return;
-    }
+    // Use the same wallet address as in payment creation
+    const walletAddress = payment.receiver_wallet || 'TQRKqJetwkAKjHKjKx2DRRhTYEtqVC7i9s';
 
     const paymentDate = new Date(payment.created_at);
     const timeAgo = Math.floor((new Date() - paymentDate) / (1000 * 60 * 60));
@@ -2043,7 +2033,7 @@ async function handleContinuePayment(ctx, callbackData) {
 ⏳ **Status:** Waiting for your payment
 
 **🏦 SEND PAYMENT TO:**
-\`${walletData.wallet_address}\`
+\`${walletAddress}\`
 
 **📱 NEXT STEPS:**
 1. Send exactly $${payment.amount} USDT to the address above
@@ -2059,10 +2049,9 @@ async function handleContinuePayment(ctx, callbackData) {
     await ctx.replyWithMarkdown(continueMessage, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "📷 Upload Payment Screenshot", callback_data: `upload_screenshot_${paymentId}` }],
-          [{ text: "📋 Copy Wallet Address", callback_data: `copy_wallet_${payment.network}` }],
+          [{ text: "💳 Submit Payment Proof", callback_data: `upload_proof_${paymentId}` }],
           [{ text: "📊 Check Payment Status", callback_data: "view_portfolio" }],
-          [{ text: "🔙 Back to Purchase Options", callback_data: "menu_purchase_shares" }]
+          [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
         ]
       }
     });

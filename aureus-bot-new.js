@@ -1711,12 +1711,14 @@ async function handleProofScreenshot(ctx, sessionData, isDocument = false) {
       // Handle document upload
       const document = ctx.message.document;
       file = await ctx.telegram.getFile(document.file_id);
-      fileUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+      fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+      console.log(`📄 Document file URL: ${fileUrl}`);
     } else {
       // Handle photo upload
       const photo = ctx.message.photo[ctx.message.photo.length - 1];
       file = await ctx.telegram.getFile(photo.file_id);
-      fileUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+      fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+      console.log(`📷 Photo file URL: ${fileUrl}`);
     }
 
     console.log(`📷 Processing screenshot upload for payment ${paymentId}`);

@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node aureus-bot-new.js",
-    "dev": "nodemon aureus-bot-new.js"
+    "dev": "nodemon aureus-bot-new.js",
+    "build": "echo 'No build step required'"
   },
   "keywords": [],
   "author": "",

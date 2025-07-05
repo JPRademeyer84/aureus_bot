@@ -1993,7 +1993,7 @@ async function handleConfirmPurchase(ctx, callbackData) {
     let { data: telegramUser, error: telegramError } = await db.client
       .from('telegram_users')
       .select('*')
-      .eq('telegram_username', user.username)
+      .eq('username', user.username)
       .single();
 
     if (telegramError && telegramError.code !== 'PGRST116') {
@@ -2008,7 +2008,7 @@ async function handleConfirmPurchase(ctx, callbackData) {
         .from('telegram_users')
         .insert({
           telegram_id: user.id,
-          telegram_username: user.username,
+          username: user.username,
           first_name: user.first_name,
           last_name: user.last_name || null,
           created_at: new Date().toISOString()

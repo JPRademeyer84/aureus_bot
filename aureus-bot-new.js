@@ -2795,62 +2795,76 @@ async function handleShareReferral(ctx) {
     }
 
     const referralUsername = telegramUser.username || user.username || user.first_name;
-    const botLink = 'https://t.me/AureusAllianceBot';
+    const botLink = 'https://t.me/aureus_africa_bot';
 
-    // Enhanced sales pitch focused on investment opportunity
-    const shareMessage = `🏆 **EXCLUSIVE GOLD MINING INVESTMENT OPPORTUNITY**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-💎 **AUREUS ALLIANCE HOLDINGS**
-*South Africa's Premier Gold Mining Investment*
-
-🥇 **INVESTMENT HIGHLIGHTS:**
-• **10 Active Washplants** - 200 tons/hour capacity each
-• **3,200 KG Annual Gold Target** - Full production by June 2026
-• **1,400,000 Total Shares** - Limited availability
-• **$1 Per Share** - Current Phase 1 pricing
-• **Proven Gold Reserves** - Geological surveys completed
-
-⛏️ **MINING OPERATIONS:**
-• **Location:** Mpumalanga Province, South Africa
-• **Technology:** Modern washplant extraction systems
-• **Capacity:** 2,000 tons/hour total processing
-• **Timeline:** Scaling to full production over 24 months
-
-💰 **INVESTMENT BENEFITS:**
-• **Share Ownership** in active gold mining operations
-• **Dividend Potential** from gold production profits
-• **Transparent Operations** with regular updates
-• **Professional Management** team with mining expertise
-
-🚀 **HOW TO GET STARTED:**
-1. Click the link below to access the investment bot
-2. During registration, use referral username: **${referralUsername}**
-3. Choose your investment amount ($25 - $50,000)
-4. Complete secure payment verification
-5. Receive your share certificates
+    // MOTIVATING & COMPELLING investment opportunity message
+    const shareMessage = `🌟 **LIFE-CHANGING OPPORTUNITY: OWN REAL GOLD MINES!** 🌟
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔗 **START YOUR INVESTMENT:**
+💰 **IMAGINE EARNING FROM ACTUAL GOLD PRODUCTION!**
+
+🏆 **AUREUS ALLIANCE HOLDINGS** - Your Gateway to Gold Wealth!
+*Join thousands already building generational wealth through gold mining*
+
+🔥 **WHY THIS IS THE OPPORTUNITY OF A LIFETIME:**
+
+💎 **REAL GOLD, REAL PROFITS:**
+• Own shares in 10 MASSIVE gold washplants
+• Each plant processes 200 tons of gold-bearing material per hour
+• Target: 3,200 KG of pure gold annually (worth $200+ MILLION!)
+• You get a piece of every ounce extracted!
+
+🚀 **EXPLOSIVE GROWTH POTENTIAL:**
+• Phase 1: $1 per share (LIMITED TIME!)
+• Full production by June 2026
+• Early investors positioned for maximum returns
+• Only 1,400,000 shares available - Don't miss out!
+
+⛏️ **PROVEN SOUTH AFRICAN GOLD RESERVES:**
+• Located in gold-rich Mpumalanga Province
+• Professional geological surveys completed
+• Modern extraction technology deployed
+• Experienced mining team managing operations
+
+💸 **MULTIPLE WAYS TO PROFIT:**
+• Share value appreciation as production scales
+• Dividend payments from gold sales
+• Portfolio diversification with precious metals
+• Hedge against inflation and economic uncertainty
+
+🎯 **PERFECT FOR:**
+• Investors seeking alternative assets
+• Those wanting exposure to gold without storage
+• People building retirement wealth
+• Anyone tired of low bank returns
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚨 **ACT NOW - PHASE 1 PRICING ENDS SOON!**
+
+👆 **CLICK TO START BUILDING WEALTH:**
 ${botLink}
 
-📝 **IMPORTANT:** When registering, enter this username as your referral:
-**${referralUsername}**
+🎁 **SPECIAL BONUS:** Use referral code **${referralUsername}** for priority processing!
 
-⚠️ **INVESTMENT DISCLAIMER:**
-This is a high-risk investment opportunity. Past performance does not guarantee future results. Please invest responsibly and only what you can afford to lose.
+💡 **INVESTMENT RANGE:** Start with just $25 or go big with $50,000+
+
+⚡ **SECURE PROCESS:** 3-step verification, instant confirmation
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-*Share this message with serious investors interested in gold mining opportunities*`;
+🔥 **DON'T LET THIS GOLDEN OPPORTUNITY SLIP AWAY!**
+
+*Join the smart money already invested in South Africa's gold boom!*
+
+⚠️ *High-risk, high-reward investment. Invest responsibly.*`;
 
     await ctx.replyWithMarkdown(shareMessage, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "📋 Copy Referral Username", callback_data: `copy_referral_${referralUsername}` }],
-          [{ text: "📤 Share Investment Link", url: `https://t.me/share/url?url=${encodeURIComponent(botLink)}&text=${encodeURIComponent('🏆 Exclusive Gold Mining Investment - Aureus Alliance Holdings')}` }],
+          [{ text: "📤 Share Investment Link", url: `https://t.me/share/url?url=${encodeURIComponent(botLink)}&text=${encodeURIComponent('🔥 GOLD MINING OPPORTUNITY! Own real South African gold mines. Use referral: ' + referralUsername)}` }],
           [{ text: "👥 Back to Referral Dashboard", callback_data: "menu_referrals" }],
           [{ text: "🔙 Back to Main Menu", callback_data: "main_menu" }]
         ]
@@ -3102,16 +3116,19 @@ async function handleCopyReferral(ctx, callbackData) {
 
 **Your Referral Username:** \`${referralCode}\`
 
-**📝 INSTRUCTIONS FOR NEW INVESTORS:**
-1. Click this link: https://t.me/AureusAllianceBot
-2. Start the bot and begin registration
-3. When asked for a referral/sponsor, enter: **${referralCode}**
-4. Complete their investment to earn your commission
+**🚀 QUICK SHARING MESSAGES:**
 
-**💡 SHARING TIP:**
-Copy this message and send it directly to potential investors:
+**💎 For WhatsApp/SMS:**
+*"🔥 GOLD MINING INVESTMENT OPPORTUNITY! Own shares in real South African gold mines. Starting at just $25. Massive profit potential! Use my referral '${referralCode}' here: https://t.me/aureus_africa_bot"*
 
-*"Join Aureus Alliance Holdings gold mining investment! Use referral username '${referralCode}' when you register: https://t.me/AureusAllianceBot"*`, {
+**📱 For Social Media:**
+*"💰 Just discovered an incredible gold mining investment! Real washplants, real gold, real profits. Early investors getting $1/share before it goes up! Use referral '${referralCode}': https://t.me/aureus_africa_bot #GoldInvestment #WealthBuilding"*
+
+**💼 For Serious Investors:**
+*"Professional gold mining investment opportunity in South Africa. 10 active washplants, 3,200 KG annual target. Phase 1 pricing available. Use referral '${referralCode}' for priority: https://t.me/aureus_africa_bot"*
+
+**📧 For Email:**
+*"I wanted to share an exclusive gold mining investment I discovered. Aureus Alliance Holdings operates real gold mines in South Africa with proven reserves. You can own shares starting at $1 each. Use my referral code '${referralCode}' when you register: https://t.me/aureus_africa_bot"*`, {
     reply_markup: {
       inline_keyboard: [
         [{ text: "📤 Share Full Investment Pitch", callback_data: "share_referral" }],

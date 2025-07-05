@@ -593,6 +593,8 @@ bot.on('callback_query', async (ctx) => {
           await handleConfirmCancel(ctx, callbackData);
         } else if (callbackData.startsWith('confirm_purchase_')) {
           await handleConfirmPurchase(ctx, callbackData);
+        } else if (callbackData.startsWith('upload_proof_')) {
+          await handleUploadProof(ctx, callbackData);
         } else if (callbackData === 'view_portfolio') {
           await handlePortfolio(ctx);
         } else {
@@ -1023,10 +1025,39 @@ bot.on('text', async (ctx) => {
   if (text.startsWith('/')) return;
 
   // Get user state
-  const userState = getUserState(user.id);
+  const userState = await getUserState(user.id);
 
   if (userState && userState.state === 'awaiting_custom_amount') {
     await handleCustomAmountInput(ctx, text);
+  } else if (userState && userState.state === 'upload_proof_wallet') {
+    await handleWalletAddressInput(ctx, text, userState.data);
+  } else if (userState && userState.state === 'upload_proof_hash') {
+    await handleTransactionHashInput(ctx, text, userState.data);
+  }
+});
+
+// Photo handler for proof upload
+bot.on('photo', async (ctx) => {
+  const user = ctx.from;
+  const userState = await getUserState(user.id);
+
+  if (userState && userState.state === 'upload_proof_screenshot') {
+    await handleProofScreenshot(ctx, userState.data);
+  }
+});
+
+// Document handler for proof upload
+bot.on('document', async (ctx) => {
+  const user = ctx.from;
+  const userState = await getUserState(user.id);
+
+  if (userState && userState.state === 'upload_proof_screenshot') {
+    const document = ctx.message.document;
+    if (document.mime_type && document.mime_type.startsWith('image/')) {
+      await handleProofScreenshot(ctx, userState.data, true);
+    } else {
+      await ctx.reply('📷 Please upload an image file for payment verification.');
+    }
   }
 });
 
@@ -1047,6 +1078,204 @@ async function handleCustomAmountInput(ctx, amountText) {
 
   // Proceed with payment process
   await processCustomAmountPurchase(ctx, amount);
+}
+
+// Handle wallet address input
+async function handleWalletAddressInput(ctx, walletAddress, sessionData) {
+  const user = ctx.from;
+  const { paymentId } = sessionData;
+
+  try {
+    // Update payment with sender wallet address
+    const { error: updateError } = await db.client
+      .from('crypto_payment_transactions')
+      .update({
+        sender_wallet: walletAddress,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId);
+
+    if (updateError) {
+      console.error('Error updating payment with wallet:', updateError);
+      await ctx.reply('❌ Error saving wallet address. Please try again.');
+      return;
+    }
+
+    // Set state for transaction hash input
+    await setUserState(user.id, 'upload_proof_hash', { paymentId, walletAddress });
+
+    const hashMessage = `💳 **PAYMENT PROOF UPLOAD - STEP 2**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ **Wallet Address Saved:** ${walletAddress.substring(0, 10)}...
+
+**📍 STEP 2: TRANSACTION HASH**
+
+Please enter the transaction hash (TXID) of your payment:
+
+⚠️ **Important:** This is the unique transaction ID from your wallet or exchange`;
+
+    await ctx.replyWithMarkdown(hashMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "❌ Cancel Upload", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling wallet address:', error);
+    await ctx.reply('❌ Error processing wallet address. Please try again.');
+  }
+}
+
+// Handle transaction hash input
+async function handleTransactionHashInput(ctx, transactionHash, sessionData) {
+  const user = ctx.from;
+  const { paymentId } = sessionData;
+
+  try {
+    // Update payment with transaction hash
+    const { error: updateError } = await db.client
+      .from('crypto_payment_transactions')
+      .update({
+        transaction_hash: transactionHash,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId);
+
+    if (updateError) {
+      console.error('Error updating payment with hash:', updateError);
+      await ctx.reply('❌ Error saving transaction hash. Please try again.');
+      return;
+    }
+
+    // Set state for screenshot upload
+    await setUserState(user.id, 'upload_proof_screenshot', { paymentId });
+
+    const screenshotMessage = `💳 **PAYMENT PROOF UPLOAD - STEP 3**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ **Transaction Hash Saved:** ${transactionHash.substring(0, 10)}...
+
+**📍 STEP 3: UPLOAD SCREENSHOT**
+
+Please upload a screenshot of your transaction:
+
+📷 **Send the image now** (as photo or document)
+
+⚠️ **Important:** Screenshot should clearly show the transaction details`;
+
+    await ctx.replyWithMarkdown(screenshotMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "❌ Cancel Upload", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling transaction hash:', error);
+    await ctx.reply('❌ Error processing transaction hash. Please try again.');
+  }
+}
+
+// Handle proof screenshot upload
+async function handleProofScreenshot(ctx, sessionData, isDocument = false) {
+  const user = ctx.from;
+  const { paymentId } = sessionData;
+
+  try {
+    let file, fileUrl;
+
+    if (isDocument) {
+      // Handle document upload
+      const document = ctx.message.document;
+      file = await ctx.telegram.getFile(document.file_id);
+      fileUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+    } else {
+      // Handle photo upload
+      const photo = ctx.message.photo[ctx.message.photo.length - 1];
+      file = await ctx.telegram.getFile(photo.file_id);
+      fileUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+    }
+
+    console.log(`📷 Processing screenshot upload for payment ${paymentId}`);
+
+    // Download and upload to Supabase storage
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+    }
+
+    const buffer = await response.arrayBuffer();
+    const timestamp = Date.now();
+    const filename = `payment_${user.id}_${timestamp}.jpg`;
+
+    // Upload to Supabase storage bucket "proof"
+    const { data, error } = await db.client.storage
+      .from('proof')
+      .upload(filename, buffer, {
+        contentType: 'image/jpeg',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Storage upload error:', error);
+      await ctx.reply('❌ Failed to upload screenshot. Please try again.');
+      return;
+    }
+
+    // Update payment with screenshot
+    const { error: updateError } = await db.client
+      .from('crypto_payment_transactions')
+      .update({
+        screenshot_url: filename,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId);
+
+    if (updateError) {
+      console.error('Error updating payment with screenshot:', updateError);
+      await ctx.reply('❌ Failed to save screenshot. Please try again.');
+      return;
+    }
+
+    // Clear user state
+    await clearUserState(user.id);
+
+    const successMessage = `✅ **PAYMENT PROOF UPLOADED SUCCESSFULLY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 SUBMISSION COMPLETE:**
+• Payment ID: #${paymentId.substring(0, 8)}
+• Wallet Address: ✅ Saved
+• Transaction Hash: ✅ Saved
+• Screenshot: ✅ Uploaded
+
+**⏳ NEXT STEPS:**
+• Admin will review your payment
+• You'll receive notification when approved
+• Shares will be allocated to your account
+
+**📱 You can check status in Portfolio section**`;
+
+    await ctx.replyWithMarkdown(successMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
+          [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling proof screenshot:', error);
+    await ctx.reply('❌ Error uploading screenshot. Please try again.');
+  }
 }
 
 // Process custom amount purchase
@@ -2100,6 +2329,56 @@ async function showPaymentInstructions(ctx, payment, phase) {
       ]
     }
   });
+}
+
+// Handle upload proof callback
+async function handleUploadProof(ctx, callbackData) {
+  const paymentId = callbackData.replace('upload_proof_', '');
+  const user = ctx.from;
+
+  try {
+    // Verify payment exists and belongs to user
+    const { data: payment, error: paymentError } = await db.client
+      .from('crypto_payment_transactions')
+      .select('*')
+      .eq('id', paymentId)
+      .single();
+
+    if (paymentError || !payment) {
+      await ctx.answerCbQuery('❌ Payment not found');
+      return;
+    }
+
+    // Set user state to collect wallet address first
+    await setUserState(user.id, 'upload_proof_wallet', { paymentId });
+
+    const walletMessage = `💳 **PAYMENT PROOF UPLOAD - STEP 1**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 PAYMENT DETAILS:**
+• Payment ID: #${paymentId.substring(0, 8)}
+• Amount: ${formatCurrency(payment.amount)}
+• Network: ${payment.network}
+
+**📍 STEP 1: SENDER WALLET ADDRESS**
+
+Please enter the wallet address you sent the payment FROM:
+
+⚠️ **Important:** This is YOUR wallet address (not our receiving address)`;
+
+    await ctx.replyWithMarkdown(walletMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "❌ Cancel Upload", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling upload proof:', error);
+    await ctx.answerCbQuery('❌ Error processing request');
+  }
 }
 
 // Admin audit logging function

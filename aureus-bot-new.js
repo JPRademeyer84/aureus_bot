@@ -1143,18 +1143,25 @@ async function handleTermsAcceptance(ctx, callbackData = null) {
       return;
     }
 
-    // Record terms acceptance
+    // Record terms acceptance (use upsert to handle duplicates)
     const { error: termsError } = await db.client
       .from('terms_acceptance')
-      .insert({
+      .upsert({
         user_id: authenticatedUser.id,
         terms_type: 'general_terms',
         version: '1.0',
         accepted_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id,terms_type'
       });
 
     if (termsError) {
       console.error('❌ Error recording terms acceptance:', termsError);
+      console.error('❌ Terms acceptance data:', {
+        user_id: authenticatedUser.id,
+        terms_type: 'general_terms',
+        version: '1.0'
+      });
       await ctx.answerCbQuery("❌ Error recording acceptance");
       return;
     }
@@ -3537,6 +3544,15 @@ async function handleReviewPayment(ctx, callbackData) {
       return;
     }
 
+    // Safely format wallet address and transaction hash to avoid Markdown parsing errors
+    const safeWalletAddress = payment.sender_wallet_address
+      ? `\`${payment.sender_wallet_address}\``
+      : 'Not provided';
+
+    const safeTransactionHash = payment.transaction_hash
+      ? `\`${payment.transaction_hash}\``
+      : 'Not provided';
+
     const reviewMessage = `🔍 **PAYMENT REVIEW**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3549,11 +3565,11 @@ async function handleReviewPayment(ctx, callbackData) {
 
 **👤 USER DETAILS:**
 • **Name:** ${payment.users.full_name || 'N/A'}
-• **Username:** ${payment.users.username || 'N/A'}
+• **Username:** @${payment.users.username || 'N/A'}
 
 **📋 TRANSACTION INFO:**
-• **Wallet Address:** ${payment.sender_wallet_address || 'Not provided'}
-• **Transaction Hash:** ${payment.transaction_hash || 'Not provided'}
+• **Wallet Address:** ${safeWalletAddress}
+• **Transaction Hash:** ${safeTransactionHash}
 • **Screenshot:** ${payment.screenshot_url ? '✅ Uploaded' : '❌ Not uploaded'}
 
 **📅 TIMESTAMPS:**
@@ -3580,9 +3596,20 @@ async function handleReviewPayment(ctx, callbackData) {
       { text: "🔙 Back to Payments", callback_data: "admin_payments" }
     ]);
 
-    await ctx.replyWithMarkdown(reviewMessage, {
-      reply_markup: { inline_keyboard: keyboard }
-    });
+    try {
+      await ctx.replyWithMarkdown(reviewMessage, {
+        reply_markup: { inline_keyboard: keyboard }
+      });
+    } catch (markdownError) {
+      console.error('❌ Markdown parsing error in payment review:', markdownError);
+      console.error('❌ Problematic message content:', reviewMessage);
+
+      // Fallback: Send without markdown formatting
+      const plainMessage = reviewMessage.replace(/\*\*/g, '').replace(/`/g, '');
+      await ctx.reply(plainMessage, {
+        reply_markup: { inline_keyboard: keyboard }
+      });
+    }
 
   } catch (error) {
     console.error('Review payment error:', error);

@@ -1454,7 +1454,7 @@ async function handlePortfolio(ctx) {
 
     const totalShares = purchases?.reduce((sum, purchase) => sum + (purchase.shares_purchased || 0), 0) || 0;
     const totalInvested = purchases?.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0) || 0;
-    const approvedPurchases = purchases?.filter(p => p.status === 'approved') || [];
+    const approvedPurchases = purchases?.filter(p => p.status === 'active') || []; // Fixed: 'active' not 'approved'
     const pendingAmount = pendingPayments?.reduce((sum, payment) => sum + (parseFloat(payment.amount) || 0), 0) || 0;
 
     const portfolioMessage = `📊 **MY PORTFOLIO**

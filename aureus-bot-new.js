@@ -2596,13 +2596,56 @@ async function handleApprovePayment(ctx, callbackData) {
       return;
     }
 
+    // Create share purchase record
+    console.log('💰 Creating share purchase record for approved payment...');
+
+    try {
+      // Calculate shares based on amount (1 share per $1 for now)
+      const amount = parseFloat(updatedPayment.amount);
+      const sharesAmount = Math.floor(amount); // 1 share per dollar
+
+      const investmentData = {
+        user_id: updatedPayment.user_id,
+        package_name: 'Custom Amount Purchase',
+        total_amount: amount,
+        shares_purchased: sharesAmount,
+        status: 'active',
+        payment_method: `${updatedPayment.network} ${updatedPayment.currency || 'USDT'}`,
+        created_at: updatedPayment.created_at,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: investmentRecord, error: investmentError } = await db.client
+        .from('aureus_share_purchases')
+        .insert([investmentData])
+        .select()
+        .single();
+
+      if (investmentError) {
+        console.error('Share Purchase creation error:', investmentError);
+      } else {
+        console.log('✅ Share Purchase record created:', investmentRecord.id);
+
+        // Link the payment to the share purchase
+        await db.client
+          .from('crypto_payment_transactions')
+          .update({ share_purchase_id: investmentRecord.id })
+          .eq('id', paymentId);
+
+        console.log('🔗 Payment linked to share purchase');
+      }
+    } catch (shareError) {
+      console.error('Error creating share purchase:', shareError);
+    }
+
     await ctx.replyWithMarkdown(`✅ **PAYMENT APPROVED**
 
 **Payment ID:** #${paymentId.substring(0, 8)}
 **Amount:** $${updatedPayment.amount} USDT
 **User:** ${updatedPayment.users.full_name || updatedPayment.users.username}
+**Shares Allocated:** ${Math.floor(parseFloat(updatedPayment.amount))}
 
-The user will be notified of the approval.`, {
+The user will be notified of the approval and shares have been allocated.`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "🔙 Back to Payments", callback_data: "admin_payments" }]

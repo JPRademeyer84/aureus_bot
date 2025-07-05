@@ -2664,27 +2664,28 @@ async function handleApprovePayment(ctx, callbackData) {
       return;
     }
 
+    // Get current phase to calculate shares correctly
+    const { data: currentPhase, error: phaseError } = await db.client
+      .from('investment_phases')
+      .select('*')
+      .eq('is_active', true)
+      .single();
+
+    if (phaseError || !currentPhase) {
+      console.error('Error getting current phase:', phaseError);
+      await ctx.reply('❌ Error: No active phase found. Cannot approve payment.');
+      return;
+    }
+
+    // Calculate shares based on current phase price
+    const amount = parseFloat(updatedPayment.amount);
+    const sharePrice = parseFloat(currentPhase.price_per_share);
+    const sharesAmount = Math.floor(amount / sharePrice); // Correct calculation!
+
     // Create share purchase record
     console.log('💰 Creating share purchase record for approved payment...');
 
     try {
-      // Get current phase to calculate shares correctly
-      const { data: currentPhase, error: phaseError } = await db.client
-        .from('investment_phases')
-        .select('*')
-        .eq('is_active', true)
-        .single();
-
-      if (phaseError || !currentPhase) {
-        console.error('Error getting current phase:', phaseError);
-        await ctx.reply('❌ Error: No active phase found. Cannot approve payment.');
-        return;
-      }
-
-      // Calculate shares based on current phase price
-      const amount = parseFloat(updatedPayment.amount);
-      const sharePrice = parseFloat(currentPhase.price_per_share);
-      const sharesAmount = Math.floor(amount / sharePrice); // Correct calculation!
 
       const investmentData = {
         user_id: updatedPayment.user_id,

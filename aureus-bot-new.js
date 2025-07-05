@@ -7,6 +7,8 @@ console.log("🚀 Starting Aureus Alliance Holdings Telegram Bot...");
 console.log("🔗 VERSION CHECK: Bot links are https://t.me/aureus_africa_bot (with underscores)");
 console.log("📅 DEPLOYMENT: " + new Date().toISOString());
 console.log("🔧 FIXED: Share calculation using phase pricing + database wallet addresses");
+console.log("🚨 CRITICAL FIX DEPLOYED: $100 payment = 20 shares (not 100 shares)");
+console.log("💰 SHARE CALCULATION: amount ÷ phase_price = shares");
 
 // Bot configuration
 const BOT_TOKEN = "8015476800:AAGMH8HMXRurphYHRQDJdeHLO10ghZVzBt8";
@@ -451,7 +453,12 @@ bot.command('version', async (ctx) => {
 📅 **Deployment Time:** ${new Date().toISOString()}
 🔗 **Bot Link:** https://t.me/aureus_africa_bot
 ✅ **Status:** Running aureus-bot-new.js
-🎯 **Links Should Be:** WITH underscores (_)`;
+🎯 **Links Should Be:** WITH underscores (_)
+
+🚨 **CRITICAL FIX STATUS:**
+💰 Share Calculation: amount ÷ phase_price = shares
+📊 Example: $100 ÷ $5.00 = 20 shares (NOT 100!)
+🔧 Fixed in handleApprovePayment line 2680`;
 
   await ctx.replyWithMarkdown(versionInfo);
 });

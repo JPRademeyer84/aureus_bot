@@ -4967,7 +4967,7 @@ async function handleShareReferral(ctx) {
 🎁 **Special Offer:**
 Mention @${referralCode} during registration and we both benefit!
 
-🚀 **Get Started:** @AureusAfricaBot
+🚀 **Get Started:** https://t.me/aureus_africa_bot
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -6878,8 +6878,18 @@ async function handleContinuePayment(ctx, callbackData) {
       return;
     }
 
-    // Use the same wallet address as in payment creation
-    const walletAddress = payment.receiver_wallet || 'TQRKqJetwkAKjHKjKx2DRRhTYEtqVC7i9s';
+    // Get the wallet address for this network
+    const { data: walletData, error: walletError } = await db.client
+      .from('crypto_wallets')
+      .select('wallet_address')
+      .eq('network', payment.network.toLowerCase())
+      .eq('is_active', true)
+      .single();
+
+    if (walletError || !walletData) {
+      await ctx.replyWithMarkdown('❌ **Wallet configuration error.**\n\nPlease contact support.');
+      return;
+    }
 
     const paymentDate = new Date(payment.created_at);
     const timeAgo = Math.floor((new Date() - paymentDate) / (1000 * 60 * 60));
@@ -6897,7 +6907,7 @@ async function handleContinuePayment(ctx, callbackData) {
 ⏳ **Status:** Waiting for your payment
 
 **🏦 SEND PAYMENT TO:**
-\`${walletAddress}\`
+\`${walletData.wallet_address}\`
 
 **📱 NEXT STEPS:**
 1. Send exactly $${payment.amount} USDT to the address above

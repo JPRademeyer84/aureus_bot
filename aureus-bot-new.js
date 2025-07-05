@@ -295,21 +295,37 @@ Let's get started with your gold mining investment!`;
 // Sponsor Assignment Function
 async function assignSponsor(userId, sponsorUsername) {
   try {
-    console.log(`🤝 Assigning sponsor ${sponsorUsername} to user ${userId}`);
+    console.log(`🤝 [assignSponsor] Starting assignment: ${sponsorUsername} -> User ${userId}`);
 
     // Get sponsor user record
     let sponsor = await db.getUserByUsername(sponsorUsername);
     if (!sponsor) {
-      console.log(`❌ Sponsor ${sponsorUsername} not found, using TTTFOUNDER`);
+      console.log(`❌ [assignSponsor] Sponsor ${sponsorUsername} not found, using TTTFOUNDER`);
       sponsor = await db.getUserByUsername('TTTFOUNDER');
       if (!sponsor) {
-        console.error('❌ TTTFOUNDER fallback sponsor not found!');
+        console.error('❌ [assignSponsor] TTTFOUNDER fallback sponsor not found!');
         return false;
       }
       sponsorUsername = 'TTTFOUNDER';
     }
 
+    console.log(`✅ [assignSponsor] Sponsor found: ${sponsor.username} (ID: ${sponsor.id})`);
+
+    // Check if referral relationship already exists
+    const { data: existingReferral, error: checkError } = await db.client
+      .from('referrals')
+      .select('id')
+      .eq('referred_id', userId)
+      .eq('status', 'active')
+      .single();
+
+    if (existingReferral && !checkError) {
+      console.log(`⚠️ [assignSponsor] User ${userId} already has an active sponsor`);
+      return true; // Consider this a success since they already have a sponsor
+    }
+
     // Create referral relationship
+    console.log(`📝 [assignSponsor] Creating referral relationship...`);
     const { data: referral, error: referralError } = await db.client
       .from('referrals')
       .insert({
@@ -324,15 +340,16 @@ async function assignSponsor(userId, sponsorUsername) {
       .single();
 
     if (referralError) {
-      console.error('Error creating referral relationship:', referralError);
+      console.error('❌ [assignSponsor] Error creating referral relationship:', referralError);
       return false;
     }
 
-    console.log(`✅ Sponsor assigned successfully: ${sponsorUsername} -> User ${userId}`);
+    console.log(`✅ [assignSponsor] Referral created successfully:`, referral);
+    console.log(`✅ [assignSponsor] Sponsor assigned successfully: ${sponsorUsername} -> User ${userId}`);
     return true;
 
   } catch (error) {
-    console.error('Error assigning sponsor:', error);
+    console.error('❌ [assignSponsor] Error assigning sponsor:', error);
     return false;
   }
 }
@@ -1376,6 +1393,8 @@ async function handleSponsorUsernameInput(ctx, text) {
   const user = ctx.from;
 
   try {
+    console.log(`🔍 Processing sponsor username input: "${text}" from user ${user.username}`);
+
     // Clear user state first
     await clearUserState(user.id);
 
@@ -1388,6 +1407,7 @@ async function handleSponsorUsernameInput(ctx, text) {
 
     // Clean the username (remove @ if present)
     const sponsorUsername = text.replace('@', '').trim();
+    console.log(`🧹 Cleaned sponsor username: "${sponsorUsername}"`);
 
     if (!sponsorUsername || sponsorUsername.length < 3) {
       await ctx.reply("❌ Invalid username. Please enter a valid Telegram username (minimum 3 characters).");
@@ -1396,8 +1416,10 @@ async function handleSponsorUsernameInput(ctx, text) {
     }
 
     // Validate sponsor exists
+    console.log(`🔍 Looking up sponsor: ${sponsorUsername}`);
     const sponsor = await db.getUserByUsername(sponsorUsername);
     if (!sponsor) {
+      console.log(`❌ Sponsor ${sponsorUsername} not found in database`);
       const notFoundMessage = `❌ **SPONSOR NOT FOUND**
 
 The username "${sponsorUsername}" was not found in our system.
@@ -1418,14 +1440,25 @@ The username "${sponsorUsername}" was not found in our system.
       return;
     }
 
-    // Get authenticated user
-    const authenticatedUser = await authenticateUser(ctx);
-    if (!authenticatedUser) return;
+    console.log(`✅ Sponsor found: ${sponsor.username} (ID: ${sponsor.id})`);
+
+    // Get the current user (should already exist since they're using the bot)
+    const authenticatedUser = await db.getUserByUsername(user.username);
+    if (!authenticatedUser) {
+      console.error(`❌ Current user ${user.username} not found in database`);
+      await ctx.reply("❌ User authentication error. Please restart the bot with /start");
+      return;
+    }
+
+    console.log(`✅ Current user found: ${authenticatedUser.username} (ID: ${authenticatedUser.id})`);
 
     // Assign sponsor
+    console.log(`🤝 Assigning sponsor ${sponsorUsername} to user ${authenticatedUser.id}`);
     const success = await assignSponsor(authenticatedUser.id, sponsorUsername);
 
     if (success) {
+      console.log(`✅ Sponsor assignment successful for user ${authenticatedUser.id}`);
+
       const successMessage = `✅ **SPONSOR ASSIGNED SUCCESSFULLY**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1444,6 +1477,7 @@ You can now access all platform features and start your gold mining investment j
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
+      console.log(`📤 Sending success message to user ${user.username}`);
       await ctx.replyWithMarkdown(successMessage, {
         reply_markup: {
           inline_keyboard: [
@@ -1453,7 +1487,9 @@ You can now access all platform features and start your gold mining investment j
           ]
         }
       });
+      console.log(`✅ Success message sent successfully to user ${user.username}`);
     } else {
+      console.error(`❌ Sponsor assignment failed for user ${authenticatedUser.id}`);
       await ctx.reply("❌ Error assigning sponsor. Please try again.");
       await promptSponsorAssignment(ctx);
     }

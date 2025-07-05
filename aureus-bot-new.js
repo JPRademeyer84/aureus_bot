@@ -1038,26 +1038,36 @@ bot.on('text', async (ctx) => {
 
 // Photo handler for proof upload
 bot.on('photo', async (ctx) => {
-  const user = ctx.from;
-  const userState = await getUserState(user.id);
+  try {
+    const user = ctx.from;
+    const userState = await getUserState(user.id);
 
-  if (userState && userState.state === 'upload_proof_screenshot') {
-    await handleProofScreenshot(ctx, userState.data);
+    if (userState && userState.state === 'upload_proof_screenshot') {
+      await handleProofScreenshot(ctx, userState.data);
+    }
+  } catch (error) {
+    console.error('Error in photo handler:', error);
+    await ctx.reply('❌ Error processing image. Please try again or contact support.');
   }
 });
 
 // Document handler for proof upload
 bot.on('document', async (ctx) => {
-  const user = ctx.from;
-  const userState = await getUserState(user.id);
+  try {
+    const user = ctx.from;
+    const userState = await getUserState(user.id);
 
-  if (userState && userState.state === 'upload_proof_screenshot') {
-    const document = ctx.message.document;
-    if (document.mime_type && document.mime_type.startsWith('image/')) {
-      await handleProofScreenshot(ctx, userState.data, true);
-    } else {
-      await ctx.reply('📷 Please upload an image file for payment verification.');
+    if (userState && userState.state === 'upload_proof_screenshot') {
+      const document = ctx.message.document;
+      if (document.mime_type && document.mime_type.startsWith('image/')) {
+        await handleProofScreenshot(ctx, userState.data, true);
+      } else {
+        await ctx.reply('📷 Please upload an image file for payment verification.');
+      }
     }
+  } catch (error) {
+    console.error('Error in document handler:', error);
+    await ctx.reply('❌ Error processing document. Please try again or contact support.');
   }
 });
 
@@ -1248,7 +1258,19 @@ async function handleProofScreenshot(ctx, sessionData, isDocument = false) {
     }
 
     // Clear user state
-    await clearUserState(user.id);
+    try {
+      if (typeof clearUserState === 'function') {
+        await clearUserState(user.id);
+      } else {
+        // Fallback if function not available
+        if (global.userStates) {
+          global.userStates.delete(user.id);
+        }
+      }
+    } catch (stateError) {
+      console.error('Error clearing user state:', stateError);
+      // Continue anyway - this is not critical
+    }
 
     const successMessage = `✅ **PAYMENT PROOF UPLOADED SUCCESSFULLY**
 

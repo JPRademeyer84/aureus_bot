@@ -2725,7 +2725,7 @@ async function handleApprovePayment(ctx, callbackData) {
 **Payment ID:** #${paymentId.substring(0, 8)}
 **Amount:** $${updatedPayment.amount} USDT
 **User:** ${updatedPayment.users.full_name || updatedPayment.users.username}
-**Shares Allocated:** ${Math.floor(parseFloat(updatedPayment.amount))}
+**Shares Allocated:** ${sharesAmount}
 
 The user will be notified of the approval and shares have been allocated.`, {
       reply_markup: {

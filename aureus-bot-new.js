@@ -2086,8 +2086,27 @@ async function handleContinuePayment(ctx, callbackData) {
       return;
     }
 
-    // Use the same wallet address as in payment creation
-    const walletAddress = payment.receiver_wallet || 'TQRKqJetwkAKjHKjKx2DRRhTYEtqVC7i9s';
+    // Get wallet address from payment record or database
+    let walletAddress = payment.receiver_wallet;
+
+    if (!walletAddress) {
+      // Fallback: Get from company_wallets table
+      const { data: companyWallet, error: walletError } = await db.client
+        .from('company_wallets')
+        .select('wallet_address')
+        .eq('network', 'TRON')
+        .eq('currency', 'USDT')
+        .eq('is_active', true)
+        .single();
+
+      if (walletError || !companyWallet) {
+        console.error('Error getting company wallet for continue payment:', walletError);
+        await ctx.reply('❌ Error: Company wallet not configured. Please contact support.');
+        return;
+      }
+
+      walletAddress = companyWallet.wallet_address;
+    }
 
     const paymentDate = new Date(payment.created_at);
     const timeAgo = Math.floor((new Date() - paymentDate) / (1000 * 60 * 60));
@@ -2318,6 +2337,21 @@ async function handleConfirmPurchase(ctx, callbackData) {
       telegramUser = newUser;
     }
 
+    // Get company wallet address from database
+    const { data: companyWallet, error: walletError } = await db.client
+      .from('company_wallets')
+      .select('wallet_address')
+      .eq('network', 'TRON')
+      .eq('currency', 'USDT')
+      .eq('is_active', true)
+      .single();
+
+    if (walletError || !companyWallet) {
+      console.error('Error getting company wallet:', walletError);
+      await ctx.reply('❌ Error: Company wallet not configured. Please contact support.');
+      return;
+    }
+
     // Create payment transaction
     const { data: payment, error: paymentError } = await db.client
       .from('crypto_payment_transactions')
@@ -2327,7 +2361,7 @@ async function handleConfirmPurchase(ctx, callbackData) {
         currency: 'USDT',
         network: 'USDT-TRC20',
         sender_wallet: '', // Will be filled when user uploads proof
-        receiver_wallet: 'TQRKqJetwkAKjHKjKx2DRRhTYEtqVC7i9s', // Our USDT wallet
+        receiver_wallet: companyWallet.wallet_address, // From database
         status: 'pending',
         created_at: new Date().toISOString()
       })

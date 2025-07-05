@@ -171,10 +171,10 @@ function createAdminKeyboard() {
 }
 
 // Authentication functions
-async function authenticateUser(ctx) {
+async function authenticateUser(ctx, sponsorUsername = null) {
   const telegramId = ctx.from.id;
   const username = ctx.from.username;
-  
+
   if (!username) {
     await ctx.reply("❌ Please set a Telegram username to use this bot.");
     return null;
@@ -183,8 +183,10 @@ async function authenticateUser(ctx) {
   try {
     // Get or create main user record by username first
     let user = await db.getUserByUsername(username);
+    let isNewUser = false;
 
     if (!user) {
+      isNewUser = true;
       // Create new user record (users table doesn't have telegram_id)
       user = await db.createUser({
         username: username,
@@ -219,11 +221,240 @@ async function authenticateUser(ctx) {
       });
     }
 
+    // Handle sponsor assignment for new users
+    if (isNewUser && sponsorUsername) {
+      await assignSponsor(user.id, sponsorUsername);
+    }
+
     return user;
   } catch (error) {
     console.error('Authentication error:', error);
     await ctx.reply("❌ Authentication failed. Please try again.");
     return null;
+  }
+}
+
+// Referral Registration Handler
+async function handleReferralRegistration(ctx, sponsorUsername) {
+  console.log(`🔗 Processing referral registration with sponsor: ${sponsorUsername}`);
+
+  try {
+    // Validate sponsor exists
+    const sponsor = await db.getUserByUsername(sponsorUsername);
+    if (!sponsor) {
+      console.log(`❌ Sponsor not found: ${sponsorUsername}, using TTTFOUNDER as fallback`);
+      sponsorUsername = 'TTTFOUNDER';
+    }
+
+    // Authenticate user with sponsor assignment
+    const user = await authenticateUser(ctx, sponsorUsername);
+    if (!user) return;
+
+    // Show welcome message with sponsor confirmation
+    const welcomeMessage = `🎉 **WELCOME TO AUREUS ALLIANCE HOLDINGS!**
+
+✅ **Registration Successful**
+👤 **Your Sponsor:** ${sponsorUsername}
+🤝 **Referral Bonus:** You're now part of our referral network!
+
+**🎯 NEXT STEPS:**
+• Explore our gold mining investment opportunities
+• Review company presentation and mining operations
+• Start your investment journey with confidence
+
+**💎 Your sponsor will earn commissions when you invest:**
+• 15% USDT commission
+• 15% additional shares commission
+
+Let's get started with your gold mining investment!`;
+
+    await ctx.replyWithMarkdown(welcomeMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
+          [{ text: "📋 Company Presentation", callback_data: "menu_presentation" }],
+          [{ text: "💼 My Portfolio", callback_data: "menu_portfolio" }],
+          [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Referral registration error:', error);
+    await ctx.reply("❌ Error processing referral registration. Please try again.");
+    await showMainMenu(ctx);
+  }
+}
+
+// Sponsor Assignment Function
+async function assignSponsor(userId, sponsorUsername) {
+  try {
+    console.log(`🤝 Assigning sponsor ${sponsorUsername} to user ${userId}`);
+
+    // Get sponsor user record
+    const sponsor = await db.getUserByUsername(sponsorUsername);
+    if (!sponsor) {
+      console.log(`❌ Sponsor ${sponsorUsername} not found, using TTTFOUNDER`);
+      const fallbackSponsor = await db.getUserByUsername('TTTFOUNDER');
+      if (!fallbackSponsor) {
+        console.error('❌ TTTFOUNDER fallback sponsor not found!');
+        return false;
+      }
+      sponsorUsername = 'TTTFOUNDER';
+    }
+
+    // Create referral relationship
+    const { data: referral, error: referralError } = await db.client
+      .from('referrals')
+      .insert({
+        referrer_id: sponsor.id,
+        referred_id: userId,
+        referral_code: `${sponsorUsername}_${userId}_${Date.now()}`,
+        commission_rate: 15.00,
+        status: 'active',
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (referralError) {
+      console.error('Error creating referral relationship:', referralError);
+      return false;
+    }
+
+    console.log(`✅ Sponsor assigned successfully: ${sponsorUsername} -> User ${userId}`);
+    return true;
+
+  } catch (error) {
+    console.error('Error assigning sponsor:', error);
+    return false;
+  }
+}
+
+// Check if user has a sponsor
+async function checkUserHasSponsor(userId) {
+  try {
+    const { data: referral, error } = await db.client
+      .from('referrals')
+      .select('id')
+      .eq('referred_id', userId)
+      .eq('status', 'active')
+      .single();
+
+    return !error && referral;
+  } catch (error) {
+    console.error('Error checking sponsor:', error);
+    return false;
+  }
+}
+
+// Prompt user to assign sponsor
+async function promptSponsorAssignment(ctx) {
+  const sponsorMessage = `🤝 **SPONSOR ASSIGNMENT REQUIRED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⚠️ MANDATORY REFERRAL SYSTEM**
+
+To proceed with Aureus Alliance Holdings, you need a sponsor. This ensures proper commission tracking and support throughout your investment journey.
+
+**🎯 YOUR OPTIONS:**
+
+**1️⃣ ENTER SPONSOR USERNAME**
+If someone referred you, enter their username below.
+
+**2️⃣ NO SPONSOR AVAILABLE**
+We'll assign TTTFOUNDER as your default sponsor.
+
+**💡 WHY SPONSORS MATTER:**
+• Personalized investment guidance
+• Commission structure for referrers
+• Community support network
+• Proper tracking and accountability
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Please choose an option below:**`;
+
+  await ctx.replyWithMarkdown(sponsorMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "✍️ Enter Sponsor Username", callback_data: "enter_sponsor_manual" }],
+        [{ text: "🤝 Use Default Sponsor (TTTFOUNDER)", callback_data: "assign_default_sponsor" }],
+        [{ text: "ℹ️ Learn About Referral System", callback_data: "menu_referrals" }]
+      ]
+    }
+  });
+}
+
+// Handle manual sponsor entry
+async function handleEnterSponsorManual(ctx) {
+  const user = ctx.from;
+
+  // Set user state for sponsor entry
+  await setUserState(user.id, {
+    state: 'awaiting_sponsor_username',
+    data: { timestamp: Date.now() }
+  });
+
+  const instructionMessage = `✍️ **ENTER SPONSOR USERNAME**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Please type the Telegram username of your sponsor:**
+
+**📝 FORMAT:** Just the username (without @)
+**📝 EXAMPLE:** If sponsor is @JohnDoe, type: JohnDoe
+
+**⏰ You have 5 minutes to enter the username.**
+
+**🔙 To cancel, type:** cancel`;
+
+  await ctx.replyWithMarkdown(instructionMessage);
+}
+
+// Handle default sponsor assignment
+async function handleAssignDefaultSponsor(ctx) {
+  const user = await authenticateUser(ctx);
+  if (!user) return;
+
+  try {
+    const success = await assignSponsor(user.id, 'TTTFOUNDER');
+
+    if (success) {
+      const successMessage = `✅ **SPONSOR ASSIGNED SUCCESSFULLY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🤝 Your Sponsor:** TTTFOUNDER
+**📅 Assigned:** ${new Date().toLocaleDateString()}
+**✅ Status:** Active
+
+**🎯 NEXT STEPS:**
+You can now access all platform features and start your gold mining investment journey!
+
+**💎 Your sponsor will provide:**
+• Investment guidance and support
+• Commission tracking for referrals
+• Access to exclusive updates
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+      await ctx.replyWithMarkdown(successMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
+            [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
+            [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+          ]
+        }
+      });
+    } else {
+      await ctx.reply("❌ Error assigning sponsor. Please try again.");
+    }
+  } catch (error) {
+    console.error('Error assigning default sponsor:', error);
+    await ctx.reply("❌ Error assigning sponsor. Please try again.");
   }
 }
 
@@ -440,7 +671,15 @@ Regular community meetings and transparent communication about our operations.
 // Bot commands
 bot.start(async (ctx) => {
   console.log(`👤 User started bot: ${ctx.from.first_name} (@${ctx.from.username})`);
-  await showMainMenu(ctx);
+
+  // Check for referral parameter in start command
+  const startPayload = ctx.startPayload;
+  if (startPayload) {
+    console.log(`🔗 Referral link detected: ${startPayload}`);
+    await handleReferralRegistration(ctx, startPayload);
+  } else {
+    await showMainMenu(ctx);
+  }
 });
 
 bot.command("menu", async (ctx) => {
@@ -472,6 +711,15 @@ bot.on('callback_query', async (ctx) => {
   if (!user && !['main_menu', 'accept_terms'].includes(callbackData)) {
     await ctx.answerCbQuery("❌ Authentication required");
     return;
+  }
+
+  // Check if user has a sponsor (except for certain actions)
+  if (user && !['main_menu', 'accept_terms', 'menu_referrals', 'assign_sponsor', 'no_sponsor_choice'].includes(callbackData)) {
+    const hasSponsor = await checkUserHasSponsor(user.id);
+    if (!hasSponsor) {
+      await promptSponsorAssignment(ctx);
+      return;
+    }
   }
 
   console.log(`🔍 Callback: ${callbackData} from ${ctx.from.username}`);
@@ -638,8 +886,14 @@ bot.on('callback_query', async (ctx) => {
           await handleViewReferrals(ctx);
         } else if (callbackData === 'withdraw_commissions') {
           await handleWithdrawCommissions(ctx);
+        } else if (callbackData.startsWith('copy_referral_link_')) {
+          await handleCopyReferralLink(ctx, callbackData);
         } else if (callbackData.startsWith('copy_referral_')) {
           await handleCopyReferral(ctx, callbackData);
+        } else if (callbackData === 'enter_sponsor_manual') {
+          await handleEnterSponsorManual(ctx);
+        } else if (callbackData === 'assign_default_sponsor') {
+          await handleAssignDefaultSponsor(ctx);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");
         }
@@ -1076,8 +1330,104 @@ bot.on('text', async (ctx) => {
     await handleWalletAddressInput(ctx, text, userState.data);
   } else if (userState && userState.state === 'upload_proof_hash') {
     await handleTransactionHashInput(ctx, text, userState.data);
+  } else if (userState && userState.state === 'awaiting_sponsor_username') {
+    await handleSponsorUsernameInput(ctx, text);
   }
 });
+
+// Handle sponsor username input
+async function handleSponsorUsernameInput(ctx, text) {
+  const user = ctx.from;
+
+  try {
+    // Clear user state first
+    await clearUserState(user.id);
+
+    // Check for cancel
+    if (text.toLowerCase() === 'cancel') {
+      await ctx.reply("❌ Sponsor assignment cancelled.");
+      await promptSponsorAssignment(ctx);
+      return;
+    }
+
+    // Clean the username (remove @ if present)
+    const sponsorUsername = text.replace('@', '').trim();
+
+    if (!sponsorUsername || sponsorUsername.length < 3) {
+      await ctx.reply("❌ Invalid username. Please enter a valid Telegram username (minimum 3 characters).");
+      await handleEnterSponsorManual(ctx);
+      return;
+    }
+
+    // Validate sponsor exists
+    const sponsor = await db.getUserByUsername(sponsorUsername);
+    if (!sponsor) {
+      const notFoundMessage = `❌ **SPONSOR NOT FOUND**
+
+The username "${sponsorUsername}" was not found in our system.
+
+**🎯 OPTIONS:**
+• Check the spelling and try again
+• Ask your sponsor to register first
+• Use default sponsor (TTTFOUNDER)`;
+
+      await ctx.replyWithMarkdown(notFoundMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "✍️ Try Again", callback_data: "enter_sponsor_manual" }],
+            [{ text: "🤝 Use Default Sponsor", callback_data: "assign_default_sponsor" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Get authenticated user
+    const authenticatedUser = await authenticateUser(ctx);
+    if (!authenticatedUser) return;
+
+    // Assign sponsor
+    const success = await assignSponsor(authenticatedUser.id, sponsorUsername);
+
+    if (success) {
+      const successMessage = `✅ **SPONSOR ASSIGNED SUCCESSFULLY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🤝 Your Sponsor:** ${sponsor.full_name || sponsorUsername} (@${sponsorUsername})
+**📅 Assigned:** ${new Date().toLocaleDateString()}
+**✅ Status:** Active
+
+**🎯 NEXT STEPS:**
+You can now access all platform features and start your gold mining investment journey!
+
+**💎 Your sponsor will provide:**
+• Investment guidance and support
+• Commission tracking for referrals
+• Access to exclusive updates
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+      await ctx.replyWithMarkdown(successMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
+            [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
+            [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+          ]
+        }
+      });
+    } else {
+      await ctx.reply("❌ Error assigning sponsor. Please try again.");
+      await promptSponsorAssignment(ctx);
+    }
+
+  } catch (error) {
+    console.error('Error handling sponsor username input:', error);
+    await ctx.reply("❌ Error processing sponsor assignment. Please try again.");
+    await promptSponsorAssignment(ctx);
+  }
+}
 
 // Photo handler for proof upload
 bot.on('photo', async (ctx) => {
@@ -1452,6 +1802,28 @@ async function handlePortfolio(ctx) {
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
+    // Get user's sponsor information
+    const { data: referralInfo, error: referralError } = await db.client
+      .from('referrals')
+      .select(`
+        referrer_id,
+        created_at,
+        users!referrals_referrer_id_fkey (
+          username,
+          full_name
+        )
+      `)
+      .eq('referred_id', userId)
+      .eq('status', 'active')
+      .single();
+
+    let sponsorInfo = 'Not assigned';
+    if (referralInfo && !referralError) {
+      const sponsorName = referralInfo.users?.full_name || referralInfo.users?.username || 'Unknown';
+      const sponsorUsername = referralInfo.users?.username || 'Unknown';
+      sponsorInfo = `${sponsorName} (@${sponsorUsername})`;
+    }
+
     const totalShares = purchases?.reduce((sum, purchase) => sum + (purchase.shares_purchased || 0), 0) || 0;
     const totalInvested = purchases?.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0) || 0;
     const approvedPurchases = purchases?.filter(p => p.status === 'active') || []; // Fixed: 'active' not 'approved'
@@ -1465,6 +1837,10 @@ async function handlePortfolio(ctx) {
 • **Total Shares:** ${totalShares.toLocaleString()}
 • **Total Invested:** ${formatCurrency(totalInvested)}
 • **Approved Purchases:** ${approvedPurchases.length}
+
+**🤝 REFERRAL INFORMATION:**
+• **Your Sponsor:** ${sponsorInfo}
+• **Referral Status:** ${referralInfo ? 'Active' : 'Not assigned'}
 
 **📈 INVESTMENT SUMMARY:**
 ${purchases && purchases.length > 0
@@ -2870,6 +3246,7 @@ async function handleShareReferral(ctx) {
 
     const referralUsername = telegramUser.username || user.username || user.first_name;
     const botLink = 'https://t.me/aureus_africa_bot';
+    const referralLink = `https://t.me/aureus_africa_bot?start=${referralUsername}`;
 
     // MOTIVATING & COMPELLING investment opportunity message
     const shareMessage = `🌟 **LIFE-CHANGING OPPORTUNITY: OWN REAL GOLD MINES!** 🌟
@@ -2917,10 +3294,10 @@ async function handleShareReferral(ctx) {
 
 🚨 **ACT NOW - PHASE 1 PRICING ENDS SOON!**
 
-👆 **CLICK TO START BUILDING WEALTH:**
-https://t.me/aureus_africa_bot
+👆 **CLICK YOUR PERSONAL REFERRAL LINK:**
+${referralLink}
 
-🎁 **SPECIAL BONUS:** Use referral code **${referralUsername}** for priority processing!
+🎁 **AUTOMATIC SPONSOR ASSIGNMENT:** Your referrals will be automatically linked to you!
 
 💡 **INVESTMENT RANGE:** Start with just $25 or go big with $50,000+
 
@@ -2937,8 +3314,8 @@ https://t.me/aureus_africa_bot
     await ctx.replyWithMarkdown(shareMessage, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "📤 Share Investment Link", url: `https://t.me/share/url?url=${encodeURIComponent('https://t.me/aureus_africa_bot')}&text=${encodeURIComponent('🔥 GOLD MINING OPPORTUNITY! Own real South African gold mines. Use referral: ' + referralUsername)}` }],
-          [{ text: "📋 Copy Referral Username", callback_data: `copy_referral_${referralUsername}` }],
+          [{ text: "📤 Share Referral Link", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('🔥 GOLD MINING OPPORTUNITY! Join Aureus Alliance Holdings and own real South African gold mines!')}` }],
+          [{ text: "📋 Copy Referral Link", callback_data: `copy_referral_link_${referralUsername}` }],
           [{ text: "👥 Back to Referral Dashboard", callback_data: "menu_referrals" }],
           [{ text: "🔙 Back to Main Menu", callback_data: "main_menu" }]
         ]
@@ -3176,6 +3553,42 @@ We'll notify all users when the withdrawal system goes live!
         [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
         [{ text: "📤 Share More Referrals", callback_data: "share_referral" }],
         [{ text: "🔙 Back to Referral Dashboard", callback_data: "menu_referrals" }]
+      ]
+    }
+  });
+}
+
+async function handleCopyReferralLink(ctx, callbackData) {
+  const referralUsername = callbackData.replace('copy_referral_link_', '');
+  const referralLink = `https://t.me/aureus_africa_bot?start=${referralUsername}`;
+
+  await ctx.answerCbQuery(`📋 Referral link copied!`);
+
+  await ctx.replyWithMarkdown(`📋 **REFERRAL LINK COPIED**
+
+**Your Personal Referral Link:**
+\`${referralLink}\`
+
+**🎯 HOW IT WORKS:**
+• Share this link with potential investors
+• When they click it, you're automatically assigned as their sponsor
+• You earn 15% USDT + 15% shares commission on their investments
+• No manual referral code entry needed!
+
+**🚀 QUICK SHARING MESSAGES:**
+
+**💎 For WhatsApp/SMS:**
+"🔥 GOLD MINING OPPORTUNITY! Join me in owning real South African gold mines. Click: ${referralLink}"
+
+**📱 For Social Media:**
+"💰 Building wealth through gold mining! Join Aureus Alliance Holdings: ${referralLink} #GoldInvestment #WealthBuilding"
+
+**📧 For Email:**
+"I wanted to share an exciting gold mining investment opportunity with you. Aureus Alliance Holdings offers shares in real South African gold operations. Check it out: ${referralLink}"`, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📤 Share on Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('🔥 Join me in owning real South African gold mines!')}` }],
+        [{ text: "👥 Back to Referral Dashboard", callback_data: "menu_referrals" }]
       ]
     }
   });

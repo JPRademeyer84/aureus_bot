@@ -4,6 +4,8 @@ const { db } = require('./src/database/supabase-client');
 require("dotenv").config();
 
 console.log("🚀 Starting Aureus Alliance Holdings Telegram Bot...");
+console.log("🔗 VERSION CHECK: Bot links are https://t.me/aureus_africa_bot (with underscores)");
+console.log("📅 DEPLOYMENT: " + new Date().toISOString());
 
 // Bot configuration
 const BOT_TOKEN = "8015476800:AAGMH8HMXRurphYHRQDJdeHLO10ghZVzBt8";
@@ -437,6 +439,18 @@ bot.start(async (ctx) => {
 
 bot.command("menu", async (ctx) => {
   await showMainMenu(ctx);
+});
+
+// Version check command (temporary for debugging)
+bot.command('version', async (ctx) => {
+  const versionInfo = `🔍 **BOT VERSION CHECK**
+
+📅 **Deployment Time:** ${new Date().toISOString()}
+🔗 **Bot Link:** https://t.me/aureus_africa_bot
+✅ **Status:** Running aureus-bot-new.js
+🎯 **Links Should Be:** WITH underscores (_)`;
+
+  await ctx.replyWithMarkdown(versionInfo);
 });
 
 // Callback query handler

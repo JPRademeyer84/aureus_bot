@@ -177,32 +177,34 @@ async function authenticateUser(ctx) {
   }
 
   try {
-    // Get or create telegram user record
+    // Get or create main user record by username first
+    let user = await db.getUserByUsername(username);
+
+    if (!user) {
+      // Create new user record (users table doesn't have telegram_id)
+      user = await db.createUser({
+        username: username,
+        email: `${username}@telegram.local`, // Dummy email since it's required
+        password_hash: 'telegram_auth', // Dummy password since it's required
+        full_name: `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim()
+      });
+
+      if (!user) {
+        throw new Error('Failed to create user record');
+      }
+    }
+
+    // Get or create telegram user record linked to main user
     let telegramUser = await db.getTelegramUser(telegramId);
-    
+
     if (!telegramUser) {
-      // Create new telegram user record
+      // Create new telegram user record linked to main user
       telegramUser = await db.createTelegramUser(telegramId, {
+        user_id: user.id, // Link to main user
         username: username,
         first_name: ctx.from.first_name,
         last_name: ctx.from.last_name
       });
-    }
-
-    // Get or create main user record by username
-    let user = await db.getUserByUsername(username);
-    
-    if (!user) {
-      // Create new user record
-      user = await db.createUser({
-        username: username,
-        full_name: `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim(),
-        telegram_id: telegramId
-      });
-      
-      if (!user) {
-        throw new Error('Failed to create user record');
-      }
     }
 
     // Link telegram user to main user if not already linked
@@ -2624,13 +2626,27 @@ async function handleApprovePayment(ctx, callbackData) {
     console.log('💰 Creating share purchase record for approved payment...');
 
     try {
-      // Calculate shares based on amount (1 share per $1 for now)
+      // Get current phase to calculate shares correctly
+      const { data: currentPhase, error: phaseError } = await db.client
+        .from('investment_phases')
+        .select('*')
+        .eq('is_active', true)
+        .single();
+
+      if (phaseError || !currentPhase) {
+        console.error('Error getting current phase:', phaseError);
+        await ctx.reply('❌ Error: No active phase found. Cannot approve payment.');
+        return;
+      }
+
+      // Calculate shares based on current phase price
       const amount = parseFloat(updatedPayment.amount);
-      const sharesAmount = Math.floor(amount); // 1 share per dollar
+      const sharePrice = parseFloat(currentPhase.price_per_share);
+      const sharesAmount = Math.floor(amount / sharePrice); // Correct calculation!
 
       const investmentData = {
         user_id: updatedPayment.user_id,
-        package_name: 'Custom Amount Purchase',
+        package_name: `${currentPhase.phase_name} Purchase`,
         total_amount: amount,
         shares_purchased: sharesAmount,
         status: 'active',

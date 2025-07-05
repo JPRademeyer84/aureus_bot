@@ -396,6 +396,85 @@ async function checkUserHasSponsor(userId) {
   }
 }
 
+// Check if user has accepted terms
+async function checkTermsAcceptance(userId) {
+  try {
+    console.log(`🔍 [checkTermsAcceptance] Checking terms for user ${userId}`);
+    const { data: termsRecord, error } = await db.client
+      .from('terms_acceptance')
+      .select('id, accepted_at')
+      .eq('user_id', userId)
+      .eq('terms_type', 'general_terms')
+      .single();
+
+    const hasAccepted = !error && termsRecord;
+    console.log(`📋 [checkTermsAcceptance] User ${userId} terms status: ${hasAccepted ? 'ACCEPTED' : 'NOT ACCEPTED'}`);
+    return hasAccepted;
+  } catch (error) {
+    console.error('❌ Error checking terms acceptance:', error);
+    return false;
+  }
+}
+
+// Show Terms and Conditions
+async function showTermsAndConditions(ctx, referralPayload = null) {
+  console.log(`📋 [showTermsAndConditions] Displaying terms to user ${ctx.from.username}`);
+
+  const termsMessage = `📋 **TERMS AND CONDITIONS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🏆 AUREUS ALLIANCE HOLDINGS**
+*Premium Gold Mining Investment Platform*
+
+**📜 TERMS OF SERVICE:**
+
+**1. INVESTMENT NATURE**
+• Gold mining shares represent ownership in physical mining operations
+• Returns depend on actual gold production and market conditions
+• No guaranteed returns or investment promises
+
+**2. RISK DISCLOSURE**
+• Mining operations involve inherent risks
+• Share values may fluctuate based on operational performance
+• Past performance does not guarantee future results
+
+**3. COMMISSION STRUCTURE**
+• Referral commissions: 15% USDT + 15% shares
+• Commissions paid on successful share purchases
+• Withdrawal subject to admin approval
+
+**4. PLATFORM USAGE**
+• Users must provide accurate information
+• Prohibited: fraud, manipulation, unauthorized access
+• Platform reserves right to suspend accounts for violations
+
+**5. DATA PRIVACY**
+• Personal information protected per privacy policy
+• Transaction data stored securely
+• No sharing with third parties without consent
+
+**6. DISPUTE RESOLUTION**
+• Good faith resolution attempts required
+• Binding arbitration for unresolved disputes
+• Governing law: [Jurisdiction to be specified]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⚠️ MANDATORY ACCEPTANCE REQUIRED**
+You must accept these terms to use the platform.`;
+
+  const keyboard = [
+    [{ text: "✅ I Accept Terms & Conditions", callback_data: `accept_terms_${referralPayload || 'direct'}` }],
+    [{ text: "❌ I Decline", callback_data: "decline_terms" }],
+    [{ text: "📄 View Privacy Policy", callback_data: "view_privacy_policy" }]
+  ];
+
+  await ctx.replyWithMarkdown(termsMessage, {
+    reply_markup: { inline_keyboard: keyboard }
+  });
+}
+
 // Prompt user to assign sponsor
 async function promptSponsorAssignment(ctx) {
   const sponsorMessage = `🤝 **SPONSOR ASSIGNMENT REQUIRED**
@@ -743,13 +822,26 @@ bot.start(async (ctx) => {
 
   // Check for referral parameter in start command
   const startPayload = ctx.startPayload;
-  if (startPayload) {
-    console.log(`🔗 [START] Referral link detected with payload: ${startPayload}`);
-    console.log(`🔗 [START] Processing referral registration...`);
-    await handleReferralRegistration(ctx, startPayload);
+
+  // First, check if user has accepted terms
+  const user = await authenticateUser(ctx, startPayload);
+  if (!user) return;
+
+  console.log(`🔍 [START] Checking terms acceptance for user ${user.id}`);
+  const hasAcceptedTerms = await checkTermsAcceptance(user.id);
+
+  if (!hasAcceptedTerms) {
+    console.log(`📋 [START] User ${user.id} has not accepted terms - showing terms`);
+    await showTermsAndConditions(ctx, startPayload);
   } else {
-    console.log(`🏠 [START] No referral payload, showing main menu`);
-    await showMainMenu(ctx);
+    console.log(`✅ [START] User ${user.id} has accepted terms - proceeding`);
+    if (startPayload) {
+      console.log(`🔗 [START] Referral link detected with payload: ${startPayload}`);
+      await handleReferralRegistration(ctx, startPayload);
+    } else {
+      console.log(`🏠 [START] No referral payload, showing main menu`);
+      await showMainMenu(ctx);
+    }
   }
 });
 
@@ -808,6 +900,8 @@ bot.on('callback_query', async (ctx) => {
       case 'accept_terms':
         await handleTermsAcceptance(ctx);
         break;
+
+
 
       case 'menu_presentation':
         await handleCompanyPresentation(ctx);
@@ -961,6 +1055,12 @@ bot.on('callback_query', async (ctx) => {
           await handleViewReferrals(ctx);
         } else if (callbackData === 'withdraw_commissions') {
           await handleWithdrawCommissions(ctx);
+        } else if (callbackData === 'withdraw_usdt_commission') {
+          await handleWithdrawUSDTCommission(ctx);
+        } else if (callbackData === 'commission_to_shares') {
+          await handleCommissionToShares(ctx);
+        } else if (callbackData === 'withdrawal_history') {
+          await handleWithdrawalHistory(ctx);
         } else if (callbackData.startsWith('copy_referral_link_')) {
           await handleCopyReferralLink(ctx, callbackData);
         } else if (callbackData.startsWith('copy_referral_')) {
@@ -973,6 +1073,12 @@ bot.on('callback_query', async (ctx) => {
           console.log('🔧 Handling assign_default_sponsor callback');
           await ctx.answerCbQuery("Assigning default sponsor...");
           await handleAssignDefaultSponsor(ctx);
+        } else if (callbackData.startsWith('accept_terms_')) {
+          await handleTermsAcceptance(ctx, callbackData);
+        } else if (callbackData === 'decline_terms') {
+          await handleTermsDecline(ctx);
+        } else if (callbackData === 'view_privacy_policy') {
+          await showPrivacyPolicy(ctx);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");
         }
@@ -1017,6 +1123,163 @@ async function handleSupportCenter(ctx) {
         [{ text: "📧 Email Support", url: "mailto:support@aureusalliance.com" }],
         [{ text: "🌐 Visit Website", url: "https://aureusalliance.com" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+// TERMS AND CONDITIONS HANDLERS
+
+// Handle Terms Acceptance
+async function handleTermsAcceptance(ctx, callbackData = null) {
+  const user = ctx.from;
+  console.log(`✅ [handleTermsAcceptance] User ${user.username} accepting terms`);
+
+  try {
+    // Get user ID from database
+    const authenticatedUser = await db.getUserByUsername(user.username);
+    if (!authenticatedUser) {
+      await ctx.answerCbQuery("❌ Authentication error");
+      return;
+    }
+
+    // Record terms acceptance
+    const { error: termsError } = await db.client
+      .from('terms_acceptance')
+      .insert({
+        user_id: authenticatedUser.id,
+        terms_type: 'general_terms',
+        version: '1.0',
+        accepted_at: new Date().toISOString()
+      });
+
+    if (termsError) {
+      console.error('❌ Error recording terms acceptance:', termsError);
+      await ctx.answerCbQuery("❌ Error recording acceptance");
+      return;
+    }
+
+    console.log(`✅ Terms accepted successfully for user ${authenticatedUser.id}`);
+    await ctx.answerCbQuery("✅ Terms accepted successfully!");
+
+    // Extract referral payload if present
+    const referralPayload = callbackData && callbackData.startsWith('accept_terms_')
+      ? callbackData.replace('accept_terms_', '')
+      : null;
+
+    // Proceed with registration flow
+    if (referralPayload && referralPayload !== 'direct') {
+      console.log(`🔗 Processing referral registration with sponsor: ${referralPayload}`);
+      await handleReferralRegistration(ctx, referralPayload);
+    } else {
+      console.log(`🏠 Showing main menu after terms acceptance`);
+      await showMainMenu(ctx);
+    }
+
+  } catch (error) {
+    console.error('❌ Error handling terms acceptance:', error);
+    await ctx.answerCbQuery("❌ Error processing acceptance");
+  }
+}
+
+// Handle Terms Decline
+async function handleTermsDecline(ctx) {
+  console.log(`❌ [handleTermsDecline] User ${ctx.from.username} declined terms`);
+
+  await ctx.answerCbQuery("Terms declined");
+
+  const declineMessage = `❌ **TERMS DECLINED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⚠️ ACCESS RESTRICTED**
+
+You have declined to accept our Terms and Conditions.
+
+**📋 IMPORTANT:**
+• Terms acceptance is mandatory to use this platform
+• You cannot access any features without accepting terms
+• Your data will not be stored or processed
+
+**🔄 TO CONTINUE:**
+• Restart the bot with /start
+• Review and accept the terms
+• Begin your gold mining investment journey
+
+**📞 QUESTIONS?**
+Contact @TTTFOUNDER for clarification about our terms.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(declineMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔄 Restart Bot", callback_data: "restart_bot" }],
+        [{ text: "📧 Contact Support", url: "https://t.me/TTTFOUNDER" }]
+      ]
+    }
+  });
+}
+
+// Show Privacy Policy
+async function showPrivacyPolicy(ctx) {
+  const privacyMessage = `🔒 **PRIVACY POLICY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🏆 AUREUS ALLIANCE HOLDINGS**
+*Data Protection & Privacy*
+
+**📊 DATA COLLECTION:**
+• Username and contact information
+• Transaction and payment data
+• Investment portfolio information
+• Communication records
+
+**🔐 DATA USAGE:**
+• Platform operation and maintenance
+• Investment processing and tracking
+• Customer support and communication
+• Legal compliance and reporting
+
+**🛡️ DATA PROTECTION:**
+• Encrypted data transmission
+• Secure database storage
+• Limited access controls
+• Regular security audits
+
+**📤 DATA SHARING:**
+• No sharing with third parties
+• Exception: Legal requirements only
+• Anonymous analytics may be used
+• User consent required for marketing
+
+**🗑️ DATA RETENTION:**
+• Active accounts: Indefinite storage
+• Inactive accounts: 7 years maximum
+• Deletion upon written request
+• Legal requirements may override
+
+**👤 YOUR RIGHTS:**
+• Access your personal data
+• Request data correction
+• Request data deletion
+• Withdraw consent anytime
+
+**📞 PRIVACY CONTACT:**
+• Email: privacy@aureusalliance.com
+• Telegram: @TTTFOUNDER
+• Response: 30 days maximum
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Last Updated:** January 2025`;
+
+  await ctx.replyWithMarkdown(privacyMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔙 Back to Terms", callback_data: "show_terms" }],
+        [{ text: "✅ Accept All Terms", callback_data: "accept_terms_direct" }]
       ]
     }
   });
@@ -1421,6 +1684,12 @@ bot.on('text', async (ctx) => {
   } else if (userState && userState.state === 'awaiting_sponsor_username') {
     console.log(`👥 [TEXT HANDLER] Processing sponsor username input`);
     await handleSponsorUsernameInput(ctx, text);
+  } else if (userState && userState.state === 'awaiting_withdrawal_amount') {
+    console.log(`💸 [TEXT HANDLER] Processing withdrawal amount input`);
+    await handleWithdrawalAmountInput(ctx, text, userState.data);
+  } else if (userState && userState.state === 'awaiting_withdrawal_wallet') {
+    console.log(`💳 [TEXT HANDLER] Processing withdrawal wallet address input`);
+    await handleWithdrawalWalletInput(ctx, text, userState.data);
   } else {
     console.log(`❓ [TEXT HANDLER] No matching state handler for: ${userState?.state || 'null'}`);
   }
@@ -1806,6 +2075,203 @@ async function handleProofScreenshot(ctx, sessionData, isDocument = false) {
   } catch (error) {
     console.error('Error handling proof screenshot:', error);
     await ctx.reply('❌ Error uploading screenshot. Please try again.');
+  }
+}
+
+// WITHDRAWAL INPUT HANDLERS
+
+// Handle withdrawal amount input
+async function handleWithdrawalAmountInput(ctx, text, sessionData) {
+  const user = ctx.from;
+  const { availableBalance, withdrawalType } = sessionData;
+
+  try {
+    // Clear user state first
+    await clearUserState(user.id);
+
+    // Check for cancel
+    if (text.toLowerCase() === 'cancel') {
+      await ctx.reply("❌ Withdrawal cancelled.");
+      await handleViewCommission(ctx);
+      return;
+    }
+
+    // Parse and validate amount
+    const amount = parseFloat(text.replace(/[^0-9.]/g, ''));
+
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply("❌ Invalid amount. Please enter a valid number (e.g., 25.50)");
+      await handleWithdrawUSDTCommission(ctx);
+      return;
+    }
+
+    if (amount < 10) {
+      await ctx.reply("❌ Minimum withdrawal amount is $10.00 USDT");
+      await handleWithdrawUSDTCommission(ctx);
+      return;
+    }
+
+    if (amount > availableBalance) {
+      await ctx.reply(`❌ Insufficient balance. Available: $${availableBalance.toFixed(2)} USDT`);
+      await handleWithdrawUSDTCommission(ctx);
+      return;
+    }
+
+    if (amount > 1000) {
+      await ctx.reply("❌ Maximum daily withdrawal is $1,000.00 USDT");
+      await handleWithdrawUSDTCommission(ctx);
+      return;
+    }
+
+    // Set state for wallet address input
+    await setUserState(user.id, 'awaiting_withdrawal_wallet', {
+      amount,
+      withdrawalType,
+      availableBalance
+    });
+
+    const walletMessage = `💳 **WALLET ADDRESS REQUIRED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 Withdrawal Amount:** $${amount.toFixed(2)} USDT
+**💸 Processing Fee:** $2.00 USDT
+**📤 You'll Receive:** $${(amount - 2).toFixed(2)} USDT
+
+**🔗 NETWORK:** TRC-20 (Tron)
+
+**📝 Please enter your USDT wallet address:**
+
+**⚠️ IMPORTANT:**
+• Only TRC-20 (Tron) network supported
+• Double-check your wallet address
+• Incorrect addresses may result in lost funds
+• We cannot recover funds sent to wrong addresses
+
+**💡 Example format:** TXYZabc123def456ghi789...`;
+
+    await ctx.replyWithMarkdown(walletMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "❌ Cancel Withdrawal", callback_data: "view_commission" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling withdrawal amount:', error);
+    await ctx.reply('❌ Error processing withdrawal amount. Please try again.');
+  }
+}
+
+// Handle withdrawal wallet address input
+async function handleWithdrawalWalletInput(ctx, text, sessionData) {
+  const user = ctx.from;
+  const { amount, withdrawalType } = sessionData;
+
+  try {
+    // Clear user state first
+    await clearUserState(user.id);
+
+    // Check for cancel
+    if (text.toLowerCase() === 'cancel') {
+      await ctx.reply("❌ Withdrawal cancelled.");
+      await handleViewCommission(ctx);
+      return;
+    }
+
+    // Clean and validate wallet address
+    const walletAddress = text.trim();
+
+    // Basic TRC-20 address validation (starts with T, 34 characters)
+    if (!walletAddress.startsWith('T') || walletAddress.length !== 34) {
+      await ctx.reply(`❌ Invalid TRC-20 wallet address format.
+
+**Requirements:**
+• Must start with 'T'
+• Must be exactly 34 characters
+• Example: TXYZabc123def456ghi789jkl012mno345
+
+Please enter a valid TRC-20 wallet address:`);
+
+      // Reset state for wallet input
+      await setUserState(user.id, 'awaiting_withdrawal_wallet', sessionData);
+      return;
+    }
+
+    // Get user ID for database operations
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.reply('❌ User authentication error. Please try again.');
+      return;
+    }
+
+    // Create withdrawal request
+    const { data: withdrawal, error: withdrawalError } = await db.client
+      .from('commission_withdrawals')
+      .insert({
+        user_id: telegramUser.user_id,
+        withdrawal_type: withdrawalType,
+        amount: amount,
+        wallet_address: walletAddress,
+        status: 'pending',
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (withdrawalError) {
+      console.error('Error creating withdrawal request:', withdrawalError);
+      await ctx.reply('❌ Error creating withdrawal request. Please try again.');
+      return;
+    }
+
+    const successMessage = `✅ **WITHDRAWAL REQUEST SUBMITTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 REQUEST DETAILS:**
+• **Request ID:** #${withdrawal.id.substring(0, 8)}
+• **Amount:** $${amount.toFixed(2)} USDT
+• **Processing Fee:** $2.00 USDT
+• **You'll Receive:** $${(amount - 2).toFixed(2)} USDT
+• **Wallet:** ${walletAddress.substring(0, 10)}...${walletAddress.substring(-6)}
+• **Network:** TRC-20 (Tron)
+• **Status:** Pending Admin Review
+
+**⏳ NEXT STEPS:**
+1. **Admin Review:** 24-48 hours
+2. **Approval Notification:** Via bot message
+3. **Payment Processing:** 1-3 business days
+4. **Transaction Hash:** Provided upon completion
+
+**📱 You'll receive notifications for all status updates.**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💡 Track your request in Withdrawal History**`;
+
+    await ctx.replyWithMarkdown(successMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 View Withdrawal History", callback_data: "withdrawal_history" }],
+          [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+          [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+    // Notify admin about new withdrawal request
+    // TODO: Implement admin notification system
+
+  } catch (error) {
+    console.error('Error handling withdrawal wallet:', error);
+    await ctx.reply('❌ Error processing withdrawal request. Please try again.');
   }
 }
 
@@ -3603,12 +4069,14 @@ async function handleViewCommission(ctx) {
     const keyboard = [];
 
     if (availableUSDT > 0) {
-      keyboard.push([{ text: "💸 Withdraw USDT", callback_data: "withdraw_commissions" }]);
+      keyboard.push([{ text: "💸 Withdraw USDT Commission", callback_data: "withdraw_usdt_commission" }]);
+      keyboard.push([{ text: "🛒 Use Commission for Shares", callback_data: "commission_to_shares" }]);
     }
 
     keyboard.push(
       [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
       [{ text: "👥 View My Referrals", callback_data: "view_referrals" }],
+      [{ text: "📋 Withdrawal History", callback_data: "withdrawal_history" }],
       [{ text: "🔙 Back to Referral Dashboard", callback_data: "menu_referrals" }]
     );
 
@@ -3759,6 +4227,194 @@ We'll notify all users when the withdrawal system goes live!
       ]
     }
   });
+}
+
+// COMMISSION WITHDRAWAL SYSTEM HANDLERS
+
+// Handle USDT Commission Withdrawal
+async function handleWithdrawUSDTCommission(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user ID from telegram_users table
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // Get commission balance
+    const { data: balance, error: balanceError } = await db.client
+      .from('commission_balances')
+      .select('usdt_balance')
+      .eq('user_id', telegramUser.user_id)
+      .single();
+
+    if (balanceError || !balance || balance.usdt_balance <= 0) {
+      await ctx.replyWithMarkdown(`💸 **INSUFFICIENT BALANCE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**❌ No USDT commission available for withdrawal**
+
+**💰 Current Balance:** $0.00 USDT
+
+**🎯 TO EARN COMMISSIONS:**
+• Share your referral link
+• Invite friends to invest
+• Earn 15% USDT + 15% shares on their purchases
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
+            [{ text: "🔙 Back to Commission Dashboard", callback_data: "view_commission" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    const availableBalance = parseFloat(balance.usdt_balance);
+
+    // Set user state for withdrawal amount input
+    await setUserState(user.id, 'awaiting_withdrawal_amount', {
+      availableBalance,
+      withdrawalType: 'usdt'
+    });
+
+    const withdrawalMessage = `💸 **USDT COMMISSION WITHDRAWAL**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 Available Balance:** $${availableBalance.toFixed(2)} USDT
+
+**📝 WITHDRAWAL PROCESS:**
+1. **Enter withdrawal amount** (minimum $10.00)
+2. **Provide USDT wallet address** (TRC-20 network)
+3. **Admin review and approval** (24-48 hours)
+4. **Payment processing** (1-3 business days)
+
+**💡 IMPORTANT NOTES:**
+• Minimum withdrawal: $10.00 USDT
+• Network: TRC-20 (Tron)
+• Processing fee: $2.00 USDT (deducted from withdrawal)
+• Maximum daily withdrawal: $1,000.00 USDT
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💵 Enter withdrawal amount (USD):**`;
+
+    await ctx.replyWithMarkdown(withdrawalMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "❌ Cancel Withdrawal", callback_data: "view_commission" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling USDT withdrawal:', error);
+    await ctx.replyWithMarkdown('❌ **Error processing withdrawal request**\n\nPlease try again.');
+  }
+}
+
+// Handle Commission to Shares Conversion
+async function handleCommissionToShares(ctx) {
+  await ctx.replyWithMarkdown(`🛒 **USE COMMISSION FOR SHARE PURCHASE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🚧 FEATURE COMING SOON**
+
+This feature will allow you to use your commission balance to purchase additional gold mining shares directly.
+
+**📋 PLANNED FEATURES:**
+• Use USDT commission balance for share purchases
+• Automatic conversion at current share price
+• No withdrawal fees when used for shares
+• Instant processing (no admin approval needed)
+• Commission + additional payment combinations
+
+**💡 CURRENT WORKAROUND:**
+1. Withdraw your commission balance
+2. Use the withdrawn funds for new share purchase
+3. Contact @TTTFOUNDER for manual processing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⏳ This feature will be available soon!**`, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "💸 Withdraw USDT Instead", callback_data: "withdraw_usdt_commission" }],
+        [{ text: "🔙 Back to Commission Dashboard", callback_data: "view_commission" }]
+      ]
+    }
+  });
+}
+
+// Handle Withdrawal History
+async function handleWithdrawalHistory(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user ID from telegram_users table
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // Get withdrawal history (when table exists)
+    const historyMessage = `📋 **WITHDRAWAL HISTORY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🚧 FEATURE COMING SOON**
+
+Your withdrawal history will be displayed here once the withdrawal system is fully implemented.
+
+**📊 PLANNED FEATURES:**
+• Complete withdrawal transaction history
+• Status tracking (pending, approved, completed)
+• Transaction hash verification
+• Download statements
+• Filter by date range and status
+
+**💰 CURRENT STATUS:**
+• Commission tracking: ✅ Active
+• Balance management: ✅ Active
+• Withdrawal requests: 🚧 In development
+• History tracking: 🚧 In development
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📞 For withdrawal history inquiries, contact @TTTFOUNDER**`;
+
+    await ctx.replyWithMarkdown(historyMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "💰 View Current Balance", callback_data: "view_commission" }],
+          [{ text: "📧 Contact Support", url: "https://t.me/TTTFOUNDER" }],
+          [{ text: "🔙 Back to Commission Dashboard", callback_data: "view_commission" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error loading withdrawal history:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading withdrawal history**\n\nPlease try again.');
+  }
 }
 
 async function handleCopyReferralLink(ctx, callbackData) {

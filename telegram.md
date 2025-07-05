@@ -2,12 +2,12 @@
 
 ## Overview
 
-The **Aureus Africa Bot** (@aureus_africa_bot) is a comprehensive Telegram bot that serves as the primary interface for the Aureus Alliance Holdings equity share purchase platform. It provides a complete share purchase management system directly within Telegram, allowing users to purchase equity shares, manage their portfolios, and interact with the mining share purchase opportunity.
+The **Aureus Alliance Bot** (@AureusAllianceBot) is a comprehensive Telegram bot that serves as the primary interface for the Aureus Alliance Holdings equity share purchase platform. It provides a complete share purchase management system directly within Telegram, allowing users to purchase equity shares, manage their portfolios, and interact with the mining share purchase opportunity.
 
 ## Bot Configuration
 
-- **Bot Username**: @aureus_africa_bot
-- **Bot Token**: 8015476800:AAGMH8HMXRurphYHRQDJdeHLO10ghZVzBt8
+- **Bot Username**: @AureusAllianceBot
+- **Bot Token**: 7858706839:AAFRXBSlREW0wPvIyI57uFpHfYopi2CY464
 - **Database**: Supabase
 
 ## Database Integration

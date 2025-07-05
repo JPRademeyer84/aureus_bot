@@ -4,18 +4,18 @@ const { db } = require('./src/database/supabase-client');
 require("dotenv").config();
 
 console.log("🚀 Starting Aureus Alliance Holdings Telegram Bot...");
-console.log("🔗 VERSION CHECK: Bot links are https://t.me/aureus_africa_bot (with underscores)");
-console.log("🔥 DEPLOYMENT VERSION: 2025-01-05-FIXED-REFERRAL-LINKS");
+console.log("🔗 VERSION CHECK: Bot links are https://t.me/AureusAllianceBot (NEW BOT TOKEN)");
+console.log("🔥 DEPLOYMENT VERSION: 2025-01-05-NEW-BOT-TOKEN-CREATED");
 console.log("📅 DEPLOYMENT: " + new Date().toISOString());
 console.log("🔧 FIXED: Share calculation using phase pricing + database wallet addresses");
 console.log("🚨 CRITICAL FIX DEPLOYED: $100 payment = 20 shares (not 100 shares)");
 console.log("💰 SHARE CALCULATION: amount ÷ phase_price = shares");
 console.log("🛠️ SCOPE FIX: sharesAmount variable moved to outer scope - ReferenceError resolved");
-console.log("🔗 BOT LINK FIX: All referral links use aureus_africa_bot (WITH underscores)");
-console.log("🚨 CRITICAL: If you see aureusafricabot (without underscores), restart the bot!");
+console.log("🔗 BOT LINK FIX: All referral links use AureusAllianceBot (NEW BOT TOKEN)");
+console.log("🚨 NEW BOT: AureusAllianceBot token created - old bot issues resolved!");
 
 // Bot configuration
-const BOT_TOKEN = "8015476800:AAGMH8HMXRurphYHRQDJdeHLO10ghZVzBt8";
+const BOT_TOKEN = "7858706839:AAFRXBSlREW0wPvIyI57uFpHfYopi2CY464";
 const ADMIN_USERNAME = "TTTFOUNDER";
 
 console.log("📊 Database: Supabase PostgreSQL");
@@ -719,18 +719,18 @@ bot.command('version', async (ctx) => {
   const versionInfo = `🔍 **BOT VERSION CHECK**
 
 📅 **Deployment Time:** ${new Date().toISOString()}
-🔗 **Bot Link:** https://t.me/aureus_africa_bot
+🔗 **Bot Link:** https://t.me/AureusAllianceBot
 ✅ **Status:** Running aureus-bot-new.js
-🎯 **Links Should Be:** WITH underscores (_)
+🎯 **NEW BOT TOKEN:** AureusAllianceBot (clean slate)
 🔗 **REFERRAL LINK FIX:** Applied ${new Date().toISOString()}
 
 🚨 **CRITICAL FIX STATUS:**
 💰 Share Calculation: amount ÷ phase_price = shares
 📊 Example: $100 ÷ $5.00 = 20 shares (NOT 100!)
 🔧 Fixed in handleApprovePayment line 2680
-🔗 Bot links: ALL use aureus_africa_bot (WITH underscores)
+🔗 Bot links: ALL use AureusAllianceBot (NEW BOT)
 
-⚠️ **If you see aureusafricabot (without underscores), the bot needs restart!**`;
+✅ **New bot token resolves all username inconsistencies!**`;
 
   await ctx.replyWithMarkdown(versionInfo);
 });
@@ -1218,7 +1218,7 @@ async function startBot() {
     console.log("🤖 Starting bot in polling mode...");
     await bot.launch();
     console.log("✅ Aureus Alliance Holdings Bot is running!");
-    console.log("🤖 Bot username: @aureus_africa_bot");
+    console.log("🤖 Bot username: @AureusAllianceBot");
   } catch (error) {
     console.error("❌ Failed to start bot:", error);
     process.exit(1);
@@ -3281,8 +3281,8 @@ async function handleShareReferral(ctx) {
     }
 
     const referralUsername = telegramUser.username || user.username || user.first_name;
-    const botLink = 'https://t.me/aureus_africa_bot';
-    const referralLink = `https://t.me/aureus_africa_bot?start=${referralUsername}`;
+    const botLink = 'https://t.me/AureusAllianceBot';
+    const referralLink = `https://t.me/AureusAllianceBot?start=${referralUsername}`;
 
     // DEBUG: Log the generated links to verify they're correct
     console.log('🔗 DEBUG - Generated referral link:', referralLink);
@@ -3601,7 +3601,7 @@ We'll notify all users when the withdrawal system goes live!
 
 async function handleCopyReferralLink(ctx, callbackData) {
   const referralUsername = callbackData.replace('copy_referral_link_', '');
-  const referralLink = `https://t.me/aureus_africa_bot?start=${referralUsername}`;
+  const referralLink = `https://t.me/AureusAllianceBot?start=${referralUsername}`;
 
   // DEBUG: Log the generated link to verify it's correct
   console.log('🔗 DEBUG - Copy referral link generated:', referralLink);
@@ -3651,16 +3651,16 @@ async function handleCopyReferral(ctx, callbackData) {
 **🚀 QUICK SHARING MESSAGES:**
 
 **💎 For WhatsApp/SMS:**
-*"🔥 GOLD MINING INVESTMENT OPPORTUNITY! Own shares in real South African gold mines. Starting at just $25. Massive profit potential! Use my referral '${referralCode}' here: https://t.me/aureus_africa_bot"*
+*"🔥 GOLD MINING INVESTMENT OPPORTUNITY! Own shares in real South African gold mines. Starting at just $25. Massive profit potential! Use my referral '${referralCode}' here: https://t.me/AureusAllianceBot"*
 
 **📱 For Social Media:**
-*"💰 Just discovered an incredible gold mining investment! Real washplants, real gold, real profits. Early investors getting $1/share before it goes up! Use referral '${referralCode}': https://t.me/aureus_africa_bot #GoldInvestment #WealthBuilding"*
+*"💰 Just discovered an incredible gold mining investment! Real washplants, real gold, real profits. Early investors getting $1/share before it goes up! Use referral '${referralCode}': https://t.me/AureusAllianceBot #GoldInvestment #WealthBuilding"*
 
 **💼 For Serious Investors:**
-*"Professional gold mining investment opportunity in South Africa. 10 active washplants, 3,200 KG annual target. Phase 1 pricing available. Use referral '${referralCode}' for priority: https://t.me/aureus_africa_bot"*
+*"Professional gold mining investment opportunity in South Africa. 10 active washplants, 3,200 KG annual target. Phase 1 pricing available. Use referral '${referralCode}' for priority: https://t.me/AureusAllianceBot"*
 
 **📧 For Email:**
-*"I wanted to share an exclusive gold mining investment I discovered. Aureus Alliance Holdings operates real gold mines in South Africa with proven reserves. You can own shares starting at $1 each. Use my referral code '${referralCode}' when you register: https://t.me/aureus_africa_bot"*`, {
+*"I wanted to share an exclusive gold mining investment I discovered. Aureus Alliance Holdings operates real gold mines in South Africa with proven reserves. You can own shares starting at $1 each. Use my referral code '${referralCode}' when you register: https://t.me/AureusAllianceBot"*`, {
     reply_markup: {
       inline_keyboard: [
         [{ text: "📤 Share Full Investment Pitch", callback_data: "share_referral" }],

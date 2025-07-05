@@ -5,6 +5,7 @@ require("dotenv").config();
 
 console.log("🚀 Starting Aureus Alliance Holdings Telegram Bot...");
 console.log("🔗 VERSION CHECK: Bot links are https://t.me/aureus_africa_bot (with underscores)");
+console.log("🔥 DEPLOYMENT VERSION: 2025-01-05-FIXED-REFERRAL-LINKS");
 console.log("📅 DEPLOYMENT: " + new Date().toISOString());
 console.log("🔧 FIXED: Share calculation using phase pricing + database wallet addresses");
 console.log("🚨 CRITICAL FIX DEPLOYED: $100 payment = 20 shares (not 100 shares)");

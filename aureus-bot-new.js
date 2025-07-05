@@ -1143,27 +1143,30 @@ async function handleTermsAcceptance(ctx, callbackData = null) {
       return;
     }
 
-    // Record terms acceptance (use upsert to handle duplicates)
+    // Record terms acceptance (use insert with error handling for duplicates)
     const { error: termsError } = await db.client
       .from('terms_acceptance')
-      .upsert({
+      .insert({
         user_id: authenticatedUser.id,
         terms_type: 'general_terms',
         version: '1.0',
         accepted_at: new Date().toISOString()
-      }, {
-        onConflict: 'user_id,terms_type'
       });
 
     if (termsError) {
-      console.error('❌ Error recording terms acceptance:', termsError);
-      console.error('❌ Terms acceptance data:', {
-        user_id: authenticatedUser.id,
-        terms_type: 'general_terms',
-        version: '1.0'
-      });
-      await ctx.answerCbQuery("❌ Error recording acceptance");
-      return;
+      // Check if it's a duplicate key error (user already accepted terms)
+      if (termsError.code === '23505' || termsError.message?.includes('duplicate')) {
+        console.log(`ℹ️ User ${authenticatedUser.id} already accepted terms - proceeding`);
+      } else {
+        console.error('❌ Error recording terms acceptance:', termsError);
+        console.error('❌ Terms acceptance data:', {
+          user_id: authenticatedUser.id,
+          terms_type: 'general_terms',
+          version: '1.0'
+        });
+        await ctx.answerCbQuery("❌ Error recording acceptance");
+        return;
+      }
     }
 
     console.log(`✅ Terms accepted successfully for user ${authenticatedUser.id}`);
@@ -4141,37 +4144,27 @@ async function handleViewCommission(ctx) {
       return;
     }
 
-    // Get commission balance
-    const { data: commissions, error: commissionError } = await db.client
-      .from('commissions')
+    // Get commission balance from commission_balances table
+    const { data: commissionBalance, error: commissionError } = await db.client
+      .from('commission_balances')
       .select('*')
-      .eq('referrer_id', telegramUser.user_id)
-      .eq('status', 'approved');
+      .eq('user_id', telegramUser.user_id)
+      .single();
 
-    if (commissionError) {
-      console.error('Commission fetch error:', commissionError);
+    if (commissionError && commissionError.code !== 'PGRST116') {
+      console.error('Commission balance fetch error:', commissionError);
       await ctx.replyWithMarkdown('❌ **Error loading commission data**\n\nPlease try again.');
       return;
     }
 
-    // Calculate totals
-    let totalUSDT = 0;
-    let totalShares = 0;
-    let availableUSDT = 0;
-    let pendingUSDT = 0;
+    // Set default values if no commission balance exists
+    const totalUSDT = commissionBalance ? parseFloat(commissionBalance.total_earned_usdt || 0) : 0;
+    const totalShares = commissionBalance ? parseFloat(commissionBalance.total_earned_shares || 0) : 0;
+    const availableUSDT = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
+    const totalWithdrawn = commissionBalance ? parseFloat(commissionBalance.total_withdrawn || 0) : 0;
 
-    if (commissions && commissions.length > 0) {
-      commissions.forEach(commission => {
-        totalUSDT += parseFloat(commission.usdt_amount || 0);
-        totalShares += parseFloat(commission.share_amount || 0);
-
-        if (commission.withdrawal_status === 'available') {
-          availableUSDT += parseFloat(commission.usdt_amount || 0);
-        } else if (commission.withdrawal_status === 'pending') {
-          pendingUSDT += parseFloat(commission.usdt_amount || 0);
-        }
-      });
-    }
+    // Calculate pending withdrawals (if any)
+    const pendingUSDT = totalUSDT - availableUSDT - totalWithdrawn;
 
     const commissionMessage = `💰 **COMMISSION BALANCE**
 
@@ -4189,7 +4182,7 @@ async function handleViewCommission(ctx) {
 
 **📊 COMMISSION SUMMARY:**
 • **Total Commission Value:** $${(totalUSDT + totalShares).toFixed(2)}
-• **Active Referrals:** ${commissions ? commissions.length : 0}
+• **Total Withdrawn:** $${totalWithdrawn.toFixed(2)} USDT
 • **Commission Rate:** 15% USDT + 15% Shares
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
@@ -4258,17 +4251,17 @@ async function handleViewReferrals(ctx) {
       return;
     }
 
-    // Get commission data for these referrals
-    const { data: commissions, error: commissionError } = await db.client
-      .from('commissions')
+    // Get commission balance for total commissions display
+    const { data: commissionBalance, error: commissionError } = await db.client
+      .from('commission_balances')
       .select('*')
-      .eq('referrer_id', telegramUser.user_id);
+      .eq('user_id', telegramUser.user_id)
+      .single();
 
     let totalCommissions = 0;
-    if (commissions && commissions.length > 0) {
-      totalCommissions = commissions.reduce((sum, comm) =>
-        sum + parseFloat(comm.usdt_amount || 0) + parseFloat(comm.share_amount || 0), 0
-      );
+    if (commissionBalance) {
+      totalCommissions = parseFloat(commissionBalance.total_earned_usdt || 0) +
+                        parseFloat(commissionBalance.total_earned_shares || 0);
     }
 
     let referralsList = '';

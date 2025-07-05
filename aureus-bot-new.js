@@ -595,6 +595,14 @@ bot.on('callback_query', async (ctx) => {
           await handleConfirmPurchase(ctx, callbackData);
         } else if (callbackData.startsWith('upload_proof_')) {
           await handleUploadProof(ctx, callbackData);
+        } else if (callbackData.startsWith('review_payment_')) {
+          await handleReviewPayment(ctx, callbackData);
+        } else if (callbackData.startsWith('approve_payment_')) {
+          await handleApprovePayment(ctx, callbackData);
+        } else if (callbackData.startsWith('reject_payment_')) {
+          await handleRejectPayment(ctx, callbackData);
+        } else if (callbackData.startsWith('view_screenshot_')) {
+          await handleViewScreenshot(ctx, callbackData);
         } else if (callbackData === 'view_portfolio') {
           await handlePortfolio(ctx);
         } else {
@@ -1390,7 +1398,7 @@ async function handlePortfolio(ctx) {
 
     // Get user's share purchases
     const { data: purchases, error: purchasesError } = await db.client
-      .from('share_purchases')
+      .from('aureus_share_purchases')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
@@ -1401,9 +1409,18 @@ async function handlePortfolio(ctx) {
       return;
     }
 
+    // Get pending payments
+    const { data: pendingPayments, error: paymentsError } = await db.client
+      .from('crypto_payment_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
     const totalShares = purchases?.reduce((sum, purchase) => sum + (purchase.shares_purchased || 0), 0) || 0;
     const totalInvested = purchases?.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0) || 0;
     const approvedPurchases = purchases?.filter(p => p.status === 'approved') || [];
+    const pendingAmount = pendingPayments?.reduce((sum, payment) => sum + (parseFloat(payment.amount) || 0), 0) || 0;
 
     const portfolioMessage = `📊 **MY PORTFOLIO**
 
@@ -2466,6 +2483,244 @@ async function logAdminAction(adminTelegramId, adminUsername, action, targetType
     }
   } catch (error) {
     console.error('Audit logging failed:', error);
+  }
+}
+
+// ADMIN PAYMENT REVIEW HANDLERS
+async function handleReviewPayment(ctx, callbackData) {
+  const user = ctx.from;
+
+  // Check admin authorization
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  const paymentId = callbackData.replace('review_payment_', '');
+
+  try {
+    // Get payment details with user info
+    const { data: payment, error: fetchError } = await db.client
+      .from('crypto_payment_transactions')
+      .select(`
+        *,
+        users!inner(username, full_name)
+      `)
+      .eq('id', paymentId)
+      .single();
+
+    if (fetchError || !payment) {
+      await ctx.answerCbQuery('❌ Payment not found');
+      return;
+    }
+
+    const reviewMessage = `🔍 **PAYMENT REVIEW**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 PAYMENT DETAILS:**
+• **ID:** #${paymentId.substring(0, 8)}
+• **Amount:** $${payment.amount} USDT
+• **Network:** ${payment.network}
+• **Status:** ${payment.status}
+
+**👤 USER DETAILS:**
+• **Name:** ${payment.users.full_name || 'N/A'}
+• **Username:** ${payment.users.username || 'N/A'}
+
+**📋 TRANSACTION INFO:**
+• **Wallet Address:** ${payment.sender_wallet_address || 'Not provided'}
+• **Transaction Hash:** ${payment.transaction_hash || 'Not provided'}
+• **Screenshot:** ${payment.screenshot_url ? '✅ Uploaded' : '❌ Not uploaded'}
+
+**📅 TIMESTAMPS:**
+• **Created:** ${new Date(payment.created_at).toLocaleString()}
+• **Updated:** ${new Date(payment.updated_at).toLocaleString()}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    const keyboard = [
+      [
+        { text: "✅ Approve Payment", callback_data: `approve_payment_${paymentId}` },
+        { text: "❌ Reject Payment", callback_data: `reject_payment_${paymentId}` }
+      ]
+    ];
+
+    if (payment.screenshot_url) {
+      keyboard.unshift([
+        { text: "📷 View Screenshot", callback_data: `view_screenshot_${paymentId}` }
+      ]);
+    }
+
+    keyboard.push([
+      { text: "🔄 Refresh", callback_data: `review_payment_${paymentId}` },
+      { text: "🔙 Back to Payments", callback_data: "admin_payments" }
+    ]);
+
+    await ctx.replyWithMarkdown(reviewMessage, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+
+  } catch (error) {
+    console.error('Review payment error:', error);
+    await ctx.answerCbQuery('❌ Error loading payment details');
+  }
+}
+
+async function handleApprovePayment(ctx, callbackData) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  const paymentId = callbackData.replace('approve_payment_', '');
+
+  try {
+    // Update payment status to approved
+    const { data: updatedPayment, error: updateError } = await db.client
+      .from('crypto_payment_transactions')
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId)
+      .select('*, users!inner(username, full_name)')
+      .single();
+
+    if (updateError) {
+      console.error('Payment approval error:', updateError);
+      await ctx.answerCbQuery('❌ Error approving payment');
+      return;
+    }
+
+    await ctx.replyWithMarkdown(`✅ **PAYMENT APPROVED**
+
+**Payment ID:** #${paymentId.substring(0, 8)}
+**Amount:** $${updatedPayment.amount} USDT
+**User:** ${updatedPayment.users.full_name || updatedPayment.users.username}
+
+The user will be notified of the approval.`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🔙 Back to Payments", callback_data: "admin_payments" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Payment approval error:', error);
+    await ctx.answerCbQuery('❌ Error approving payment');
+  }
+}
+
+async function handleRejectPayment(ctx, callbackData) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  const paymentId = callbackData.replace('reject_payment_', '');
+
+  try {
+    // Update payment status to rejected
+    const { data: updatedPayment, error: updateError } = await db.client
+      .from('crypto_payment_transactions')
+      .update({
+        status: 'rejected',
+        rejected_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId)
+      .select('*, users!inner(username, full_name)')
+      .single();
+
+    if (updateError) {
+      console.error('Payment rejection error:', updateError);
+      await ctx.answerCbQuery('❌ Error rejecting payment');
+      return;
+    }
+
+    await ctx.replyWithMarkdown(`❌ **PAYMENT REJECTED**
+
+**Payment ID:** #${paymentId.substring(0, 8)}
+**Amount:** $${updatedPayment.amount} USDT
+**User:** ${updatedPayment.users.full_name || updatedPayment.users.username}
+
+The user will be notified of the rejection.`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🔙 Back to Payments", callback_data: "admin_payments" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Payment rejection error:', error);
+    await ctx.answerCbQuery('❌ Error rejecting payment');
+  }
+}
+
+async function handleViewScreenshot(ctx, callbackData) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  const paymentId = callbackData.replace('view_screenshot_', '');
+
+  try {
+    // Get payment screenshot URL
+    const { data: payment, error: fetchError } = await db.client
+      .from('crypto_payment_transactions')
+      .select('screenshot_url, amount, users!inner(username)')
+      .eq('id', paymentId)
+      .single();
+
+    if (fetchError || !payment || !payment.screenshot_url) {
+      await ctx.answerCbQuery('❌ Screenshot not found');
+      return;
+    }
+
+    // Get the screenshot from Supabase storage
+    const { data: fileData, error: downloadError } = await db.client.storage
+      .from('proof')
+      .download(payment.screenshot_url);
+
+    if (downloadError) {
+      console.error('Screenshot download error:', downloadError);
+      await ctx.answerCbQuery('❌ Error loading screenshot');
+      return;
+    }
+
+    // Convert blob to buffer for Telegram
+    const buffer = Buffer.from(await fileData.arrayBuffer());
+
+    await ctx.replyWithPhoto(
+      { source: buffer },
+      {
+        caption: `📷 **Payment Screenshot**\n\n**Payment ID:** #${paymentId.substring(0, 8)}\n**Amount:** $${payment.amount} USDT\n**User:** ${payment.users.username}`,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "✅ Approve", callback_data: `approve_payment_${paymentId}` },
+              { text: "❌ Reject", callback_data: `reject_payment_${paymentId}` }
+            ],
+            [{ text: "🔙 Back to Review", callback_data: `review_payment_${paymentId}` }]
+          ]
+        }
+      }
+    );
+
+  } catch (error) {
+    console.error('View screenshot error:', error);
+    await ctx.answerCbQuery('❌ Error loading screenshot');
   }
 }
 

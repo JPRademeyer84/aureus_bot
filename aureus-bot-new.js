@@ -224,9 +224,17 @@ async function authenticateUser(ctx, sponsorUsername = null) {
       });
     }
 
-    // Handle sponsor assignment for new users
-    if (isNewUser && sponsorUsername) {
-      await assignSponsor(user.id, sponsorUsername);
+    // Handle sponsor assignment
+    if (sponsorUsername) {
+      console.log(`🔗 [authenticateUser] Sponsor provided via referral: ${sponsorUsername}`);
+      // Check if user already has a sponsor
+      const hasSponsor = await checkUserHasSponsor(user.id);
+      if (!hasSponsor) {
+        console.log(`🤝 [authenticateUser] Assigning sponsor ${sponsorUsername} to user ${user.id}`);
+        await assignSponsor(user.id, sponsorUsername);
+      } else {
+        console.log(`⚠️ [authenticateUser] User ${user.id} already has a sponsor, skipping assignment`);
+      }
     } else if (isNewUser && !sponsorUsername) {
       // New user without sponsor - will be prompted later
       console.log(`🆕 New user ${user.username} registered without sponsor - will prompt for assignment`);
@@ -242,19 +250,36 @@ async function authenticateUser(ctx, sponsorUsername = null) {
 
 // Referral Registration Handler
 async function handleReferralRegistration(ctx, sponsorUsername) {
-  console.log(`🔗 Processing referral registration with sponsor: ${sponsorUsername}`);
+  console.log(`🔗 [handleReferralRegistration] Processing referral registration with sponsor: ${sponsorUsername}`);
 
   try {
     // Validate sponsor exists
+    console.log(`🔍 [handleReferralRegistration] Looking up sponsor: ${sponsorUsername}`);
     const sponsor = await db.getUserByUsername(sponsorUsername);
     if (!sponsor) {
-      console.log(`❌ Sponsor not found: ${sponsorUsername}, using TTTFOUNDER as fallback`);
+      console.log(`❌ [handleReferralRegistration] Sponsor not found: ${sponsorUsername}, using TTTFOUNDER as fallback`);
       sponsorUsername = 'TTTFOUNDER';
+    } else {
+      console.log(`✅ [handleReferralRegistration] Sponsor found: ${sponsor.username} (ID: ${sponsor.id})`);
     }
 
     // Authenticate user with sponsor assignment
+    console.log(`🔐 [handleReferralRegistration] Authenticating user with sponsor: ${sponsorUsername}`);
     const user = await authenticateUser(ctx, sponsorUsername);
-    if (!user) return;
+    if (!user) {
+      console.error(`❌ [handleReferralRegistration] User authentication failed`);
+      return;
+    }
+
+    console.log(`✅ [handleReferralRegistration] User authenticated: ${user.username} (ID: ${user.id})`);
+
+    // Verify sponsor assignment was successful
+    const hasSponsor = await checkUserHasSponsor(user.id);
+    console.log(`🔍 [handleReferralRegistration] Sponsor assignment check: ${hasSponsor ? 'SUCCESS' : 'FAILED'}`);
+
+    if (!hasSponsor) {
+      console.error(`❌ [handleReferralRegistration] CRITICAL: Sponsor assignment failed for user ${user.id}`);
+    }
 
     // Show welcome message with sponsor confirmation
     const welcomeMessage = `🎉 **WELCOME TO AUREUS ALLIANCE HOLDINGS!**
@@ -714,14 +739,16 @@ Regular community meetings and transparent communication about our operations.
 
 // Bot commands
 bot.start(async (ctx) => {
-  console.log(`👤 User started bot: ${ctx.from.first_name} (@${ctx.from.username})`);
+  console.log(`👤 [START] User started bot: ${ctx.from.first_name} (@${ctx.from.username})`);
 
   // Check for referral parameter in start command
   const startPayload = ctx.startPayload;
   if (startPayload) {
-    console.log(`🔗 Referral link detected: ${startPayload}`);
+    console.log(`🔗 [START] Referral link detected with payload: ${startPayload}`);
+    console.log(`🔗 [START] Processing referral registration...`);
     await handleReferralRegistration(ctx, startPayload);
   } else {
+    console.log(`🏠 [START] No referral payload, showing main menu`);
     await showMainMenu(ctx);
   }
 });

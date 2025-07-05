@@ -4276,7 +4276,9 @@ async function handleViewReferrals(ctx) {
       referrals.forEach((referral, index) => {
         const joinDate = new Date(referral.users.created_at).toLocaleDateString();
         const username = referral.users.username || referral.users.full_name || 'Anonymous';
-        referralsList += `${index + 1}. **${username}**\n   📅 Joined: ${joinDate}\n   ✅ Status: Active\n\n`;
+        // Safely format username to avoid Markdown parsing issues
+        const safeUsername = username.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
+        referralsList += `${index + 1}. **${safeUsername}**\n   📅 Joined: ${joinDate}\n   ✅ Status: Active\n\n`;
       });
     } else {
       referralsList = '*No referrals yet. Start sharing your referral link!*';
@@ -4299,16 +4301,34 @@ Share your referral link to earn 15% USDT + 15% shares commission on every inves
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
-    await ctx.replyWithMarkdown(referralsMessage, {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
-          [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
-          [{ text: "🔄 Refresh List", callback_data: "view_referrals" }],
-          [{ text: "🔙 Back to Referral Dashboard", callback_data: "menu_referrals" }]
-        ]
-      }
-    });
+    try {
+      await ctx.replyWithMarkdown(referralsMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
+            [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+            [{ text: "🔄 Refresh List", callback_data: "view_referrals" }],
+            [{ text: "🔙 Back to Referral Dashboard", callback_data: "menu_referrals" }]
+          ]
+        }
+      });
+    } catch (markdownError) {
+      console.error('❌ Markdown parsing error in referrals view:', markdownError);
+      console.error('❌ Problematic message content:', referralsMessage);
+
+      // Fallback: Send without markdown formatting
+      const plainMessage = referralsMessage.replace(/\*\*/g, '').replace(/`/g, '');
+      await ctx.reply(plainMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
+            [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+            [{ text: "🔄 Refresh List", callback_data: "view_referrals" }],
+            [{ text: "🔙 Back to Referral Dashboard", callback_data: "menu_referrals" }]
+          ]
+        }
+      });
+    }
 
   } catch (error) {
     console.error('View referrals error:', error);

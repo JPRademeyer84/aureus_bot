@@ -6,6 +6,7 @@ require("dotenv").config();
 console.log("🚀 Starting Aureus Alliance Holdings Telegram Bot...");
 console.log("🔗 VERSION CHECK: Bot links are https://t.me/aureus_africa_bot (with underscores)");
 console.log("📅 DEPLOYMENT: " + new Date().toISOString());
+console.log("🔧 FIXED: Share calculation using phase pricing + database wallet addresses");
 
 // Bot configuration
 const BOT_TOKEN = "8015476800:AAGMH8HMXRurphYHRQDJdeHLO10ghZVzBt8";

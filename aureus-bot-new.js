@@ -2844,7 +2844,7 @@ async function handleShareReferral(ctx) {
 🚨 **ACT NOW - PHASE 1 PRICING ENDS SOON!**
 
 👆 **CLICK TO START BUILDING WEALTH:**
-${botLink}
+https://t.me/aureus_africa_bot
 
 🎁 **SPECIAL BONUS:** Use referral code **${referralUsername}** for priority processing!
 
@@ -2863,8 +2863,8 @@ ${botLink}
     await ctx.replyWithMarkdown(shareMessage, {
       reply_markup: {
         inline_keyboard: [
+          [{ text: "📤 Share Investment Link", url: `https://t.me/share/url?url=${encodeURIComponent('https://t.me/aureus_africa_bot')}&text=${encodeURIComponent('🔥 GOLD MINING OPPORTUNITY! Own real South African gold mines. Use referral: ' + referralUsername)}` }],
           [{ text: "📋 Copy Referral Username", callback_data: `copy_referral_${referralUsername}` }],
-          [{ text: "📤 Share Investment Link", url: `https://t.me/share/url?url=${encodeURIComponent(botLink)}&text=${encodeURIComponent('🔥 GOLD MINING OPPORTUNITY! Own real South African gold mines. Use referral: ' + referralUsername)}` }],
           [{ text: "👥 Back to Referral Dashboard", callback_data: "menu_referrals" }],
           [{ text: "🔙 Back to Main Menu", callback_data: "main_menu" }]
         ]

@@ -155,28 +155,7 @@ async function createTablesDirectly() {
         CREATE INDEX IF NOT EXISTS idx_telegram_users_user_id ON telegram_users(user_id);
       `
     },
-    {
-      name: 'investment_packages',
-      sql: `
-        CREATE TABLE IF NOT EXISTS investment_packages (
-          id SERIAL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          description TEXT,
-          price DECIMAL(15,2) NOT NULL,
-          shares INTEGER NOT NULL,
-          roi DECIMAL(10,2) DEFAULT 0,
-          annual_dividends DECIMAL(15,2) DEFAULT 0,
-          quarter_dividends DECIMAL(15,2) DEFAULT 0,
-          bonuses JSONB DEFAULT '[]'::jsonb,
-          is_active BOOLEAN DEFAULT TRUE,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        );
-        
-        CREATE INDEX IF NOT EXISTS idx_investment_packages_active ON investment_packages(is_active);
-        CREATE INDEX IF NOT EXISTS idx_investment_packages_price ON investment_packages(price);
-      `
-    }
+    // Investment packages table removed - using custom amounts only
   ];
   
   let successCount = 0;
@@ -196,12 +175,7 @@ async function insertSampleData() {
   console.log('\n📝 Inserting sample data...\n');
   
   const sampleDataQueries = [
-    {
-      description: 'Sample investment packages',
-      sql: `
-        INSERT INTO investment_packages (name, description, price, shares, roi, annual_dividends, quarter_dividends, bonuses) VALUES
-        ('Starter Package', 'Perfect for beginners looking to start their investment journey', 1000.00, 100, 12.50, 125.00, 31.25, '["Welcome bonus", "Free consultation"]'::jsonb),
-        ('Growth Package', 'Ideal for investors seeking balanced growth and returns', 5000.00, 500, 15.00, 750.00, 187.50, '["Priority support", "Quarterly reports", "Investment advisor access"]'::jsonb),
+    // Sample investment packages removed - using custom amounts only
         ('Premium Package', 'For serious investors wanting maximum returns and benefits', 10000.00, 1000, 18.00, 1800.00, 450.00, '["VIP support", "Monthly reports", "Personal advisor", "Exclusive events"]'::jsonb),
         ('Elite Package', 'Ultimate investment package with highest returns and premium benefits', 25000.00, 2500, 22.00, 5500.00, 1375.00, '["24/7 support", "Weekly reports", "Dedicated advisor", "Exclusive events", "NFT certificate"]'::jsonb)
         ON CONFLICT DO NOTHING;

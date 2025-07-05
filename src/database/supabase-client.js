@@ -179,18 +179,12 @@ class SupabaseDB {
 
   // Package functions removed - using custom amounts only
 
-  // Investment functions
+  // Investment functions - removed investment_packages references
   async getUserInvestments(userId) {
     try {
       const { data, error } = await this.client
         .from('aureus_investments')
-        .select(`
-          *,
-          investment_packages (
-            name,
-            price
-          )
-        `)
+        .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 

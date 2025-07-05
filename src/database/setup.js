@@ -34,7 +34,7 @@ async function createDatabaseSchema() {
     await createTelegramUsersTable(client);
     await createTelegramSessionsTable(client);
     await createTermsAcceptanceTable(client);
-    await createInvestmentPackagesTable(client);
+    // Investment packages table removed - using custom amounts only
     await createInvestmentsTable(client);
     await createPaymentsTable(client);
     await createReferralsTable(client);
@@ -155,32 +155,7 @@ async function createTermsAcceptanceTable(client) {
   console.log('✅ Terms acceptance table created');
 }
 
-async function createInvestmentPackagesTable(client) {
-  console.log('🏗️ Creating investment_packages table...');
-  
-  const createInvestmentPackagesSQL = `
-    CREATE TABLE IF NOT EXISTS investment_packages (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      description TEXT,
-      price DECIMAL(15,2) NOT NULL,
-      shares INTEGER NOT NULL,
-      roi DECIMAL(10,2) DEFAULT 0,
-      annual_dividends DECIMAL(15,2) DEFAULT 0,
-      quarter_dividends DECIMAL(15,2) DEFAULT 0,
-      bonuses JSONB DEFAULT '[]'::jsonb,
-      is_active BOOLEAN DEFAULT TRUE,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    );
-    
-    CREATE INDEX IF NOT EXISTS idx_investment_packages_active ON investment_packages(is_active);
-    CREATE INDEX IF NOT EXISTS idx_investment_packages_price ON investment_packages(price);
-  `;
-  
-  await client.query(createInvestmentPackagesSQL);
-  console.log('✅ Investment packages table created');
-}
+// Investment packages table removed - using custom amounts only
 
 async function createInvestmentsTable(client) {
   console.log('🏗️ Creating aureus_investments table...');
@@ -189,7 +164,6 @@ async function createInvestmentsTable(client) {
     CREATE TABLE IF NOT EXISTS aureus_investments (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      package_id INTEGER NOT NULL REFERENCES investment_packages(id) ON DELETE RESTRICT,
       amount DECIMAL(15,2) NOT NULL,
       shares INTEGER NOT NULL,
       status VARCHAR(50) DEFAULT 'pending',

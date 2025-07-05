@@ -121,26 +121,7 @@ async function createAllTables() {
     CREATE INDEX IF NOT EXISTS idx_telegram_users_user_id ON telegram_users(user_id);
   `, 'Creating telegram_users table');
   
-  // Investment packages table
-  await executeSQL(`
-    CREATE TABLE IF NOT EXISTS investment_packages (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      description TEXT,
-      price DECIMAL(15,2) NOT NULL,
-      shares INTEGER NOT NULL,
-      roi DECIMAL(10,2) DEFAULT 0,
-      annual_dividends DECIMAL(15,2) DEFAULT 0,
-      quarter_dividends DECIMAL(15,2) DEFAULT 0,
-      bonuses JSONB DEFAULT '[]'::jsonb,
-      is_active BOOLEAN DEFAULT TRUE,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    );
-    
-    CREATE INDEX IF NOT EXISTS idx_investment_packages_active ON investment_packages(is_active);
-    CREATE INDEX IF NOT EXISTS idx_investment_packages_price ON investment_packages(price);
-  `, 'Creating investment_packages table');
+  // Investment packages table removed - using custom amounts only
   
   console.log('\n🎉 Database schema setup completed!');
   console.log('📋 Tables created: test_connection, users, telegram_users, investment_packages');

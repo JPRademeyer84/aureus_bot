@@ -1056,7 +1056,7 @@ async function processCustomAmountPurchase(ctx, amount) {
   try {
     // Get current phase and share price
     const { data: currentPhase, error: phaseError } = await db.client
-      .from('phases')
+      .from('investment_phases')
       .select('*')
       .eq('is_active', true)
       .single();
@@ -1066,7 +1066,7 @@ async function processCustomAmountPurchase(ctx, amount) {
       return;
     }
 
-    const sharePrice = parseFloat(currentPhase.share_price);
+    const sharePrice = parseFloat(currentPhase.price_per_share);
     const sharesAmount = Math.floor(amount / sharePrice);
 
     if (sharesAmount < 1) {
@@ -1975,7 +1975,7 @@ async function handleConfirmPurchase(ctx, callbackData) {
   try {
     // Get current phase and share price
     const { data: currentPhase, error: phaseError } = await db.client
-      .from('phases')
+      .from('investment_phases')
       .select('*')
       .eq('is_active', true)
       .single();
@@ -1985,7 +1985,7 @@ async function handleConfirmPurchase(ctx, callbackData) {
       return;
     }
 
-    const sharePrice = parseFloat(currentPhase.share_price);
+    const sharePrice = parseFloat(currentPhase.price_per_share);
     const sharesAmount = Math.floor(amount / sharePrice);
     const totalCost = sharesAmount * sharePrice;
 

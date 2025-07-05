@@ -1618,6 +1618,13 @@ function getUserState(userId) {
   return global.userStates.get(userId);
 }
 
+function clearUserState(userId) {
+  if (!global.userStates) {
+    return;
+  }
+  global.userStates.delete(userId);
+}
+
 // ADMIN PANEL DETAILED HANDLERS
 
 // Admin Payments Handler

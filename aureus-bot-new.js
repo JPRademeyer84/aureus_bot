@@ -2028,11 +2028,12 @@ async function handleConfirmPurchase(ctx, callbackData) {
     const { data: payment, error: paymentError } = await db.client
       .from('crypto_payment_transactions')
       .insert({
-        telegram_user_id: telegramUser.id,
+        user_id: telegramUser.user_id || null, // Link to main users table
         amount: totalCost,
-        shares_amount: sharesAmount,
-        phase_id: currentPhase.id,
-        network: 'USDT-TRC20', // Default network
+        currency: 'USDT',
+        network: 'USDT-TRC20',
+        sender_wallet: '', // Will be filled when user uploads proof
+        receiver_wallet: 'TQRKqJetwkAKjHKjKx2DRRhTYEtqVC7i9s', // Our USDT wallet
         status: 'pending',
         created_at: new Date().toISOString()
       })
@@ -2056,19 +2057,24 @@ async function handleConfirmPurchase(ctx, callbackData) {
 
 // Show payment instructions
 async function showPaymentInstructions(ctx, payment, phase) {
+  // Calculate shares from payment amount and phase price
+  const sharePrice = parseFloat(phase.price_per_share);
+  const sharesAmount = Math.floor(payment.amount / sharePrice);
+
   const paymentMessage = `💳 **PAYMENT INSTRUCTIONS**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **📋 PURCHASE DETAILS:**
 • Amount: ${formatCurrency(payment.amount)}
-• Shares: ${payment.shares_amount.toLocaleString()}
+• Shares: ${sharesAmount.toLocaleString()}
 • Phase: ${phase.phase_name}
-• Payment ID: #${payment.id}
+• Share Price: ${formatCurrency(sharePrice)}
+• Payment ID: #${payment.id.substring(0, 8)}
 
 **💰 PAYMENT INFORMATION:**
 • Network: USDT-TRC20 (Tron)
-• Wallet Address: \`TQRKqJetwkAKjHKjKx2DRRhTYEtqVC7i9s\`
+• Wallet Address: \`${payment.receiver_wallet}\`
 • Amount to Send: **$${payment.amount} USDT**
 
 **⚠️ IMPORTANT INSTRUCTIONS:**

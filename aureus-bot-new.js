@@ -10,6 +10,8 @@ console.log("🔧 FIXED: Share calculation using phase pricing + database wallet
 console.log("🚨 CRITICAL FIX DEPLOYED: $100 payment = 20 shares (not 100 shares)");
 console.log("💰 SHARE CALCULATION: amount ÷ phase_price = shares");
 console.log("🛠️ SCOPE FIX: sharesAmount variable moved to outer scope - ReferenceError resolved");
+console.log("🔗 BOT LINK FIX: All referral links use aureus_africa_bot (WITH underscores)");
+console.log("🚨 CRITICAL: If you see aureusafricabot (without underscores), restart the bot!");
 
 // Bot configuration
 const BOT_TOKEN = "8015476800:AAGMH8HMXRurphYHRQDJdeHLO10ghZVzBt8";
@@ -719,11 +721,15 @@ bot.command('version', async (ctx) => {
 🔗 **Bot Link:** https://t.me/aureus_africa_bot
 ✅ **Status:** Running aureus-bot-new.js
 🎯 **Links Should Be:** WITH underscores (_)
+🔗 **REFERRAL LINK FIX:** Applied ${new Date().toISOString()}
 
 🚨 **CRITICAL FIX STATUS:**
 💰 Share Calculation: amount ÷ phase_price = shares
 📊 Example: $100 ÷ $5.00 = 20 shares (NOT 100!)
-🔧 Fixed in handleApprovePayment line 2680`;
+🔧 Fixed in handleApprovePayment line 2680
+🔗 Bot links: ALL use aureus_africa_bot (WITH underscores)
+
+⚠️ **If you see aureusafricabot (without underscores), the bot needs restart!**`;
 
   await ctx.replyWithMarkdown(versionInfo);
 });
@@ -3277,6 +3283,11 @@ async function handleShareReferral(ctx) {
     const botLink = 'https://t.me/aureus_africa_bot';
     const referralLink = `https://t.me/aureus_africa_bot?start=${referralUsername}`;
 
+    // DEBUG: Log the generated links to verify they're correct
+    console.log('🔗 DEBUG - Generated referral link:', referralLink);
+    console.log('🔗 DEBUG - Bot link:', botLink);
+    console.log('🔗 DEBUG - Referral username:', referralUsername);
+
     // MOTIVATING & COMPELLING investment opportunity message
     const shareMessage = `🌟 **LIFE-CHANGING OPPORTUNITY: OWN REAL GOLD MINES!** 🌟
 
@@ -3590,6 +3601,10 @@ We'll notify all users when the withdrawal system goes live!
 async function handleCopyReferralLink(ctx, callbackData) {
   const referralUsername = callbackData.replace('copy_referral_link_', '');
   const referralLink = `https://t.me/aureus_africa_bot?start=${referralUsername}`;
+
+  // DEBUG: Log the generated link to verify it's correct
+  console.log('🔗 DEBUG - Copy referral link generated:', referralLink);
+  console.log('🔗 DEBUG - Username:', referralUsername);
 
   await ctx.answerCbQuery(`📋 Referral link copied!`);
 

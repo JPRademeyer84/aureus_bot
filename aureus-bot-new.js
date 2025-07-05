@@ -417,10 +417,9 @@ async function handleEnterSponsorManual(ctx) {
 
   try {
     // Set user state for sponsor entry
-    await setUserState(user.id, {
-      state: 'awaiting_sponsor_username',
-      data: { timestamp: Date.now() }
-    });
+    console.log(`🔧 Setting user state for ${user.id}: awaiting_sponsor_username`);
+    await setUserState(user.id, 'awaiting_sponsor_username', { timestamp: Date.now() });
+    console.log(`✅ User state set successfully for ${user.id}`);
 
   const instructionMessage = `✍️ **ENTER SPONSOR USERNAME**
 
@@ -1371,20 +1370,32 @@ bot.on('text', async (ctx) => {
   const user = ctx.from;
   const text = ctx.message.text;
 
+  console.log(`📝 [TEXT HANDLER] Received text: "${text}" from user ${user.username} (ID: ${user.id})`);
+
   // Skip if it's a command
-  if (text.startsWith('/')) return;
+  if (text.startsWith('/')) {
+    console.log(`⏭️ [TEXT HANDLER] Skipping command: ${text}`);
+    return;
+  }
 
   // Get user state
   const userState = await getUserState(user.id);
+  console.log(`🔍 [TEXT HANDLER] User state for ${user.id}:`, userState);
 
   if (userState && userState.state === 'awaiting_custom_amount') {
+    console.log(`💰 [TEXT HANDLER] Processing custom amount input`);
     await handleCustomAmountInput(ctx, text);
   } else if (userState && userState.state === 'upload_proof_wallet') {
+    console.log(`💳 [TEXT HANDLER] Processing wallet address input`);
     await handleWalletAddressInput(ctx, text, userState.data);
   } else if (userState && userState.state === 'upload_proof_hash') {
+    console.log(`🔗 [TEXT HANDLER] Processing transaction hash input`);
     await handleTransactionHashInput(ctx, text, userState.data);
   } else if (userState && userState.state === 'awaiting_sponsor_username') {
+    console.log(`👥 [TEXT HANDLER] Processing sponsor username input`);
     await handleSponsorUsernameInput(ctx, text);
+  } else {
+    console.log(`❓ [TEXT HANDLER] No matching state handler for: ${userState?.state || 'null'}`);
   }
 });
 

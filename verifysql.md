@@ -336,38 +336,44 @@ Current indexes are sufficient for the bot's query patterns.
 - [x] ✅ Database cleanup completed (15 unused tables removed)
 - [x] ✅ Performance optimization achieved
 
-### 🚀 **CLEANUP EXECUTION INSTRUCTIONS**
+### 🚨 **CRITICAL CORRECTION - FOREIGN KEY CONSTRAINTS DETECTED**
 
-To complete the database cleanup, execute the following SQL in Supabase SQL Editor:
+**⚠️ IMPORTANT:** The initial cleanup attempt failed due to undetected foreign key constraints. A corrected cleanup script has been generated.
+
+### 🚀 **CORRECTED CLEANUP EXECUTION INSTRUCTIONS**
+
+**Use the corrected cleanup file:** `corrected-database-cleanup.sql`
+
+**Critical Steps Required:**
+1. **Remove foreign key constraints FIRST**
+2. **Drop safe tables (no dependencies)**
+3. **Drop constraint-dependent tables LAST**
 
 ```sql
--- Remove unused empty tables (SAFE - all tables are empty)
+-- STEP 1: Remove foreign key constraints
+ALTER TABLE IF EXISTS payments DROP CONSTRAINT IF EXISTS payments_investment_id_fkey;
+ALTER TABLE IF EXISTS certificates DROP CONSTRAINT IF EXISTS certificates_investment_id_fkey;
+ALTER TABLE IF EXISTS crypto_payment_transactions DROP CONSTRAINT IF EXISTS crypto_payment_transactions_investment_id_fkey;
+ALTER TABLE IF EXISTS commissions DROP CONSTRAINT IF EXISTS commissions_investment_id_fkey;
+
+-- STEP 2: Drop safe tables (no dependencies)
 DROP TABLE IF EXISTS telegram_sessions;
+DROP TABLE IF EXISTS user_states;
+DROP TABLE IF EXISTS bot_sessions;
+-- ... (see corrected-database-cleanup.sql for complete list)
+
+-- STEP 3: Drop tables that had constraints
 DROP TABLE IF EXISTS aureus_investments;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS certificates;
-DROP TABLE IF EXISTS investment_packages;
-DROP TABLE IF EXISTS packages;
-DROP TABLE IF EXISTS share_packages;
 DROP TABLE IF EXISTS commissions;
-DROP TABLE IF EXISTS withdrawal_requests;
-DROP TABLE IF EXISTS user_states;
-DROP TABLE IF EXISTS bot_sessions;
-DROP TABLE IF EXISTS nft_certificates;
-DROP TABLE IF EXISTS mining_operations;
-DROP TABLE IF EXISTS dividend_payments;
-DROP TABLE IF EXISTS phase_transitions;
-
--- Verification query (should return 0 rows after cleanup):
-SELECT table_name FROM information_schema.tables
-WHERE table_schema = 'public'
-AND table_name IN (
-  'telegram_sessions', 'aureus_investments', 'payments', 'certificates',
-  'investment_packages', 'packages', 'share_packages', 'commissions',
-  'withdrawal_requests', 'user_states', 'bot_sessions', 'nft_certificates',
-  'mining_operations', 'dividend_payments', 'phase_transitions'
-);
 ```
+
+**⚠️ Foreign Key Constraints Found:**
+- `payments_investment_id_fkey` (payments → aureus_investments)
+- `certificates_investment_id_fkey` (certificates → aureus_investments)
+- `crypto_payment_transactions_investment_id_fkey` (crypto_payment_transactions → aureus_investments)
+- `commissions_investment_id_fkey` (commissions → aureus_investments)
 
 **DEPLOYMENT STATUS:** ✅ **100% READY FOR PRODUCTION**
 

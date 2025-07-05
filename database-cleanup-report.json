@@ -1,0 +1,153 @@
+{
+  "timestamp": "2025-07-05T21:38:50.780Z",
+  "summary": {
+    "totalTested": 29,
+    "existing": 29,
+    "missing": 0,
+    "empty": 18,
+    "withData": 11,
+    "unused": 16,
+    "safeToRemove": 15,
+    "requiresReview": 1,
+    "missingCritical": 0
+  },
+  "tables": {
+    "existing": [
+      "users",
+      "telegram_users",
+      "crypto_payment_transactions",
+      "aureus_share_purchases",
+      "referrals",
+      "commission_balances",
+      "commission_transactions",
+      "investment_phases",
+      "company_wallets",
+      "terms_acceptance",
+      "admin_audit_logs",
+      "commission_withdrawals",
+      "user_sessions",
+      "test_connection",
+      "telegram_sessions",
+      "aureus_investments",
+      "payments",
+      "certificates",
+      "investment_packages",
+      "packages",
+      "share_packages",
+      "commissions",
+      "withdrawal_requests",
+      "user_states",
+      "bot_sessions",
+      "nft_certificates",
+      "mining_operations",
+      "dividend_payments",
+      "phase_transitions"
+    ],
+    "missing": [],
+    "empty": [
+      "admin_audit_logs",
+      "commission_withdrawals",
+      "user_sessions",
+      "telegram_sessions",
+      "aureus_investments",
+      "payments",
+      "certificates",
+      "investment_packages",
+      "packages",
+      "share_packages",
+      "commissions",
+      "withdrawal_requests",
+      "user_states",
+      "bot_sessions",
+      "nft_certificates",
+      "mining_operations",
+      "dividend_payments",
+      "phase_transitions"
+    ],
+    "withData": [
+      {
+        "name": "users",
+        "count": 3
+      },
+      {
+        "name": "telegram_users",
+        "count": 3
+      },
+      {
+        "name": "crypto_payment_transactions",
+        "count": 2
+      },
+      {
+        "name": "aureus_share_purchases",
+        "count": 2
+      },
+      {
+        "name": "referrals",
+        "count": 3
+      },
+      {
+        "name": "commission_balances",
+        "count": 2
+      },
+      {
+        "name": "commission_transactions",
+        "count": 2
+      },
+      {
+        "name": "investment_phases",
+        "count": 20
+      },
+      {
+        "name": "company_wallets",
+        "count": 3
+      },
+      {
+        "name": "terms_acceptance",
+        "count": 2
+      },
+      {
+        "name": "test_connection",
+        "count": 8
+      }
+    ],
+    "unused": [
+      "test_connection",
+      "telegram_sessions",
+      "aureus_investments",
+      "payments",
+      "certificates",
+      "investment_packages",
+      "packages",
+      "share_packages",
+      "commissions",
+      "withdrawal_requests",
+      "user_states",
+      "bot_sessions",
+      "nft_certificates",
+      "mining_operations",
+      "dividend_payments",
+      "phase_transitions"
+    ],
+    "safeToRemove": [
+      "telegram_sessions",
+      "aureus_investments",
+      "payments",
+      "certificates",
+      "investment_packages",
+      "packages",
+      "share_packages",
+      "commissions",
+      "withdrawal_requests",
+      "user_states",
+      "bot_sessions",
+      "nft_certificates",
+      "mining_operations",
+      "dividend_payments",
+      "phase_transitions"
+    ],
+    "requiresReview": [
+      "test_connection"
+    ],
+    "missingCritical": []
+  }
+}

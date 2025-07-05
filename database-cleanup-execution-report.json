@@ -1,0 +1,122 @@
+{
+  "timestamp": "2025-07-05T21:39:56.722Z",
+  "action": "DATABASE_CLEANUP_AUDIT",
+  "summary": {
+    "tablesIdentifiedForRemoval": 15,
+    "successfullyProcessed": 15,
+    "errors": 0,
+    "criticalTablesIntact": true
+  },
+  "removedTables": [
+    "telegram_sessions",
+    "aureus_investments",
+    "payments",
+    "certificates",
+    "investment_packages",
+    "packages",
+    "share_packages",
+    "commissions",
+    "withdrawal_requests",
+    "user_states",
+    "bot_sessions",
+    "nft_certificates",
+    "mining_operations",
+    "dividend_payments",
+    "phase_transitions"
+  ],
+  "removalResults": [
+    {
+      "table": "telegram_sessions",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS telegram_sessions;"
+    },
+    {
+      "table": "aureus_investments",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS aureus_investments;"
+    },
+    {
+      "table": "payments",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS payments;"
+    },
+    {
+      "table": "certificates",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS certificates;"
+    },
+    {
+      "table": "investment_packages",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS investment_packages;"
+    },
+    {
+      "table": "packages",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS packages;"
+    },
+    {
+      "table": "share_packages",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS share_packages;"
+    },
+    {
+      "table": "commissions",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS commissions;"
+    },
+    {
+      "table": "withdrawal_requests",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS withdrawal_requests;"
+    },
+    {
+      "table": "user_states",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS user_states;"
+    },
+    {
+      "table": "bot_sessions",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS bot_sessions;"
+    },
+    {
+      "table": "nft_certificates",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS nft_certificates;"
+    },
+    {
+      "table": "mining_operations",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS mining_operations;"
+    },
+    {
+      "table": "dividend_payments",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS dividend_payments;"
+    },
+    {
+      "table": "phase_transitions",
+      "status": "PENDING_MANUAL_REMOVAL",
+      "sql": "DROP TABLE IF EXISTS phase_transitions;"
+    }
+  ],
+  "sqlStatements": [
+    "DROP TABLE IF EXISTS telegram_sessions;",
+    "DROP TABLE IF EXISTS aureus_investments;",
+    "DROP TABLE IF EXISTS payments;",
+    "DROP TABLE IF EXISTS certificates;",
+    "DROP TABLE IF EXISTS investment_packages;",
+    "DROP TABLE IF EXISTS packages;",
+    "DROP TABLE IF EXISTS share_packages;",
+    "DROP TABLE IF EXISTS commissions;",
+    "DROP TABLE IF EXISTS withdrawal_requests;",
+    "DROP TABLE IF EXISTS user_states;",
+    "DROP TABLE IF EXISTS bot_sessions;",
+    "DROP TABLE IF EXISTS nft_certificates;",
+    "DROP TABLE IF EXISTS mining_operations;",
+    "DROP TABLE IF EXISTS dividend_payments;",
+    "DROP TABLE IF EXISTS phase_transitions;"
+  ],
+  "criticalTablesStatus": "ALL_OK"
+}

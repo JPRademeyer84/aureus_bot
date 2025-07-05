@@ -1104,17 +1104,19 @@ async function handleWalletAddressInput(ctx, walletAddress, sessionData) {
     // Set state for transaction hash input
     await setUserState(user.id, 'upload_proof_hash', { paymentId, walletAddress });
 
-    const hashMessage = `💳 **PAYMENT PROOF UPLOAD - STEP 2**
+    const hashMessage = `💳 **PAYMENT PROOF SUBMISSION - STEP 2 OF 3**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ✅ **Wallet Address Saved:** ${walletAddress.substring(0, 10)}...
 
-**📍 STEP 2: TRANSACTION HASH**
+**📍 STEP 2: TRANSACTION HASH (TXID)**
 
-Please enter the transaction hash (TXID) of your payment:
+Please type the transaction hash (TXID) of your payment:
 
-⚠️ **Important:** This is the unique transaction ID from your wallet or exchange`;
+⚠️ **Important:** This is the unique transaction ID from your wallet or exchange
+
+**Next Step:** Screenshot Upload`;
 
     await ctx.replyWithMarkdown(hashMessage, {
       reply_markup: {
@@ -1154,7 +1156,7 @@ async function handleTransactionHashInput(ctx, transactionHash, sessionData) {
     // Set state for screenshot upload
     await setUserState(user.id, 'upload_proof_screenshot', { paymentId });
 
-    const screenshotMessage = `💳 **PAYMENT PROOF UPLOAD - STEP 3**
+    const screenshotMessage = `💳 **PAYMENT PROOF SUBMISSION - STEP 3 OF 3**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1166,7 +1168,9 @@ Please upload a screenshot of your transaction:
 
 📷 **Send the image now** (as photo or document)
 
-⚠️ **Important:** Screenshot should clearly show the transaction details`;
+⚠️ **Important:** Screenshot should clearly show the transaction details
+
+**Final Step:** Upload complete → Admin review`;
 
     await ctx.replyWithMarkdown(screenshotMessage, {
       reply_markup: {
@@ -2323,7 +2327,7 @@ async function showPaymentInstructions(ctx, payment, phase) {
   await ctx.replyWithMarkdown(paymentMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📸 Upload Proof", callback_data: `upload_proof_${payment.id}` }],
+        [{ text: "💳 Submit Payment Proof", callback_data: `upload_proof_${payment.id}` }],
         [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
         [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
       ]
@@ -2352,7 +2356,7 @@ async function handleUploadProof(ctx, callbackData) {
     // Set user state to collect wallet address first
     await setUserState(user.id, 'upload_proof_wallet', { paymentId });
 
-    const walletMessage = `💳 **PAYMENT PROOF UPLOAD - STEP 1**
+    const walletMessage = `💳 **PAYMENT PROOF SUBMISSION - STEP 1 OF 3**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2361,11 +2365,13 @@ async function handleUploadProof(ctx, callbackData) {
 • Amount: ${formatCurrency(payment.amount)}
 • Network: ${payment.network}
 
-**📍 STEP 1: SENDER WALLET ADDRESS**
+**📍 STEP 1: YOUR SENDER WALLET ADDRESS**
 
-Please enter the wallet address you sent the payment FROM:
+Please type the wallet address you sent the payment FROM:
 
-⚠️ **Important:** This is YOUR wallet address (not our receiving address)`;
+⚠️ **Important:** This is YOUR wallet address (not our receiving address)
+
+**Next Steps:** Wallet Address → Transaction Hash → Screenshot Upload`;
 
     await ctx.replyWithMarkdown(walletMessage, {
       reply_markup: {

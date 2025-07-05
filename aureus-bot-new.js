@@ -3673,7 +3673,9 @@ async function handleApprovePayment(ctx, callbackData) {
         console.log('🔗 Payment linked to share purchase');
 
         // COMMISSION CREATION - Check for referral relationship and create commission
-        console.log('💰 Checking for referral relationship to create commission...');
+        console.log('💰 [COMMISSION] Checking for referral relationship to create commission...');
+        console.log(`💰 [COMMISSION] Looking for referrals where referred_id = ${updatedPayment.user_id}`);
+
         const { data: referralData, error: referralError } = await db.client
           .from('referrals')
           .select('referrer_id, referred_id, commission_rate')
@@ -3681,14 +3683,17 @@ async function handleApprovePayment(ctx, callbackData) {
           .eq('status', 'active')
           .single();
 
+        console.log(`💰 [COMMISSION] Referral query result:`, { referralData, referralError });
+
         if (!referralError && referralData) {
-          console.log(`👥 Found referrer: User ${referralData.referrer_id} for referred user ${referralData.referred_id}`);
+          console.log(`👥 [COMMISSION] Found referrer: User ${referralData.referrer_id} for referred user ${referralData.referred_id}`);
 
           // Calculate commission (15% USDT + 15% shares)
           const commissionAmount = amount * 0.15;
           const shareCommission = sharesAmount * 0.15;
 
-          console.log(`💰 Calculating commission: ${commissionAmount} USDT + ${shareCommission} shares`);
+          console.log(`💰 [COMMISSION] Calculating commission: ${commissionAmount} USDT + ${shareCommission} shares`);
+          console.log(`💰 [COMMISSION] Base amount: $${amount}, Share amount: ${sharesAmount}`);
 
           // Create commission transaction
           const commissionData = {
@@ -3704,19 +3709,26 @@ async function handleApprovePayment(ctx, callbackData) {
             created_at: new Date().toISOString()
           };
 
+          console.log(`💰 [COMMISSION] Inserting commission data:`, commissionData);
+
           const { data: commissionRecord, error: commissionError } = await db.client
             .from('commission_transactions')
             .insert([commissionData])
             .select()
             .single();
 
+          console.log(`💰 [COMMISSION] Insert result:`, { commissionRecord, commissionError });
+
           if (commissionError) {
-            console.error('❌ Commission creation error:', commissionError);
+            console.error('❌ [COMMISSION] Commission creation error:', commissionError);
+            console.error('❌ [COMMISSION] Failed commission data:', commissionData);
           } else {
-            console.log(`✅ Commission created: $${commissionAmount.toFixed(2)} USDT + ${shareCommission.toFixed(2)} shares`);
+            console.log(`✅ [COMMISSION] Commission created successfully: $${commissionAmount.toFixed(2)} USDT + ${shareCommission.toFixed(2)} shares`);
+            console.log(`✅ [COMMISSION] Commission record ID:`, commissionRecord.id);
 
             // Update commission balance (add to existing balance)
-            console.log('💳 Updating commission balance...');
+            console.log('💳 [COMMISSION] Updating commission balance...');
+            console.log(`💳 [COMMISSION] Looking for existing balance for user ${referralData.referrer_id}`);
 
             // First, get existing balance
             const { data: existingBalance, error: getBalanceError } = await db.client
@@ -3725,8 +3737,10 @@ async function handleApprovePayment(ctx, callbackData) {
               .eq('user_id', referralData.referrer_id)
               .single();
 
+            console.log(`💳 [COMMISSION] Existing balance query result:`, { existingBalance, getBalanceError });
+
             if (getBalanceError && getBalanceError.code !== 'PGRST116') {
-              console.error('❌ Error getting existing balance:', getBalanceError);
+              console.error('❌ [COMMISSION] Error getting existing balance:', getBalanceError);
             }
 
             const currentUSDT = existingBalance?.usdt_balance || 0;
@@ -3734,33 +3748,55 @@ async function handleApprovePayment(ctx, callbackData) {
             const totalEarnedUSDT = (existingBalance?.total_earned_usdt || 0) + commissionAmount;
             const totalEarnedShares = (existingBalance?.total_earned_shares || 0) + shareCommission;
 
+            const balanceUpdateData = {
+              user_id: referralData.referrer_id,
+              usdt_balance: currentUSDT + commissionAmount,
+              share_balance: currentShares + shareCommission,
+              total_earned_usdt: totalEarnedUSDT,
+              total_earned_shares: totalEarnedShares,
+              last_updated: new Date().toISOString(),
+              created_at: existingBalance?.created_at || new Date().toISOString()
+            };
+
+            console.log(`💳 [COMMISSION] Upserting balance data:`, balanceUpdateData);
+
             const { error: balanceError } = await db.client
               .from('commission_balances')
-              .upsert({
-                user_id: referralData.referrer_id,
-                usdt_balance: currentUSDT + commissionAmount,
-                share_balance: currentShares + shareCommission,
-                total_earned_usdt: totalEarnedUSDT,
-                total_earned_shares: totalEarnedShares,
-                last_updated: new Date().toISOString(),
-                created_at: existingBalance?.created_at || new Date().toISOString()
-              }, {
+              .upsert(balanceUpdateData, {
                 onConflict: 'user_id'
               });
 
+            console.log(`💳 [COMMISSION] Balance upsert result:`, { balanceError });
+
             if (balanceError) {
-              console.error('❌ Commission balance update error:', balanceError);
+              console.error('❌ [COMMISSION] Commission balance update error:', balanceError);
             } else {
-              console.log(`✅ Commission balance updated: +$${commissionAmount} USDT, +${shareCommission} shares`);
+              console.log(`✅ [COMMISSION] Commission balance updated successfully: +$${commissionAmount} USDT, +${shareCommission} shares`);
+              console.log(`✅ [COMMISSION] New balances: $${currentUSDT + commissionAmount} USDT, ${currentShares + shareCommission} shares`);
             }
           }
         } else {
-          console.log('ℹ️ No referrer found for this user - no commission to create');
+          console.log('ℹ️ [COMMISSION] No referrer found for this user - no commission to create');
+          console.log(`ℹ️ [COMMISSION] Referral error:`, referralError);
+          console.log(`ℹ️ [COMMISSION] User ID searched: ${updatedPayment.user_id}`);
+
+          // Let's also check if there are ANY referrals for this user (debug)
+          const { data: allReferrals, error: allReferralsError } = await db.client
+            .from('referrals')
+            .select('*')
+            .eq('referred_id', updatedPayment.user_id);
+
+          console.log(`🔍 [COMMISSION] All referrals for user ${updatedPayment.user_id}:`, allReferrals);
+          console.log(`🔍 [COMMISSION] All referrals query error:`, allReferralsError);
         }
       }
     } catch (shareError) {
       console.error('Error creating share purchase:', shareError);
     }
+
+    // NOTIFY USER OF PAYMENT APPROVAL
+    console.log(`📱 Notifying user ${updatedPayment.users.username} of payment approval...`);
+    await notifyUserPaymentApproved(updatedPayment, sharesAmount, currentPhase);
 
     await ctx.replyWithMarkdown(`✅ **PAYMENT APPROVED**
 
@@ -3769,7 +3805,7 @@ async function handleApprovePayment(ctx, callbackData) {
 **User:** ${updatedPayment.users.full_name || updatedPayment.users.username}
 **Shares Allocated:** ${sharesAmount}
 
-The user will be notified of the approval and shares have been allocated.`, {
+✅ User has been notified of the approval and shares have been allocated.`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "🔙 Back to Payments", callback_data: "admin_payments" }]
@@ -3780,6 +3816,71 @@ The user will be notified of the approval and shares have been allocated.`, {
   } catch (error) {
     console.error('Payment approval error:', error);
     await ctx.answerCbQuery('❌ Error approving payment');
+  }
+}
+
+// Notify user of payment approval
+async function notifyUserPaymentApproved(payment, sharesAllocated, currentPhase) {
+  try {
+    console.log(`📱 [notifyUserPaymentApproved] Notifying user ${payment.users.username} of payment approval`);
+
+    // Get user's Telegram ID
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('telegram_id')
+      .eq('user_id', payment.user_id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      console.error('❌ Error finding user Telegram ID:', telegramError);
+      return;
+    }
+
+    const approvalMessage = `🎉 **PAYMENT APPROVED!**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**✅ CONGRATULATIONS!**
+Your share purchase has been approved and processed successfully.
+
+**📋 TRANSACTION DETAILS:**
+• **Payment ID:** #${payment.id.substring(0, 8)}
+• **Amount Paid:** $${payment.amount} USDT
+• **Shares Allocated:** ${sharesAllocated} shares
+• **Share Price:** $${currentPhase.price_per_share} per share
+• **Current Phase:** ${currentPhase.name}
+• **Approval Date:** ${new Date().toLocaleDateString()}
+
+**💰 PORTFOLIO UPDATE:**
+Your ${sharesAllocated} new shares have been added to your portfolio and are now earning dividends from our gold mining operations.
+
+**🎯 NEXT STEPS:**
+• View your updated portfolio
+• Track your dividend earnings
+• Share your referral link to earn commissions
+• Consider additional share purchases
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🏆 Welcome to Aureus Alliance Holdings!**
+Your investment in African gold mining starts now.`;
+
+    // Send notification to user
+    await bot.telegram.sendMessage(telegramUser.telegram_id, approvalMessage, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
+          [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
+          [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+    console.log(`✅ [notifyUserPaymentApproved] Notification sent successfully to user ${payment.users.username}`);
+
+  } catch (error) {
+    console.error('❌ Error sending payment approval notification:', error);
   }
 }
 

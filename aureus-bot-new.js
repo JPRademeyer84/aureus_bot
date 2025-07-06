@@ -2516,7 +2516,7 @@ async function handleAdminPendingWithdrawals(ctx) {
       .from('commission_withdrawals')
       .select(`
         *,
-        users!inner(full_name, username)
+        users!commission_withdrawals_user_id_fkey!inner(full_name, username)
       `)
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
@@ -2607,7 +2607,7 @@ async function handleApproveWithdrawalShort(ctx, callbackData) {
       .from('commission_withdrawals')
       .select(`
         *,
-        users!inner(full_name, username)
+        users!commission_withdrawals_user_id_fkey!inner(full_name, username)
       `)
       .ilike('id', `${shortId}%`)
       .eq('status', 'pending')
@@ -2786,7 +2786,7 @@ async function handleRejectWithdrawalPrompt(ctx, callbackData) {
       .from('commission_withdrawals')
       .select(`
         *,
-        users!inner(full_name, username)
+        users!commission_withdrawals_user_id_fkey!inner(full_name, username)
       `)
       .ilike('id', `${shortId}%`)
       .eq('status', 'pending')
@@ -2862,7 +2862,7 @@ async function handleWithdrawalRejectionReasonInput(ctx, rejectionReason) {
       .from('commission_withdrawals')
       .select(`
         *,
-        users!inner(full_name, username)
+        users!commission_withdrawals_user_id_fkey!inner(full_name, username)
       `)
       .eq('id', withdrawalId)
       .eq('status', 'pending')
@@ -5967,6 +5967,54 @@ async function handleCommissionToShares(ctx) {
     }
 
     const availableUSDT = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
+
+    // Check for existing pending conversion requests
+    const { data: pendingConversions, error: pendingError } = await db.client
+      .from('commission_conversions')
+      .select('id')
+      .eq('user_id', telegramUser.user_id)
+      .eq('status', 'pending')
+      .limit(1);
+
+    if (pendingError) {
+      console.error('Error checking pending conversions:', pendingError);
+      await ctx.replyWithMarkdown('❌ **Error checking existing requests**\n\nPlease try again.');
+      return;
+    }
+
+    if (pendingConversions && pendingConversions.length > 0) {
+      await ctx.replyWithMarkdown(`⚠️ **PENDING CONVERSION REQUEST EXISTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**You already have a pending commission-to-shares conversion request.**
+
+**Current Status:** Waiting for admin approval
+
+**Available USDT Commission:** $${availableUSDT.toFixed(2)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Please wait for your current conversion to be processed before submitting a new request.**
+
+**You can:**
+• Check the status in Admin Panel → Commission Conversions
+• Contact admin for updates on your pending request
+• Use your commission for other purposes
+
+**This prevents duplicate requests and ensures accurate balance management.**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💸 Withdraw USDT Instead", callback_data: "withdraw_usdt_commission" }],
+            [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+            [{ text: "📞 Contact Admin", url: "https://t.me/TTTFOUNDER" }]
+          ]
+        }
+      });
+      return;
+    }
 
     if (availableUSDT <= 0) {
       await ctx.replyWithMarkdown(`💰 **INSUFFICIENT COMMISSION BALANCE**

@@ -2025,9 +2025,10 @@ Your conversion request has been submitted to the admin for approval. You will b
       }
     });
 
-    // Notify admin
+    // Notify admin (skip if admin is testing their own conversion)
     try {
-      const adminNotification = `🛒 **NEW COMMISSION CONVERSION REQUEST**
+      if (user.username !== 'TTTFOUNDER') {
+        const adminNotification = `🛒 **NEW COMMISSION CONVERSION REQUEST**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2044,18 +2045,22 @@ Your conversion request has been submitted to the admin for approval. You will b
 
 **Action Required:** Please review and approve/reject this conversion request.`;
 
-      await bot.telegram.sendMessage(process.env.ADMIN_TELEGRAM_ID || '1234567890', adminNotification, {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "✅ Approve", callback_data: `approve_commission_conversion_${conversion.id}` },
-              { text: "❌ Reject", callback_data: `reject_commission_conversion_${conversion.id}` }
-            ],
-            [{ text: "👥 View All Requests", callback_data: "admin_commission_conversions" }]
-          ]
-        }
-      });
+        // Send to admin (use your actual Telegram ID: 1393852532)
+        await bot.telegram.sendMessage(1393852532, adminNotification, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: "✅ Approve", callback_data: `approve_conv_${conversion.id.substring(0, 8)}` },
+                { text: "❌ Reject", callback_data: `reject_conv_${conversion.id.substring(0, 8)}` }
+              ],
+              [{ text: "👥 View All Requests", callback_data: "admin_commission_conversions" }]
+            ]
+          }
+        });
+      } else {
+        console.log('📝 Admin testing conversion - skipping self-notification');
+      }
     } catch (adminNotifyError) {
       console.error('Error notifying admin:', adminNotifyError);
     }

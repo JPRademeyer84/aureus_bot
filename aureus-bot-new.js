@@ -3370,7 +3370,7 @@ Cannot approve this withdrawal due to insufficient balance.`, {
       .single();
 
     const currentBalance = updatedBalance ? parseFloat(updatedBalance.usdt_balance || 0) : 0;
-    const currentEscrow = updatedBalance ? parseFloat(updatedBalance.escrowed_amount || 0) : 0;
+    const finalEscrowAmount = updatedBalance ? parseFloat(updatedBalance.escrowed_amount || 0) : 0;
     const totalWithdrawn = updatedBalance ? parseFloat(updatedBalance.total_withdrawn_usdt || 0) : 0;
 
     // Enhanced success notification to admin
@@ -3389,7 +3389,7 @@ Cannot approve this withdrawal due to insufficient balance.`, {
 • **Previous Balance:** $${(currentBalance + withdrawal.amount).toFixed(2)} USDT
 • **Withdrawal Amount:** -$${withdrawal.amount.toFixed(2)} USDT
 • **New Balance:** $${currentBalance.toFixed(2)} USDT
-• **Escrowed Amount:** $${currentEscrow.toFixed(2)} USDT
+• **Escrowed Amount:** $${finalEscrowAmount.toFixed(2)} USDT
 • **Total Withdrawn:** $${totalWithdrawn.toFixed(2)} USDT
 
 **✅ SYSTEM ACTIONS COMPLETED:**
@@ -3625,7 +3625,7 @@ async function handleWithdrawalRejectionReasonInput(ctx, rejectionReason) {
       .single();
 
     const currentBalance = updatedBalance ? parseFloat(updatedBalance.usdt_balance || 0) : 0;
-    const currentEscrow = updatedBalance ? parseFloat(updatedBalance.escrowed_amount || 0) : 0;
+    const finalEscrowBalance = updatedBalance ? parseFloat(updatedBalance.escrowed_amount || 0) : 0;
     const totalWithdrawn = updatedBalance ? parseFloat(updatedBalance.total_withdrawn_usdt || 0) : 0;
 
     // Enhanced rejection notification to admin
@@ -3645,7 +3645,7 @@ ${rejectionReason.trim()}
 
 **💰 BALANCE STATUS:**
 • **Current Balance:** $${currentBalance.toFixed(2)} USDT (unchanged)
-• **Escrowed Amount:** $${currentEscrow.toFixed(2)} USDT (released)
+• **Escrowed Amount:** $${finalEscrowBalance.toFixed(2)} USDT (released)
 • **Total Withdrawn:** $${totalWithdrawn.toFixed(2)} USDT
 • **Funds Released:** $${withdrawal.amount.toFixed(2)} USDT (back to available balance)
 

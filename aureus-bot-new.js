@@ -1014,6 +1014,10 @@ bot.on('callback_query', async (ctx) => {
         await handleAdminCommissionConversions(ctx);
         break;
 
+      case 'admin_pending_withdrawals':
+        await handleAdminPendingWithdrawals(ctx);
+        break;
+
       case 'admin_stats':
         await handleAdminAnalytics(ctx);
         break;
@@ -1092,6 +1096,10 @@ bot.on('callback_query', async (ctx) => {
           await handleApproveCommissionConversionShort(ctx, callbackData);
         } else if (callbackData.startsWith('reject_conv_')) {
           await handleRejectCommissionConversionShort(ctx, callbackData);
+        } else if (callbackData.startsWith('approve_withdrawal_')) {
+          await handleApproveWithdrawalShort(ctx, callbackData);
+        } else if (callbackData.startsWith('reject_withdrawal_')) {
+          await handleRejectWithdrawalPrompt(ctx, callbackData);
         } else if (callbackData === 'withdrawal_history') {
           await handleWithdrawalHistory(ctx);
         } else if (callbackData.startsWith('copy_referral_link_')) {
@@ -1823,6 +1831,9 @@ bot.on('text', async (ctx) => {
   } else if (ctx.session && ctx.session.pendingRejection) {
     console.log(`❌ [TEXT HANDLER] Processing payment rejection reason`);
     await handleRejectionReasonInput(ctx, text);
+  } else if (ctx.session && ctx.session.pendingWithdrawalRejection) {
+    console.log(`💸 [TEXT HANDLER] Processing withdrawal rejection reason`);
+    await handleWithdrawalRejectionReasonInput(ctx, text);
   } else {
     console.log(`❓ [TEXT HANDLER] No matching state handler for: ${userState?.state || 'null'}`);
   }
@@ -2487,6 +2498,490 @@ async function handleRejectCommissionConversionShort(ctx, callbackData) {
   } catch (error) {
     console.error('Error handling short rejection:', error);
     await ctx.answerCbQuery('❌ Error processing rejection');
+  }
+}
+
+// Handle admin pending withdrawals view
+async function handleAdminPendingWithdrawals(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  try {
+    // Get pending withdrawal requests with user info
+    const { data: withdrawals, error: withdrawalsError } = await db.client
+      .from('commission_withdrawals')
+      .select(`
+        *,
+        users!inner(full_name, username)
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (withdrawalsError) {
+      console.error('Error fetching pending withdrawals:', withdrawalsError);
+      await ctx.reply('❌ Error loading pending withdrawals');
+      return;
+    }
+
+    if (!withdrawals || withdrawals.length === 0) {
+      await ctx.replyWithMarkdown(`⏳ **PENDING WITHDRAWALS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**No pending withdrawal requests**
+
+All withdrawal requests have been processed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Back to Commission Requests", callback_data: "admin_commissions" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    let message = `⏳ **PENDING WITHDRAWALS**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**${withdrawals.length} Pending Request${withdrawals.length > 1 ? 's' : ''}:**\n\n`;
+
+    const keyboard = [];
+
+    for (let i = 0; i < withdrawals.length; i++) {
+      const withdrawal = withdrawals[i];
+      const shortId = withdrawal.id.substring(0, 8);
+      const userName = withdrawal.users.full_name || withdrawal.users.username;
+      const createdDate = new Date(withdrawal.created_at).toLocaleDateString();
+      const walletShort = withdrawal.wallet_address ?
+        `${withdrawal.wallet_address.substring(0, 6)}...${withdrawal.wallet_address.substring(-4)}` :
+        'N/A';
+
+      message += `**${i + 1}. Request #${shortId}**\n`;
+      message += `• **User:** ${userName}\n`;
+      message += `• **Amount:** $${withdrawal.amount} USDT\n`;
+      message += `• **Wallet:** ${walletShort}\n`;
+      message += `• **Date:** ${createdDate}\n`;
+      message += `• **Type:** ${withdrawal.withdrawal_type.toUpperCase()}\n\n`;
+
+      // Add approve/reject buttons for each withdrawal (using short ID to avoid 64-byte limit)
+      keyboard.push([
+        { text: `✅ Approve #${shortId}`, callback_data: `approve_withdrawal_${shortId}` },
+        { text: `❌ Reject #${shortId}`, callback_data: `reject_withdrawal_${shortId}` }
+      ]);
+    }
+
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**Select an action for each request above.**`;
+
+    keyboard.push([{ text: "🔙 Back to Commission Requests", callback_data: "admin_commissions" }]);
+
+    await ctx.replyWithMarkdown(message, {
+      reply_markup: {
+        inline_keyboard: keyboard
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling admin pending withdrawals:', error);
+    await ctx.reply('❌ Error loading pending withdrawals');
+  }
+}
+
+// Handle admin approval of withdrawal (short callback)
+async function handleApproveWithdrawalShort(ctx, callbackData) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  try {
+    const shortId = callbackData.replace('approve_withdrawal_', '');
+
+    // Find the withdrawal by short ID
+    const { data: withdrawal, error: withdrawalError } = await db.client
+      .from('commission_withdrawals')
+      .select(`
+        *,
+        users!inner(full_name, username)
+      `)
+      .ilike('id', `${shortId}%`)
+      .eq('status', 'pending')
+      .single();
+
+    if (withdrawalError || !withdrawal) {
+      await ctx.answerCbQuery('❌ Withdrawal request not found or already processed');
+      return;
+    }
+
+    // Verify user still has sufficient commission balance
+    const { data: commissionBalance, error: balanceError } = await db.client
+      .from('commission_balances')
+      .select('usdt_balance')
+      .eq('user_id', withdrawal.user_id)
+      .single();
+
+    const availableUSDT = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
+
+    if (availableUSDT < withdrawal.amount) {
+      await ctx.replyWithMarkdown(`❌ **INSUFFICIENT USER COMMISSION BALANCE**
+
+**User:** ${withdrawal.users.full_name || withdrawal.users.username}
+**Withdrawal Amount:** $${withdrawal.amount.toFixed(2)} USDT
+**Available Balance:** $${availableUSDT.toFixed(2)} USDT
+
+Cannot approve this withdrawal due to insufficient balance.`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Back to Pending Withdrawals", callback_data: "admin_pending_withdrawals" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Update withdrawal status and deduct from commission balance
+    const { error: updateError } = await db.client
+      .from('commission_withdrawals')
+      .update({
+        status: 'approved',
+        approved_by_admin_id: user.id,
+        approved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', withdrawal.id);
+
+    if (updateError) {
+      console.error('Error approving withdrawal:', updateError);
+      await ctx.answerCbQuery('❌ Error approving withdrawal');
+      return;
+    }
+
+    // Deduct from commission balance
+    const { error: balanceUpdateError } = await db.client
+      .from('commission_balances')
+      .update({
+        usdt_balance: availableUSDT - withdrawal.amount,
+        total_withdrawn_usdt: (commissionBalance.total_withdrawn_usdt || 0) + withdrawal.amount,
+        last_updated: new Date().toISOString()
+      })
+      .eq('user_id', withdrawal.user_id);
+
+    if (balanceUpdateError) {
+      console.error('Error updating commission balance:', balanceUpdateError);
+      // Rollback withdrawal approval
+      await db.client
+        .from('commission_withdrawals')
+        .update({ status: 'pending' })
+        .eq('id', withdrawal.id);
+      await ctx.answerCbQuery('❌ Error updating balance');
+      return;
+    }
+
+    // Log admin action
+    await logAdminAction(
+      user.id,
+      user.username,
+      'withdrawal_approved',
+      'withdrawal',
+      withdrawal.id,
+      {
+        user: withdrawal.users.username,
+        amount: withdrawal.amount,
+        wallet: withdrawal.wallet_address
+      }
+    );
+
+    // Success notification to admin
+    await ctx.replyWithMarkdown(`✅ **WITHDRAWAL APPROVED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${withdrawal.id.substring(0, 8)}
+**User:** ${withdrawal.users.full_name || withdrawal.users.username}
+**Amount:** $${withdrawal.amount.toFixed(2)} USDT
+**Wallet:** ${withdrawal.wallet_address}
+
+**✅ Transaction completed successfully**
+• User's commission balance updated
+• Withdrawal marked as approved
+• User has been notified
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Next Step:** Process the actual USDT transfer to user's wallet.`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⏳ View Pending Withdrawals", callback_data: "admin_pending_withdrawals" }],
+          [{ text: "🔙 Back to Commission Requests", callback_data: "admin_commissions" }]
+        ]
+      }
+    });
+
+    // Notify user of approval
+    try {
+      const { data: telegramUser } = await db.client
+        .from('telegram_users')
+        .select('telegram_id')
+        .eq('user_id', withdrawal.user_id)
+        .single();
+
+      if (telegramUser) {
+        const userNotification = `✅ **WITHDRAWAL APPROVED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${withdrawal.id.substring(0, 8)}
+**Amount:** $${withdrawal.amount.toFixed(2)} USDT
+**Wallet Address:** ${withdrawal.wallet_address}
+
+**Status:** Approved by Admin
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Your withdrawal request has been approved! The USDT will be transferred to your wallet address within 24-48 hours.
+
+**You will receive a confirmation message with the transaction hash once the transfer is completed.**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+        await bot.telegram.sendMessage(telegramUser.telegram_id, userNotification, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+              [{ text: "📋 Withdrawal History", callback_data: "withdrawal_history" }]
+            ]
+          }
+        });
+      }
+    } catch (notifyError) {
+      console.error('Error notifying user of withdrawal approval:', notifyError);
+    }
+
+  } catch (error) {
+    console.error('Error approving withdrawal:', error);
+    await ctx.answerCbQuery('❌ Error processing approval');
+  }
+}
+
+// Handle withdrawal rejection prompt
+async function handleRejectWithdrawalPrompt(ctx, callbackData) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  try {
+    const shortId = callbackData.replace('reject_withdrawal_', '');
+
+    // Find the withdrawal by short ID
+    const { data: withdrawal, error: withdrawalError } = await db.client
+      .from('commission_withdrawals')
+      .select(`
+        *,
+        users!inner(full_name, username)
+      `)
+      .ilike('id', `${shortId}%`)
+      .eq('status', 'pending')
+      .single();
+
+    if (withdrawalError || !withdrawal) {
+      await ctx.answerCbQuery('❌ Withdrawal request not found');
+      return;
+    }
+
+    const promptMessage = `❌ **REJECT WITHDRAWAL CONFIRMATION**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Withdrawal Details:**
+• **ID:** #${withdrawal.id.substring(0, 8)}
+• **User:** ${withdrawal.users.full_name || withdrawal.users.username}
+• **Amount:** $${withdrawal.amount} USDT
+• **Wallet:** ${withdrawal.wallet_address}
+• **Type:** ${withdrawal.withdrawal_type.toUpperCase()}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Please enter the reason for rejecting this withdrawal:**
+
+*This message will be sent to the user along with the rejection notification.*`;
+
+    await ctx.replyWithMarkdown(promptMessage, {
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: "Enter rejection reason..."
+      }
+    });
+
+    // Store the withdrawal ID in session for the next message
+    ctx.session = ctx.session || {};
+    ctx.session.pendingWithdrawalRejection = withdrawal.id;
+
+  } catch (error) {
+    console.error('Error showing withdrawal rejection prompt:', error);
+    await ctx.answerCbQuery('❌ Error processing rejection');
+  }
+}
+
+// Handle withdrawal rejection reason input
+async function handleWithdrawalRejectionReasonInput(ctx, rejectionReason) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.reply('❌ Access denied');
+    return;
+  }
+
+  try {
+    const withdrawalId = ctx.session.pendingWithdrawalRejection;
+
+    if (!withdrawalId) {
+      await ctx.reply('❌ No pending withdrawal rejection found. Please try again.');
+      return;
+    }
+
+    // Clear the session data
+    delete ctx.session.pendingWithdrawalRejection;
+
+    // Validate rejection reason
+    if (!rejectionReason || rejectionReason.trim().length < 5) {
+      await ctx.reply('❌ Rejection reason must be at least 5 characters long. Please try again.');
+      return;
+    }
+
+    // Get withdrawal details
+    const { data: withdrawal, error: withdrawalError } = await db.client
+      .from('commission_withdrawals')
+      .select(`
+        *,
+        users!inner(full_name, username)
+      `)
+      .eq('id', withdrawalId)
+      .eq('status', 'pending')
+      .single();
+
+    if (withdrawalError || !withdrawal) {
+      await ctx.reply('❌ Withdrawal request not found or already processed.');
+      return;
+    }
+
+    // Update withdrawal status to rejected
+    const { error: updateError } = await db.client
+      .from('commission_withdrawals')
+      .update({
+        status: 'rejected',
+        rejected_by_admin_id: user.id,
+        rejected_at: new Date().toISOString(),
+        admin_notes: rejectionReason.trim(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', withdrawalId);
+
+    if (updateError) {
+      console.error('Error rejecting withdrawal:', updateError);
+      await ctx.reply('❌ Error rejecting withdrawal. Please try again.');
+      return;
+    }
+
+    // Log admin action
+    await logAdminAction(
+      user.id,
+      user.username,
+      'withdrawal_rejected',
+      'withdrawal',
+      withdrawalId,
+      {
+        user: withdrawal.users.username,
+        amount: withdrawal.amount,
+        rejection_reason: rejectionReason.trim()
+      }
+    );
+
+    // Success notification to admin
+    await ctx.replyWithMarkdown(`❌ **WITHDRAWAL REJECTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${withdrawalId.substring(0, 8)}
+**User:** ${withdrawal.users.full_name || withdrawal.users.username}
+**Amount:** $${withdrawal.amount.toFixed(2)} USDT
+**Wallet:** ${withdrawal.wallet_address}
+
+**Rejection Reason:** ${rejectionReason.trim()}
+
+**✅ Withdrawal request has been rejected**
+
+The user will be notified of the rejection with your custom message.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⏳ View Pending Withdrawals", callback_data: "admin_pending_withdrawals" }],
+          [{ text: "🔙 Back to Commission Requests", callback_data: "admin_commissions" }]
+        ]
+      }
+    });
+
+    // Notify user of rejection
+    try {
+      const { data: telegramUser } = await db.client
+        .from('telegram_users')
+        .select('telegram_id')
+        .eq('user_id', withdrawal.user_id)
+        .single();
+
+      if (telegramUser) {
+        const userNotification = `❌ **WITHDRAWAL REJECTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${withdrawalId.substring(0, 8)}
+**Amount:** $${withdrawal.amount.toFixed(2)} USDT
+**Wallet Address:** ${withdrawal.wallet_address}
+
+**Status:** Rejected by Admin
+
+**Reason for Rejection:**
+${rejectionReason.trim()}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Your withdrawal request has been rejected. Your commission balance remains unchanged.
+
+**You can:**
+• Review the rejection reason above
+• Correct any issues mentioned
+• Submit a new withdrawal request
+• Contact support for assistance
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+        await bot.telegram.sendMessage(telegramUser.telegram_id, userNotification, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "💸 Try New Withdrawal", callback_data: "withdraw_usdt_commission" }],
+              [{ text: "💰 View Commission", callback_data: "view_commission" }],
+              [{ text: "📞 Contact Support", url: "https://t.me/TTTFOUNDER" }]
+            ]
+          }
+        });
+      }
+    } catch (notifyError) {
+      console.error('Error notifying user of withdrawal rejection:', notifyError);
+    }
+
+  } catch (error) {
+    console.error('Error processing withdrawal rejection reason:', error);
+    await ctx.reply('❌ Error processing rejection. Please try again.');
   }
 }
 

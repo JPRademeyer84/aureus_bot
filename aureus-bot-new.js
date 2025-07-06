@@ -273,7 +273,7 @@ async function getEnhancedCommissionBalance(userId) {
     const totalBalance = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
     const escrowedAmount = commissionBalance ? parseFloat(commissionBalance.escrowed_amount || 0) : 0;
     const availableUSDT = Math.max(0, totalBalance - escrowedAmount);
-    const totalWithdrawnUSDT = commissionBalance ? parseFloat(commissionBalance.total_withdrawn_usdt || 0) : 0;
+    const totalWithdrawnUSDT = commissionBalance ? parseFloat(commissionBalance.total_withdrawn || 0) : 0;
 
     // Calculate conversion totals
     const totalConvertedUSDT = conversionHistory ? conversionHistory.reduce((sum, conv) => sum + parseFloat(conv.usdt_amount || 0), 0) : 0;
@@ -2379,6 +2379,9 @@ bot.on('text', async (ctx) => {
   } else if (userState && userState.state === 'awaiting_commission_shares') {
     console.log(`🛒 [TEXT HANDLER] Processing commission shares input`);
     await handleCommissionSharesInput(ctx, text, userState.data);
+  } else if (userState && userState.state === 'awaiting_withdrawal_hash') {
+    console.log(`🔐 [TEXT HANDLER] Processing withdrawal transaction hash input`);
+    await handleWithdrawalHashInput(ctx, text, userState.data);
   } else if (ctx.session && ctx.session.pendingRejection) {
     console.log(`❌ [TEXT HANDLER] Processing payment rejection reason`);
     await handleRejectionReasonInput(ctx, text);
@@ -3246,7 +3249,7 @@ async function handleApproveWithdrawalShort(ctx, callbackData) {
         *,
         users!commission_withdrawals_user_id_fkey!inner(full_name, username)
       `)
-      .filter('id::text', 'like', `${shortId}%`)
+      .filter('id', 'like', `${shortId}%`)
       .eq('status', 'pending');
 
     if (error1) {
@@ -3303,159 +3306,37 @@ Cannot approve this withdrawal due to insufficient balance.`, {
       return;
     }
 
-    // Update withdrawal status and deduct from commission balance
-    const { error: updateError } = await db.client
-      .from('commission_withdrawals')
-      .update({
-        status: 'approved',
-        approved_by_admin_id: user.id,
-        approved_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', withdrawal.id);
+    // Ask admin for transaction hash before final approval
+    await ctx.replyWithMarkdown(`🔐 **WITHDRAWAL APPROVAL - TRANSACTION HASH REQUIRED**
 
-    if (updateError) {
-      console.error('Error approving withdrawal:', updateError);
-      await ctx.answerCbQuery('❌ Error approving withdrawal');
-      return;
-    }
+**User:** ${withdrawal.users.full_name || withdrawal.users.username}
+**Amount:** $${withdrawal.amount.toFixed(2)} USDT
+**Wallet:** \`${withdrawal.wallet_address}\`
+**Available Balance:** $${availableUSDT.toFixed(2)} USDT
 
-    // 🔒 SECURE ESCROW: Deduct from both commission balance and escrow
-    const currentEscrow = parseFloat(commissionBalance.escrowed_amount || 0);
-    const newBalance = availableUSDT - withdrawal.amount;
-    const newEscrow = Math.max(0, currentEscrow - withdrawal.amount);
+⚠️ **Please provide the transaction hash for this withdrawal payment:**
 
-    console.log(`🔒 [ESCROW] Withdrawal approval - Balance: $${availableUSDT} -> $${newBalance}, Escrow: $${currentEscrow} -> $${newEscrow}`);
-
-    const { error: balanceUpdateError } = await db.client
-      .from('commission_balances')
-      .update({
-        usdt_balance: newBalance,
-        escrowed_amount: newEscrow,
-        total_withdrawn_usdt: (commissionBalance.total_withdrawn_usdt || 0) + withdrawal.amount,
-        last_updated: new Date().toISOString()
-      })
-      .eq('user_id', withdrawal.user_id);
-
-    if (balanceUpdateError) {
-      console.error('Error updating commission balance:', balanceUpdateError);
-      // Rollback withdrawal approval
-      await db.client
-        .from('commission_withdrawals')
-        .update({ status: 'pending' })
-        .eq('id', withdrawal.id);
-      await ctx.answerCbQuery('❌ Error updating balance');
-      return;
-    }
-
-    // Log admin action
-    await logAdminAction(
-      user.id,
-      user.username,
-      'withdrawal_approved',
-      'withdrawal',
-      withdrawal.id,
-      {
-        user: withdrawal.users.username,
-        amount: withdrawal.amount,
-        wallet: withdrawal.wallet_address
-      }
-    );
-
-    // Get updated balance information for detailed confirmation
-    const { data: updatedBalance, error: balanceCheckError } = await db.client
-      .from('commission_balances')
-      .select('usdt_balance, escrowed_amount, total_withdrawn_usdt')
-      .eq('user_id', withdrawal.user_id)
-      .single();
-
-    const currentBalance = updatedBalance ? parseFloat(updatedBalance.usdt_balance || 0) : 0;
-    const finalEscrowAmount = updatedBalance ? parseFloat(updatedBalance.escrowed_amount || 0) : 0;
-    const totalWithdrawn = updatedBalance ? parseFloat(updatedBalance.total_withdrawn_usdt || 0) : 0;
-
-    // Enhanced success notification to admin
-    await ctx.replyWithMarkdown(`✅ **WITHDRAWAL APPROVED & PROCESSED**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**📋 REQUEST DETAILS:**
-• **Request ID:** #${withdrawal.id.substring(0, 8)}
-• **User:** ${withdrawal.users.full_name || withdrawal.users.username}
-• **Amount:** $${withdrawal.amount.toFixed(2)} USDT
-• **Wallet:** ${withdrawal.wallet_address}
-• **Type:** ${withdrawal.withdrawal_type.toUpperCase()}
-
-**💰 BALANCE UPDATES:**
-• **Previous Balance:** $${(currentBalance + withdrawal.amount).toFixed(2)} USDT
-• **Withdrawal Amount:** -$${withdrawal.amount.toFixed(2)} USDT
-• **New Balance:** $${currentBalance.toFixed(2)} USDT
-• **Escrowed Amount:** $${finalEscrowAmount.toFixed(2)} USDT
-• **Total Withdrawn:** $${totalWithdrawn.toFixed(2)} USDT
-
-**✅ SYSTEM ACTIONS COMPLETED:**
-• ✅ Commission balance deducted
-• ✅ Escrow amount released
-• ✅ Withdrawal status updated to 'approved'
-• ✅ User notification sent successfully
-• ✅ Audit log entry created
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**🚀 NEXT STEP:** Process the actual USDT transfer to user's wallet address.
-**⏰ TIMELINE:** Complete transfer within 24-48 hours as promised.`, {
+*This hash will be sent to the user as proof of payment.*`, {
       reply_markup: {
-        inline_keyboard: [
-          [{ text: "⏳ View Pending Withdrawals", callback_data: "admin_pending_withdrawals" }],
-          [{ text: "🔙 Back to Commission Requests", callback_data: "admin_commissions" }]
-        ]
+        force_reply: true,
+        input_field_placeholder: "Enter transaction hash (e.g., 0x1234...)"
       }
     });
 
-    // Notify user of approval
-    try {
-      const { data: telegramUser } = await db.client
-        .from('telegram_users')
-        .select('telegram_id')
-        .eq('user_id', withdrawal.user_id)
-        .single();
+    // Set user state to await transaction hash
+    await setUserState(user.id, 'awaiting_withdrawal_hash', {
+      withdrawal_id: withdrawal.id,
+      short_id: shortId,
+      user_name: withdrawal.users.full_name || withdrawal.users.username,
+      amount: withdrawal.amount,
+      wallet_address: withdrawal.wallet_address,
+      available_balance: availableUSDT
+    });
 
-      if (telegramUser) {
-        const userNotification = `✅ **WITHDRAWAL APPROVED**
+    await ctx.answerCbQuery('💳 Please provide transaction hash');
+    return;
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Request ID:** #${withdrawal.id.substring(0, 8)}
-**Amount:** $${withdrawal.amount.toFixed(2)} USDT
-**Wallet Address:** ${withdrawal.wallet_address}
-
-**Status:** Approved by Admin
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Your withdrawal request has been approved! The USDT will be transferred to your wallet address within 24-48 hours.
-
-**You will receive a confirmation message with the transaction hash once the transfer is completed.**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-
-        await sendAudioNotificationToUser(
-          telegramUser.telegram_id,
-          userNotification,
-          'APPROVAL',
-          {
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
-                [{ text: "📋 Withdrawal History", callback_data: "withdrawal_history" }]
-              ]
-            }
-          },
-          true // Enable audio notification for approvals
-        );
-      }
-    } catch (notifyError) {
-      console.error('Error notifying user of withdrawal approval:', notifyError);
-    }
 
   } catch (error) {
     console.error('Error approving withdrawal:', error);
@@ -3620,13 +3501,13 @@ async function handleWithdrawalRejectionReasonInput(ctx, rejectionReason) {
     // Get updated balance information for detailed confirmation
     const { data: updatedBalance, error: balanceCheckError } = await db.client
       .from('commission_balances')
-      .select('usdt_balance, escrowed_amount, total_withdrawn_usdt')
+      .select('usdt_balance, escrowed_amount, total_withdrawn')
       .eq('user_id', withdrawal.user_id)
       .single();
 
     const currentBalance = updatedBalance ? parseFloat(updatedBalance.usdt_balance || 0) : 0;
     const finalEscrowBalance = updatedBalance ? parseFloat(updatedBalance.escrowed_amount || 0) : 0;
-    const totalWithdrawn = updatedBalance ? parseFloat(updatedBalance.total_withdrawn_usdt || 0) : 0;
+    const totalWithdrawn = updatedBalance ? parseFloat(updatedBalance.total_withdrawn || 0) : 0;
 
     // Enhanced rejection notification to admin
     await ctx.replyWithMarkdown(`❌ **WITHDRAWAL REJECTED & PROCESSED**
@@ -4368,6 +4249,199 @@ Your commission balance is secure and will be available once pending requests ar
   } catch (error) {
     console.error('Error handling withdrawal wallet:', error);
     await ctx.reply('❌ Error processing withdrawal request. Please try again.');
+  }
+}
+
+// Handle withdrawal transaction hash input from admin
+async function handleWithdrawalHashInput(ctx, text, sessionData) {
+  const user = ctx.from;
+  const { withdrawal_id, short_id, user_name, amount, wallet_address, available_balance } = sessionData;
+
+  try {
+    // Clear user state first
+    await clearUserState(user.id);
+
+    // Validate transaction hash format (basic validation)
+    const transactionHash = text.trim();
+    if (!transactionHash || transactionHash.length < 10) {
+      await ctx.reply('❌ Invalid transaction hash. Please provide a valid transaction hash.');
+      return;
+    }
+
+    // Get withdrawal details to verify it's still pending
+    const { data: withdrawal, error: withdrawalError } = await db.client
+      .from('commission_withdrawals')
+      .select(`
+        *,
+        users!commission_withdrawals_user_id_fkey!inner(full_name, username)
+      `)
+      .eq('id', withdrawal_id)
+      .eq('status', 'pending')
+      .single();
+
+    if (withdrawalError || !withdrawal) {
+      await ctx.reply('❌ Withdrawal request not found or already processed.');
+      return;
+    }
+
+    // Get current commission balance
+    const { data: commissionBalance, error: balanceError } = await db.client
+      .from('commission_balances')
+      .select('usdt_balance, escrowed_amount, total_withdrawn')
+      .eq('user_id', withdrawal.user_id)
+      .single();
+
+    if (balanceError || !commissionBalance) {
+      await ctx.reply('❌ Error retrieving user balance.');
+      return;
+    }
+
+    // Update withdrawal status with transaction hash
+    const { error: updateError } = await db.client
+      .from('commission_withdrawals')
+      .update({
+        status: 'approved',
+        transaction_hash: transactionHash,
+        approved_by_admin_id: user.id,
+        approved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', withdrawal_id);
+
+    if (updateError) {
+      console.error('Error updating withdrawal:', updateError);
+      await ctx.reply('❌ Error updating withdrawal status.');
+      return;
+    }
+
+    // 🔒 SECURE ESCROW: Deduct from both commission balance and escrow
+    const currentEscrow = parseFloat(commissionBalance.escrowed_amount || 0);
+    const newBalance = parseFloat(commissionBalance.usdt_balance || 0) - withdrawal.amount;
+    const newEscrow = Math.max(0, currentEscrow - withdrawal.amount);
+
+    console.log(`🔒 [ESCROW] Withdrawal approval - Balance: $${commissionBalance.usdt_balance} -> $${newBalance}, Escrow: $${currentEscrow} -> $${newEscrow}`);
+
+    const { error: balanceUpdateError } = await db.client
+      .from('commission_balances')
+      .update({
+        usdt_balance: newBalance,
+        escrowed_amount: newEscrow,
+        total_withdrawn: (commissionBalance.total_withdrawn || 0) + withdrawal.amount,
+        last_updated: new Date().toISOString()
+      })
+      .eq('user_id', withdrawal.user_id);
+
+    if (balanceUpdateError) {
+      console.error('Error updating commission balance:', balanceUpdateError);
+      // Rollback withdrawal approval
+      await db.client
+        .from('commission_withdrawals')
+        .update({ status: 'pending', transaction_hash: null })
+        .eq('id', withdrawal_id);
+      await ctx.reply('❌ Error updating balance. Withdrawal reverted to pending.');
+      return;
+    }
+
+    // Log admin action
+    await logAdminAction(
+      user.id,
+      user.username,
+      'withdrawal_approved',
+      'withdrawal',
+      withdrawal_id,
+      {
+        user: withdrawal.users.username,
+        amount: withdrawal.amount,
+        wallet: withdrawal.wallet_address,
+        transaction_hash: transactionHash
+      }
+    );
+
+    // Success notification to admin
+    await ctx.replyWithMarkdown(`✅ **WITHDRAWAL APPROVED & PROCESSED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 REQUEST DETAILS:**
+• **Request ID:** #${short_id}
+• **User:** ${user_name}
+• **Amount:** $${withdrawal.amount.toFixed(2)} USDT
+• **Wallet:** ${wallet_address}
+• **Transaction Hash:** \`${transactionHash}\`
+
+**💰 BALANCE UPDATES:**
+• **Previous Balance:** $${(newBalance + withdrawal.amount).toFixed(2)} USDT
+• **Withdrawal Amount:** -$${withdrawal.amount.toFixed(2)} USDT
+• **New Balance:** $${newBalance.toFixed(2)} USDT
+• **Escrowed Amount:** $${newEscrow.toFixed(2)} USDT
+
+**✅ SYSTEM ACTIONS COMPLETED:**
+• ✅ Commission balance deducted
+• ✅ Escrow amount released
+• ✅ Transaction hash recorded
+• ✅ User notification sent
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⏳ View Pending Withdrawals", callback_data: "admin_pending_withdrawals" }],
+          [{ text: "🔙 Back to Commission Requests", callback_data: "admin_commissions" }]
+        ]
+      }
+    });
+
+    // Notify user of approval with transaction hash
+    try {
+      const { data: telegramUser } = await db.client
+        .from('telegram_users')
+        .select('telegram_id')
+        .eq('user_id', withdrawal.user_id)
+        .single();
+
+      if (telegramUser) {
+        const userNotification = `✅ **WITHDRAWAL COMPLETED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${short_id}
+**Amount:** $${withdrawal.amount.toFixed(2)} USDT
+**Wallet Address:** ${wallet_address}
+
+**🔗 Transaction Hash:**
+\`${transactionHash}\`
+
+**Status:** ✅ Payment Completed
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Your withdrawal has been successfully processed! The USDT has been transferred to your wallet address.
+
+**You can verify the transaction using the hash above on the blockchain explorer.**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+        await sendAudioNotificationToUser(
+          telegramUser.telegram_id,
+          userNotification,
+          'APPROVAL',
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+                [{ text: "📋 Withdrawal History", callback_data: "withdrawal_history" }]
+              ]
+            }
+          },
+          true // Enable audio notification for approvals
+        );
+      }
+    } catch (notifyError) {
+      console.error('Error notifying user of withdrawal completion:', notifyError);
+    }
+
+  } catch (error) {
+    console.error('Error processing withdrawal hash:', error);
+    await ctx.reply('❌ Error processing transaction hash. Please try again.');
   }
 }
 

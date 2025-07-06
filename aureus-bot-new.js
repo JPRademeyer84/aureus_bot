@@ -2444,16 +2444,24 @@ async function handleApproveCommissionConversionShort(ctx, callbackData) {
 
   try {
     const shortId = callbackData.replace('approve_conv_', '');
+    console.log(`🔍 Looking for commission conversion with short ID: ${shortId}`);
 
-    // Find the conversion by short ID
-    const { data: conversion, error: conversionError } = await db.client
+    // Find the conversion by short ID - robust approach
+    const { data: allPending, error: conversionError } = await db.client
       .from('commission_conversions')
-      .select('id')
-      .ilike('id', `${shortId}%`)
-      .eq('status', 'pending')
-      .single();
+      .select('*')
+      .eq('status', 'pending');
 
-    if (conversionError || !conversion) {
+    if (conversionError) {
+      console.error('Error fetching pending conversions:', conversionError);
+      await ctx.answerCbQuery('❌ Error loading conversion data');
+      return;
+    }
+
+    const conversion = allPending?.find(c => c.id.startsWith(shortId));
+
+    if (!conversion) {
+      console.error('Conversion not found:', { shortId, availableIds: allPending?.map(c => c.id.substring(0, 8)) });
       await ctx.answerCbQuery('❌ Conversion request not found');
       return;
     }
@@ -2478,16 +2486,24 @@ async function handleRejectCommissionConversionShort(ctx, callbackData) {
 
   try {
     const shortId = callbackData.replace('reject_conv_', '');
+    console.log(`🔍 Looking for commission conversion to reject with short ID: ${shortId}`);
 
-    // Find the conversion by short ID
-    const { data: conversion, error: conversionError } = await db.client
+    // Find the conversion by short ID - robust approach
+    const { data: allPending, error: conversionError } = await db.client
       .from('commission_conversions')
-      .select('id')
-      .ilike('id', `${shortId}%`)
-      .eq('status', 'pending')
-      .single();
+      .select('*')
+      .eq('status', 'pending');
 
-    if (conversionError || !conversion) {
+    if (conversionError) {
+      console.error('Error fetching pending conversions:', conversionError);
+      await ctx.answerCbQuery('❌ Error loading conversion data');
+      return;
+    }
+
+    const conversion = allPending?.find(c => c.id.startsWith(shortId));
+
+    if (!conversion) {
+      console.error('Conversion not found:', { shortId, availableIds: allPending?.map(c => c.id.substring(0, 8)) });
       await ctx.answerCbQuery('❌ Conversion request not found');
       return;
     }

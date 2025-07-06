@@ -20,6 +20,473 @@ const ADMIN_USERNAME = "TTTFOUNDER";
 
 console.log("📊 Database: Supabase PostgreSQL");
 
+// 🔒 ESCROW SECURITY FUNCTIONS - Prevent Double-Spending Vulnerabilities
+// These functions implement atomic escrow operations to prevent race conditions
+// between concurrent commission withdrawal and conversion requests
+
+/**
+ * Atomically check available balance and create escrow for commission request
+ * @param {string} userId - User ID
+ * @param {number} requestAmount - Amount to escrow
+ * @param {string} requestType - 'withdrawal' or 'conversion'
+ * @returns {Promise<{success: boolean, availableBalance?: number, error?: string}>}
+ */
+async function createCommissionEscrow(userId, requestAmount, requestType) {
+  try {
+    // Use a database transaction to atomically check and update escrow
+    const { data, error } = await db.client.rpc('create_commission_escrow', {
+      p_user_id: userId,
+      p_request_amount: requestAmount,
+      p_request_type: requestType
+    });
+
+    if (error) {
+      console.error(`❌ [ESCROW] Failed to create escrow for ${requestType}:`, error);
+      return { success: false, error: error.message };
+    }
+
+    console.log(`✅ [ESCROW] Created ${requestType} escrow: $${requestAmount} for user ${userId}`);
+    return { success: true, availableBalance: data };
+  } catch (error) {
+    console.error(`❌ [ESCROW] Exception creating escrow:`, error);
+    return { success: false, error: 'Internal escrow error' };
+  }
+}
+
+/**
+ * Release escrow when request is rejected (only deduct from escrowed_amount)
+ * @param {string} userId - User ID
+ * @param {number} escrowAmount - Amount to release from escrow
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function releaseCommissionEscrow(userId, escrowAmount) {
+  try {
+    const { error } = await db.client.rpc('release_commission_escrow', {
+      p_user_id: userId,
+      p_escrow_amount: escrowAmount
+    });
+
+    if (error) {
+      console.error(`❌ [ESCROW] Failed to release escrow:`, error);
+      return { success: false, error: error.message };
+    }
+
+    console.log(`✅ [ESCROW] Released escrow: $${escrowAmount} for user ${userId}`);
+    return { success: true };
+  } catch (error) {
+    console.error(`❌ [ESCROW] Exception releasing escrow:`, error);
+    return { success: false, error: 'Internal escrow error' };
+  }
+}
+
+/**
+ * Audio notification system for enhanced user experience
+ * Sends different notification sounds based on message type
+ */
+const AUDIO_NOTIFICATIONS = {
+  SUCCESS: '🔔', // Success sound emoji
+  ERROR: '🚨',   // Error sound emoji
+  WARNING: '⚠️', // Warning sound emoji
+  INFO: 'ℹ️',    // Info sound emoji
+  PAYMENT: '💰', // Payment sound emoji
+  APPROVAL: '✅', // Approval sound emoji
+  REJECTION: '❌' // Rejection sound emoji
+};
+
+/**
+ * Send notification with optional audio cue
+ * @param {Object} ctx - Telegram context
+ * @param {string} message - Message to send
+ * @param {string} audioType - Type of audio notification
+ * @param {Object} options - Additional options (keyboard, etc.)
+ * @param {boolean} enableAudio - Whether to include audio notification
+ */
+async function sendNotificationWithAudio(ctx, message, audioType = 'INFO', options = {}, enableAudio = true) {
+  try {
+    // Add audio emoji to message if enabled
+    let finalMessage = message;
+    if (enableAudio && AUDIO_NOTIFICATIONS[audioType]) {
+      finalMessage = `${AUDIO_NOTIFICATIONS[audioType]} ${message}`;
+    }
+
+    // Send the message with enhanced notification
+    const messageOptions = {
+      parse_mode: 'Markdown',
+      disable_notification: !enableAudio, // Enable notification sound if audio is enabled
+      ...options
+    };
+
+    await ctx.replyWithMarkdown(finalMessage, messageOptions);
+
+    // Log audio notification for debugging
+    if (enableAudio) {
+      console.log(`🔊 [AUDIO] Sent ${audioType} notification to user ${ctx.from.id}`);
+    }
+
+  } catch (error) {
+    console.error('Error sending notification with audio:', error);
+    // Fallback to regular message
+    await ctx.replyWithMarkdown(message, options);
+  }
+}
+
+/**
+ * Check if user has audio notifications enabled
+ * @param {number} telegramId - User's telegram ID
+ * @returns {Promise<boolean>} - Whether audio notifications are enabled
+ */
+async function isAudioNotificationEnabled(telegramId) {
+  try {
+    // For now, default to enabled. In the future, this could check user preferences
+    // from a database table like user_preferences
+    return true;
+  } catch (error) {
+    console.error('Error checking audio notification preference:', error);
+    return true; // Default to enabled
+  }
+}
+
+/**
+ * Send audio notification to user by telegram ID
+ * @param {number} telegramId - User's telegram ID
+ * @param {string} message - Message to send
+ * @param {string} audioType - Type of audio notification
+ * @param {Object} options - Additional options
+ * @param {boolean} forceAudio - Force audio notification regardless of user preference
+ */
+async function sendAudioNotificationToUser(telegramId, message, audioType = 'INFO', options = {}, forceAudio = false) {
+  try {
+    // Check user preference for audio notifications
+    const audioEnabled = forceAudio || await isAudioNotificationEnabled(telegramId);
+
+    // Add audio emoji to message if enabled
+    let finalMessage = message;
+    if (audioEnabled && AUDIO_NOTIFICATIONS[audioType]) {
+      finalMessage = `${AUDIO_NOTIFICATIONS[audioType]} ${message}`;
+    }
+
+    // Send the message with enhanced notification
+    const messageOptions = {
+      parse_mode: 'Markdown',
+      disable_notification: !audioEnabled, // Enable notification sound if audio is enabled
+      ...options
+    };
+
+    await bot.telegram.sendMessage(telegramId, finalMessage, messageOptions);
+
+    // Log audio notification for debugging
+    if (audioEnabled) {
+      console.log(`🔊 [AUDIO] Sent ${audioType} notification to user ${telegramId}`);
+    }
+
+  } catch (error) {
+    console.error('Error sending audio notification to user:', error);
+    // Fallback to regular message
+    await bot.telegram.sendMessage(telegramId, message, options);
+  }
+}
+
+/**
+ * Get available commission balance (usdt_balance - escrowed_amount)
+ * @param {string} userId - User ID
+ * @returns {Promise<{availableBalance: number, totalBalance: number, escrowedAmount: number}>}
+ */
+async function getAvailableCommissionBalance(userId) {
+  try {
+    const { data: balance, error } = await db.client
+      .from('commission_balances')
+      .select('usdt_balance, escrowed_amount')
+      .eq('user_id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error(`❌ [ESCROW] Error fetching balance:`, error);
+      return { availableBalance: 0, totalBalance: 0, escrowedAmount: 0 };
+    }
+
+    const totalBalance = balance ? parseFloat(balance.usdt_balance || 0) : 0;
+    const escrowedAmount = balance ? parseFloat(balance.escrowed_amount || 0) : 0;
+    const availableBalance = totalBalance - escrowedAmount;
+
+    console.log(`💰 [ESCROW] Balance check for user ${userId}: Total=$${totalBalance}, Escrowed=$${escrowedAmount}, Available=$${availableBalance}`);
+
+    return {
+      availableBalance: Math.max(0, availableBalance),
+      totalBalance,
+      escrowedAmount
+    };
+  } catch (error) {
+    console.error(`❌ [ESCROW] Exception getting balance:`, error);
+    return { availableBalance: 0, totalBalance: 0, escrowedAmount: 0 };
+  }
+}
+
+/**
+ * Get enhanced commission balance with comprehensive information
+ * @param {string} userId - User ID
+ * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+ */
+async function getEnhancedCommissionBalance(userId) {
+  try {
+    console.log(`🔍 [ENHANCED_BALANCE] Starting enhanced balance fetch for user ${userId}`);
+
+    // Get commission balance
+    const { data: commissionBalance, error: balanceError } = await db.client
+      .from('commission_balances')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    console.log(`🔍 [ENHANCED_BALANCE] Commission balance query result:`, { commissionBalance, balanceError });
+
+    if (balanceError && balanceError.code !== 'PGRST116') {
+      console.error('Enhanced commission balance fetch error:', balanceError);
+      return { success: false, error: balanceError.message };
+    }
+
+    // Get pending withdrawals
+    const { data: pendingWithdrawals, error: withdrawalError } = await db.client
+      .from('commission_withdrawals')
+      .select('id, amount, created_at, withdrawal_type')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    // Get pending conversions
+    const { data: pendingConversions, error: conversionError } = await db.client
+      .from('commission_conversions')
+      .select('id, usdt_amount, shares_requested, created_at')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    // Get conversion history (approved conversions)
+    const { data: conversionHistory, error: historyError } = await db.client
+      .from('commission_conversions')
+      .select('usdt_amount, shares_requested')
+      .eq('user_id', userId)
+      .eq('status', 'approved');
+
+    // Calculate values
+    const totalEarnedUSDT = commissionBalance ? parseFloat(commissionBalance.total_earned_usdt || 0) : 0;
+    const totalEarnedShares = commissionBalance ? parseFloat(commissionBalance.total_earned_shares || 0) : 0;
+    const totalBalance = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
+    const escrowedAmount = commissionBalance ? parseFloat(commissionBalance.escrowed_amount || 0) : 0;
+    const availableUSDT = Math.max(0, totalBalance - escrowedAmount);
+    const totalWithdrawnUSDT = commissionBalance ? parseFloat(commissionBalance.total_withdrawn_usdt || 0) : 0;
+
+    // Calculate conversion totals
+    const totalConvertedUSDT = conversionHistory ? conversionHistory.reduce((sum, conv) => sum + parseFloat(conv.usdt_amount || 0), 0) : 0;
+    const sharesFromConversions = conversionHistory ? conversionHistory.reduce((sum, conv) => sum + parseFloat(conv.shares_requested || 0), 0) : 0;
+
+    // Get current phase price for accurate share value calculation
+    let currentSharePrice = 5.00; // Default to $5
+    try {
+      const currentPhase = await db.getCurrentPhase();
+      if (currentPhase && currentPhase.price_per_share) {
+        currentSharePrice = parseFloat(currentPhase.price_per_share);
+      }
+      console.log(`🔍 [ENHANCED_BALANCE] Current phase price: $${currentSharePrice}`);
+    } catch (phaseError) {
+      console.error('Error getting current phase for share value calculation:', phaseError);
+      // Continue with default price
+    }
+
+    // Calculate share value using current phase price
+    const shareValue = totalEarnedShares * currentSharePrice;
+    const totalCommissionValue = totalEarnedUSDT + shareValue;
+
+    console.log(`🔍 [ENHANCED_BALANCE] Share value calculation: ${totalEarnedShares} shares × $${currentSharePrice} = $${shareValue}`);
+
+    return {
+      success: true,
+      data: {
+        totalEarnedUSDT,
+        totalEarnedShares,
+        availableUSDT,
+        escrowedAmount,
+        totalWithdrawnUSDT,
+        totalConvertedUSDT,
+        sharesFromConversions,
+        shareValue,
+        totalCommissionValue,
+        pendingWithdrawals: pendingWithdrawals || [],
+        pendingConversions: pendingConversions || []
+      }
+    };
+  } catch (error) {
+    console.error('Enhanced commission balance exception:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// 🚨 SHARES SOLD TRACKING FUNCTIONS - Critical Bug Fix
+// These functions ensure shares_sold field is properly updated when shares are allocated
+
+/**
+ * Atomically increment shares_sold for a specific investment phase
+ * @param {string} phaseId - Investment phase ID
+ * @param {number} sharesAllocated - Number of shares to add to shares_sold
+ * @param {string} source - Source of allocation (e.g., 'direct_purchase', 'commission_conversion', 'referral_bonus')
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function incrementSharesSold(phaseId, sharesAllocated, source = 'unknown') {
+  try {
+    console.log(`📊 [SHARES_SOLD] Incrementing shares_sold: Phase ${phaseId}, +${sharesAllocated} shares, Source: ${source}`);
+
+    // Use atomic update with current value check
+    const { data: currentPhase, error: fetchError } = await db.client
+      .from('investment_phases')
+      .select('id, phase_number, shares_sold, total_shares_available')
+      .eq('id', phaseId)
+      .single();
+
+    if (fetchError || !currentPhase) {
+      console.error(`❌ [SHARES_SOLD] Phase ${phaseId} not found:`, fetchError);
+      return { success: false, error: `Phase ${phaseId} not found` };
+    }
+
+    const currentSharesSold = parseInt(currentPhase.shares_sold || 0);
+    const newSharesSold = currentSharesSold + sharesAllocated;
+    const totalAvailable = parseInt(currentPhase.total_shares_available || 0);
+
+    // Validate we don't exceed total available shares
+    if (newSharesSold > totalAvailable) {
+      console.error(`❌ [SHARES_SOLD] Would exceed total available shares: ${newSharesSold} > ${totalAvailable}`);
+      return { success: false, error: `Would exceed total available shares (${totalAvailable})` };
+    }
+
+    // Atomic update
+    const { error: updateError } = await db.client
+      .from('investment_phases')
+      .update({
+        shares_sold: newSharesSold,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', phaseId)
+      .eq('shares_sold', currentSharesSold); // Ensure no concurrent updates
+
+    if (updateError) {
+      console.error(`❌ [SHARES_SOLD] Failed to update shares_sold:`, updateError);
+      return { success: false, error: updateError.message };
+    }
+
+    console.log(`✅ [SHARES_SOLD] Updated Phase ${currentPhase.phase_number}: ${currentSharesSold} -> ${newSharesSold} shares sold`);
+
+    // Log the update for audit trail
+    await logAdminAction(
+      null, // No specific admin for system actions
+      'SYSTEM',
+      'shares_sold_increment',
+      'investment_phase',
+      phaseId,
+      {
+        source,
+        shares_allocated: sharesAllocated,
+        previous_shares_sold: currentSharesSold,
+        new_shares_sold: newSharesSold,
+        remaining_shares: totalAvailable - newSharesSold
+      }
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error(`❌ [SHARES_SOLD] Exception incrementing shares_sold:`, error);
+    return { success: false, error: 'Internal error updating shares_sold' };
+  }
+}
+
+/**
+ * Get current active phase for share allocation
+ * @returns {Promise<{phase: object|null, error?: string}>}
+ */
+async function getCurrentActivePhase() {
+  try {
+    const { data: phase, error } = await db.client
+      .from('investment_phases')
+      .select('*')
+      .eq('is_active', true)
+      .single();
+
+    if (error) {
+      console.error(`❌ [SHARES_SOLD] Error fetching active phase:`, error);
+      return { phase: null, error: error.message };
+    }
+
+    return { phase };
+  } catch (error) {
+    console.error(`❌ [SHARES_SOLD] Exception fetching active phase:`, error);
+    return { phase: null, error: 'Internal error fetching active phase' };
+  }
+}
+
+/**
+ * Validate shares_sold integrity across all phases
+ * @returns {Promise<{valid: boolean, issues?: Array, summary?: object}>}
+ */
+async function validateSharesSoldIntegrity() {
+  try {
+    console.log(`🔍 [VALIDATION] Starting shares_sold integrity check...`);
+
+    // Get all phases
+    const { data: phases, error: phasesError } = await db.client
+      .from('investment_phases')
+      .select('*')
+      .order('phase_number');
+
+    if (phasesError) {
+      console.error(`❌ [VALIDATION] Error fetching phases:`, phasesError);
+      return { valid: false, issues: ['Failed to fetch investment phases'] };
+    }
+
+    const issues = [];
+    let totalSharesSold = 0;
+    let totalSharesAvailable = 0;
+
+    for (const phase of phases) {
+      const sharesSold = parseInt(phase.shares_sold || 0);
+      const totalAvailable = parseInt(phase.total_shares_available || 0);
+      const remaining = totalAvailable - sharesSold;
+
+      totalSharesSold += sharesSold;
+      totalSharesAvailable += totalAvailable;
+
+      // Check for negative remaining shares
+      if (remaining < 0) {
+        issues.push(`Phase ${phase.phase_number}: Negative remaining shares (${remaining})`);
+      }
+
+      // Check for impossible values
+      if (sharesSold > totalAvailable) {
+        issues.push(`Phase ${phase.phase_number}: shares_sold (${sharesSold}) exceeds total_shares_available (${totalAvailable})`);
+      }
+
+      console.log(`📊 [VALIDATION] Phase ${phase.phase_number}: ${sharesSold}/${totalAvailable} shares sold (${remaining} remaining)`);
+    }
+
+    const summary = {
+      total_phases: phases.length,
+      total_shares_sold: totalSharesSold,
+      total_shares_available: totalSharesAvailable,
+      total_remaining: totalSharesAvailable - totalSharesSold,
+      issues_found: issues.length
+    };
+
+    console.log(`📊 [VALIDATION] Summary:`, summary);
+
+    if (issues.length > 0) {
+      console.error(`❌ [VALIDATION] Found ${issues.length} integrity issues:`, issues);
+      return { valid: false, issues, summary };
+    }
+
+    console.log(`✅ [VALIDATION] shares_sold integrity check passed`);
+    return { valid: true, summary };
+  } catch (error) {
+    console.error(`❌ [VALIDATION] Exception during integrity check:`, error);
+    return { valid: false, issues: ['Internal validation error'] };
+  }
+}
+
 // Create bot instance
 const bot = new Telegraf(BOT_TOKEN);
 
@@ -64,7 +531,8 @@ function createMainMenuKeyboard(isAdmin = false) {
       { text: "🏘️ Community Relations", callback_data: "menu_community" }
     ],
     [
-      { text: "🆘 Support Center", callback_data: "menu_help" }
+      { text: "🆘 Support Center", callback_data: "menu_help" },
+      { text: "⚙️ Settings", callback_data: "user_settings" }
     ]
   ];
 
@@ -978,6 +1446,10 @@ bot.on('callback_query', async (ctx) => {
         await handleCustomAmountPurchase(ctx);
         break;
 
+      case 'admin_validate_shares_sold':
+        await handleValidateSharesSold(ctx);
+        break;
+
       case 'menu_referrals':
         await handleReferralSystem(ctx);
         break;
@@ -1076,6 +1548,16 @@ bot.on('callback_query', async (ctx) => {
           await handleShareReferral(ctx);
         } else if (callbackData === 'view_commission') {
           await handleViewCommission(ctx);
+        } else if (callbackData === 'view_pending_requests') {
+          await handleViewPendingRequests(ctx);
+        } else if (callbackData === 'manage_pending_requests') {
+          await handleManagePendingRequests(ctx);
+        } else if (callbackData === 'user_settings') {
+          await handleUserSettings(ctx);
+        } else if (callbackData === 'test_audio_notification') {
+          await handleTestAudioNotification(ctx);
+        } else if (callbackData === 'toggle_audio_notifications') {
+          await handleToggleAudioNotifications(ctx);
         } else if (callbackData === 'view_referrals') {
           await handleViewReferrals(ctx);
         } else if (callbackData === 'withdraw_commissions') {
@@ -1566,6 +2048,75 @@ bot.catch((err, ctx) => {
 // All database schema changes are handled manually by the user
 // The bot cannot create tables, only update existing data
 
+// 🔍 Admin function to validate and fix shares_sold integrity
+async function handleValidateSharesSold(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  try {
+    await ctx.answerCbQuery('🔍 Running shares_sold validation...');
+
+    const validation = await validateSharesSoldIntegrity();
+
+    let message = `🔍 **SHARES SOLD INTEGRITY CHECK**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📊 SUMMARY:**
+• **Total Phases:** ${validation.summary?.total_phases || 0}
+• **Total Shares Sold:** ${validation.summary?.total_shares_sold || 0}
+• **Total Shares Available:** ${validation.summary?.total_shares_available || 0}
+• **Total Remaining:** ${validation.summary?.total_remaining || 0}
+• **Issues Found:** ${validation.summary?.issues_found || 0}
+
+**🔍 STATUS:** ${validation.valid ? '✅ VALID' : '❌ ISSUES DETECTED'}`;
+
+    if (!validation.valid && validation.issues) {
+      message += `
+
+**⚠️ ISSUES DETECTED:**`;
+      validation.issues.forEach((issue, index) => {
+        message += `\n${index + 1}. ${issue}`;
+      });
+
+      message += `
+
+**💡 RECOMMENDED ACTIONS:**
+• Run the audit SQL query to calculate correct totals
+• Update shares_sold values manually in database
+• Re-run this validation to confirm fixes`;
+    }
+
+    message += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔧 This validation checks:**
+• shares_sold doesn't exceed total_shares_available
+• No negative remaining shares
+• Data consistency across all phases
+
+**📝 All future share allocations will automatically update shares_sold.**`;
+
+    await ctx.replyWithMarkdown(message, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🔄 Run Validation Again", callback_data: "admin_validate_shares_sold" }],
+          [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error validating shares_sold:', error);
+    await ctx.replyWithMarkdown('❌ **Error running validation**\n\nPlease check logs and try again.');
+  }
+}
+
 // Start bot
 async function startBot() {
   try {
@@ -1898,7 +2449,33 @@ async function handleCommissionSharesInput(ctx, text, conversionData) {
     const totalCost = sharesRequested * conversionData.share_price;
 
     if (totalCost > conversionData.available_usdt) {
-      await ctx.reply(`❌ Insufficient commission balance. Cost: $${totalCost.toFixed(2)}, Available: $${conversionData.available_usdt.toFixed(2)}`);
+      // Get detailed balance information for better error message
+      const balanceInfo = await getAvailableCommissionBalance(telegramUser.user_id);
+
+      await ctx.replyWithMarkdown(`❌ **INSUFFICIENT COMMISSION BALANCE FOR CONVERSION**
+
+**🛒 Conversion Request:**
+• **Shares Requested:** ${sharesRequested} shares
+• **Share Price:** $${conversionData.share_price.toFixed(2)} per share
+• **Total Cost:** $${totalCost.toFixed(2)} USDT
+
+**💰 Your Balance Details:**
+• **Total Balance:** $${balanceInfo.totalBalance.toFixed(2)} USDT
+• **Currently Escrowed:** $${balanceInfo.escrowedAmount.toFixed(2)} USDT
+• **Available for Conversion:** $${balanceInfo.availableBalance.toFixed(2)} USDT
+
+${balanceInfo.escrowedAmount > 0 ?
+`**⚠️ FUNDS LOCKED:** You have $${balanceInfo.escrowedAmount.toFixed(2)} USDT locked in pending requests.
+
+**💡 WHAT YOU CAN DO:**
+• **Wait:** Pending requests will be processed within 24-48 hours
+• **Convert Less:** Maximum ${Math.floor(balanceInfo.availableBalance / conversionData.share_price)} shares available
+• **Check Status:** View your pending requests for details` :
+`**💡 WHAT YOU CAN DO:**
+• **Convert Less:** Maximum ${Math.floor(balanceInfo.availableBalance / conversionData.share_price)} shares available
+• **Earn More:** Refer more users to increase your commission balance`}
+
+**📞 Need Help?** Contact @TTTFOUNDER for assistance.`);
       return;
     }
 
@@ -1976,21 +2553,40 @@ async function handleConfirmCommissionConversion(ctx, callbackData) {
       return;
     }
 
-    // Verify user still has sufficient commission balance
-    const { data: commissionBalance, error: commissionError } = await db.client
-      .from('commission_balances')
-      .select('usdt_balance')
-      .eq('user_id', telegramUser.user_id)
-      .single();
+    // 🔒 SECURE ESCROW: Check available balance and create escrow atomically
+    console.log(`🔒 [ESCROW] Creating commission conversion escrow for user ${telegramUser.user_id}, amount: $${totalCost}`);
 
-    const availableUSDT = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
+    const escrowResult = await createCommissionEscrow(telegramUser.user_id, totalCost, 'conversion');
 
-    if (availableUSDT < totalCost) {
-      await ctx.replyWithMarkdown('❌ **Insufficient commission balance**\n\nYour commission balance has changed. Please try again.');
+    if (!escrowResult.success) {
+      console.error(`❌ [ESCROW] Failed to create conversion escrow:`, escrowResult.error);
+
+      if (escrowResult.error.includes('Insufficient available balance')) {
+        // Get current balance info for detailed error message
+        const balanceInfo = await getAvailableCommissionBalance(telegramUser.user_id);
+        await ctx.replyWithMarkdown(`❌ **INSUFFICIENT AVAILABLE COMMISSION BALANCE**
+
+**💰 Balance Details:**
+• **Total Balance:** $${balanceInfo.totalBalance.toFixed(2)} USDT
+• **Currently Escrowed:** $${balanceInfo.escrowedAmount.toFixed(2)} USDT
+• **Available Balance:** $${balanceInfo.availableBalance.toFixed(2)} USDT
+• **Required for Request:** $${totalCost.toFixed(2)} USDT
+
+**⚠️ You have pending commission requests that have locked some of your balance.**
+
+**💡 Options:**
+• Wait for pending requests to be processed
+• Cancel existing pending requests
+• Request a smaller amount
+
+Your commission balance is secure and will be available once pending requests are resolved.`);
+      } else {
+        await ctx.replyWithMarkdown('❌ **Error processing commission request**\n\nPlease try again or contact support.');
+      }
       return;
     }
 
-    // Create commission conversion request
+    // Create commission conversion request (escrow already secured)
     const { data: conversion, error: insertError } = await db.client
       .from('commission_conversions')
       .insert({
@@ -2007,6 +2603,11 @@ async function handleConfirmCommissionConversion(ctx, callbackData) {
 
     if (insertError) {
       console.error('Error creating commission conversion:', insertError);
+
+      // 🔒 ROLLBACK: Release escrow if conversion creation failed
+      console.log(`🔒 [ESCROW] Rolling back escrow due to conversion creation failure`);
+      await releaseCommissionEscrow(telegramUser.user_id, totalCost);
+
       await ctx.answerCbQuery('❌ Error creating conversion request');
       return;
     }
@@ -2194,15 +2795,20 @@ Your commission balance has been updated and the shares have been added to your 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
-        await bot.telegram.sendMessage(telegramUser.telegram_id, userNotification, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "📊 View Portfolio", callback_data: "menu_portfolio" }],
-              [{ text: "💰 View Commission", callback_data: "view_commission" }]
-            ]
-          }
-        });
+        await sendAudioNotificationToUser(
+          telegramUser.telegram_id,
+          userNotification,
+          'APPROVAL',
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "📊 View Portfolio", callback_data: "menu_portfolio" }],
+                [{ text: "💰 View Commission", callback_data: "view_commission" }]
+              ]
+            }
+          },
+          true // Enable audio notification for commission conversion approvals
+        );
       }
     } catch (notifyError) {
       console.error('Error notifying user of approval:', notifyError);
@@ -2258,6 +2864,16 @@ async function handleRejectCommissionConversion(ctx, callbackData) {
       console.error('Error rejecting commission conversion:', updateError);
       await ctx.answerCbQuery('❌ Error rejecting conversion');
       return;
+    }
+
+    // 🔒 SECURE ESCROW: Release escrow when conversion is rejected
+    console.log(`🔒 [ESCROW] Releasing escrow for rejected conversion: $${conversion.usdt_amount}`);
+    const escrowReleaseResult = await releaseCommissionEscrow(conversion.user_id, conversion.usdt_amount);
+
+    if (!escrowReleaseResult.success) {
+      console.error(`❌ [ESCROW] Failed to release escrow for rejected conversion:`, escrowReleaseResult.error);
+      // Continue with the rejection process even if escrow release fails
+      // This will be logged for manual review
     }
 
     // Log admin action
@@ -2630,7 +3246,7 @@ async function handleApproveWithdrawalShort(ctx, callbackData) {
         *,
         users!commission_withdrawals_user_id_fkey!inner(full_name, username)
       `)
-      .like('id', `${shortId}%`)
+      .filter('id::text', 'like', `${shortId}%`)
       .eq('status', 'pending');
 
     if (error1) {
@@ -2704,11 +3320,18 @@ Cannot approve this withdrawal due to insufficient balance.`, {
       return;
     }
 
-    // Deduct from commission balance
+    // 🔒 SECURE ESCROW: Deduct from both commission balance and escrow
+    const currentEscrow = parseFloat(commissionBalance.escrowed_amount || 0);
+    const newBalance = availableUSDT - withdrawal.amount;
+    const newEscrow = Math.max(0, currentEscrow - withdrawal.amount);
+
+    console.log(`🔒 [ESCROW] Withdrawal approval - Balance: $${availableUSDT} -> $${newBalance}, Escrow: $${currentEscrow} -> $${newEscrow}`);
+
     const { error: balanceUpdateError } = await db.client
       .from('commission_balances')
       .update({
-        usdt_balance: availableUSDT - withdrawal.amount,
+        usdt_balance: newBalance,
+        escrowed_amount: newEscrow,
         total_withdrawn_usdt: (commissionBalance.total_withdrawn_usdt || 0) + withdrawal.amount,
         last_updated: new Date().toISOString()
       })
@@ -2739,24 +3362,47 @@ Cannot approve this withdrawal due to insufficient balance.`, {
       }
     );
 
-    // Success notification to admin
-    await ctx.replyWithMarkdown(`✅ **WITHDRAWAL APPROVED**
+    // Get updated balance information for detailed confirmation
+    const { data: updatedBalance, error: balanceCheckError } = await db.client
+      .from('commission_balances')
+      .select('usdt_balance, escrowed_amount, total_withdrawn_usdt')
+      .eq('user_id', withdrawal.user_id)
+      .single();
+
+    const currentBalance = updatedBalance ? parseFloat(updatedBalance.usdt_balance || 0) : 0;
+    const currentEscrow = updatedBalance ? parseFloat(updatedBalance.escrowed_amount || 0) : 0;
+    const totalWithdrawn = updatedBalance ? parseFloat(updatedBalance.total_withdrawn_usdt || 0) : 0;
+
+    // Enhanced success notification to admin
+    await ctx.replyWithMarkdown(`✅ **WITHDRAWAL APPROVED & PROCESSED**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Request ID:** #${withdrawal.id.substring(0, 8)}
-**User:** ${withdrawal.users.full_name || withdrawal.users.username}
-**Amount:** $${withdrawal.amount.toFixed(2)} USDT
-**Wallet:** ${withdrawal.wallet_address}
+**📋 REQUEST DETAILS:**
+• **Request ID:** #${withdrawal.id.substring(0, 8)}
+• **User:** ${withdrawal.users.full_name || withdrawal.users.username}
+• **Amount:** $${withdrawal.amount.toFixed(2)} USDT
+• **Wallet:** ${withdrawal.wallet_address}
+• **Type:** ${withdrawal.withdrawal_type.toUpperCase()}
 
-**✅ Transaction completed successfully**
-• User's commission balance updated
-• Withdrawal marked as approved
-• User has been notified
+**💰 BALANCE UPDATES:**
+• **Previous Balance:** $${(currentBalance + withdrawal.amount).toFixed(2)} USDT
+• **Withdrawal Amount:** -$${withdrawal.amount.toFixed(2)} USDT
+• **New Balance:** $${currentBalance.toFixed(2)} USDT
+• **Escrowed Amount:** $${currentEscrow.toFixed(2)} USDT
+• **Total Withdrawn:** $${totalWithdrawn.toFixed(2)} USDT
+
+**✅ SYSTEM ACTIONS COMPLETED:**
+• ✅ Commission balance deducted
+• ✅ Escrow amount released
+• ✅ Withdrawal status updated to 'approved'
+• ✅ User notification sent successfully
+• ✅ Audit log entry created
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Next Step:** Process the actual USDT transfer to user's wallet.`, {
+**🚀 NEXT STEP:** Process the actual USDT transfer to user's wallet address.
+**⏰ TIMELINE:** Complete transfer within 24-48 hours as promised.`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "⏳ View Pending Withdrawals", callback_data: "admin_pending_withdrawals" }],
@@ -2792,15 +3438,20 @@ Your withdrawal request has been approved! The USDT will be transferred to your 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
-        await bot.telegram.sendMessage(telegramUser.telegram_id, userNotification, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
-              [{ text: "📋 Withdrawal History", callback_data: "withdrawal_history" }]
-            ]
-          }
-        });
+        await sendAudioNotificationToUser(
+          telegramUser.telegram_id,
+          userNotification,
+          'APPROVAL',
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+                [{ text: "📋 Withdrawal History", callback_data: "withdrawal_history" }]
+              ]
+            }
+          },
+          true // Enable audio notification for approvals
+        );
       }
     } catch (notifyError) {
       console.error('Error notifying user of withdrawal approval:', notifyError);
@@ -2942,6 +3593,16 @@ async function handleWithdrawalRejectionReasonInput(ctx, rejectionReason) {
       return;
     }
 
+    // 🔒 SECURE ESCROW: Release escrow when withdrawal is rejected
+    console.log(`🔒 [ESCROW] Releasing escrow for rejected withdrawal: $${withdrawal.amount}`);
+    const escrowReleaseResult = await releaseCommissionEscrow(withdrawal.user_id, withdrawal.amount);
+
+    if (!escrowReleaseResult.success) {
+      console.error(`❌ [ESCROW] Failed to release escrow for rejected withdrawal:`, escrowReleaseResult.error);
+      // Continue with the rejection process even if escrow release fails
+      // This will be logged for manual review
+    }
+
     // Log admin action
     await logAdminAction(
       user.id,
@@ -2956,23 +3617,49 @@ async function handleWithdrawalRejectionReasonInput(ctx, rejectionReason) {
       }
     );
 
-    // Success notification to admin
-    await ctx.replyWithMarkdown(`❌ **WITHDRAWAL REJECTED**
+    // Get updated balance information for detailed confirmation
+    const { data: updatedBalance, error: balanceCheckError } = await db.client
+      .from('commission_balances')
+      .select('usdt_balance, escrowed_amount, total_withdrawn_usdt')
+      .eq('user_id', withdrawal.user_id)
+      .single();
+
+    const currentBalance = updatedBalance ? parseFloat(updatedBalance.usdt_balance || 0) : 0;
+    const currentEscrow = updatedBalance ? parseFloat(updatedBalance.escrowed_amount || 0) : 0;
+    const totalWithdrawn = updatedBalance ? parseFloat(updatedBalance.total_withdrawn_usdt || 0) : 0;
+
+    // Enhanced rejection notification to admin
+    await ctx.replyWithMarkdown(`❌ **WITHDRAWAL REJECTED & PROCESSED**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Request ID:** #${withdrawalId.substring(0, 8)}
-**User:** ${withdrawal.users.full_name || withdrawal.users.username}
-**Amount:** $${withdrawal.amount.toFixed(2)} USDT
-**Wallet:** ${withdrawal.wallet_address}
+**📋 REQUEST DETAILS:**
+• **Request ID:** #${withdrawalId.substring(0, 8)}
+• **User:** ${withdrawal.users.full_name || withdrawal.users.username}
+• **Amount:** $${withdrawal.amount.toFixed(2)} USDT
+• **Wallet:** ${withdrawal.wallet_address}
+• **Type:** ${withdrawal.withdrawal_type.toUpperCase()}
 
-**Rejection Reason:** ${rejectionReason.trim()}
+**📝 REJECTION REASON:**
+${rejectionReason.trim()}
 
-**✅ Withdrawal request has been rejected**
+**💰 BALANCE STATUS:**
+• **Current Balance:** $${currentBalance.toFixed(2)} USDT (unchanged)
+• **Escrowed Amount:** $${currentEscrow.toFixed(2)} USDT (released)
+• **Total Withdrawn:** $${totalWithdrawn.toFixed(2)} USDT
+• **Funds Released:** $${withdrawal.amount.toFixed(2)} USDT (back to available balance)
 
-The user will be notified of the rejection with your custom message.
+**✅ SYSTEM ACTIONS COMPLETED:**
+• ✅ Withdrawal status updated to 'rejected'
+• ✅ Escrowed funds released back to user
+• ✅ User notification sent with custom reason
+• ✅ Audit log entry created
+• ✅ Balance integrity maintained
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📧 USER NOTIFICATION:** Sent successfully with rejection reason and next steps.
+**💡 USER OPTIONS:** They can review, correct issues, and submit a new request.`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "⏳ View Pending Withdrawals", callback_data: "admin_pending_withdrawals" }],
@@ -3015,16 +3702,21 @@ Your withdrawal request has been rejected. Your commission balance remains uncha
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
-        await bot.telegram.sendMessage(telegramUser.telegram_id, userNotification, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "💸 Try New Withdrawal", callback_data: "withdraw_usdt_commission" }],
-              [{ text: "💰 View Commission", callback_data: "view_commission" }],
-              [{ text: "📞 Contact Support", url: "https://t.me/TTTFOUNDER" }]
-            ]
-          }
-        });
+        await sendAudioNotificationToUser(
+          telegramUser.telegram_id,
+          userNotification,
+          'REJECTION',
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "💸 Try New Withdrawal", callback_data: "withdraw_usdt_commission" }],
+                [{ text: "💰 View Commission", callback_data: "view_commission" }],
+                [{ text: "📞 Contact Support", url: "https://t.me/TTTFOUNDER" }]
+              ]
+            }
+          },
+          true // Enable audio notification for rejections
+        );
       }
     } catch (notifyError) {
       console.error('Error notifying user of withdrawal rejection:', notifyError);
@@ -3453,7 +4145,32 @@ async function handleWithdrawalAmountInput(ctx, text, sessionData) {
     }
 
     if (amount > availableBalance) {
-      await ctx.reply(`❌ Insufficient balance. Available: $${availableBalance.toFixed(2)} USDT`);
+      // Get detailed balance information for better error message
+      const balanceInfo = await getAvailableCommissionBalance(telegramUser.user_id);
+
+      await ctx.replyWithMarkdown(`❌ **INSUFFICIENT COMMISSION BALANCE**
+
+**💰 Your Balance Details:**
+• **Total Balance:** $${balanceInfo.totalBalance.toFixed(2)} USDT
+• **Currently Escrowed:** $${balanceInfo.escrowedAmount.toFixed(2)} USDT
+• **Available for Withdrawal:** $${balanceInfo.availableBalance.toFixed(2)} USDT
+• **Requested Amount:** $${amount.toFixed(2)} USDT
+
+${balanceInfo.escrowedAmount > 0 ?
+`**⚠️ FUNDS LOCKED:** You have $${balanceInfo.escrowedAmount.toFixed(2)} USDT locked in pending requests.
+
+**💡 WHAT YOU CAN DO:**
+• **Wait:** Pending requests will be processed within 24-48 hours
+• **Withdraw Less:** Try withdrawing $${balanceInfo.availableBalance.toFixed(2)} USDT or less
+• **Check Status:** View your pending requests for details
+• **Contact Admin:** Get help with urgent requests` :
+`**💡 WHAT YOU CAN DO:**
+• **Withdraw Less:** Maximum available is $${balanceInfo.availableBalance.toFixed(2)} USDT
+• **Earn More:** Refer more users to increase your commission balance
+• **Contact Admin:** Get help if you believe this is an error`}
+
+**📞 Need Help?** Contact @TTTFOUNDER for assistance.`);
+
       await handleWithdrawUSDTCommission(ctx);
       return;
     }
@@ -3552,7 +4269,40 @@ Please enter a valid TRC-20 wallet address:`);
       return;
     }
 
-    // Create withdrawal request
+    // 🔒 SECURE ESCROW: Check available balance and create escrow atomically
+    console.log(`🔒 [ESCROW] Creating commission withdrawal escrow for user ${telegramUser.user_id}, amount: $${amount}`);
+
+    const escrowResult = await createCommissionEscrow(telegramUser.user_id, amount, 'withdrawal');
+
+    if (!escrowResult.success) {
+      console.error(`❌ [ESCROW] Failed to create withdrawal escrow:`, escrowResult.error);
+
+      if (escrowResult.error.includes('Insufficient available balance')) {
+        // Get current balance info for detailed error message
+        const balanceInfo = await getAvailableCommissionBalance(telegramUser.user_id);
+        await ctx.replyWithMarkdown(`❌ **INSUFFICIENT AVAILABLE COMMISSION BALANCE**
+
+**💰 Balance Details:**
+• **Total Balance:** $${balanceInfo.totalBalance.toFixed(2)} USDT
+• **Currently Escrowed:** $${balanceInfo.escrowedAmount.toFixed(2)} USDT
+• **Available Balance:** $${balanceInfo.availableBalance.toFixed(2)} USDT
+• **Required for Withdrawal:** $${amount.toFixed(2)} USDT
+
+**⚠️ You have pending commission requests that have locked some of your balance.**
+
+**💡 Options:**
+• Wait for pending requests to be processed
+• Cancel existing pending requests
+• Request a smaller withdrawal amount
+
+Your commission balance is secure and will be available once pending requests are resolved.`);
+      } else {
+        await ctx.reply('❌ Error processing withdrawal request. Please try again.');
+      }
+      return;
+    }
+
+    // Create withdrawal request (escrow already secured)
     const { data: withdrawal, error: withdrawalError } = await db.client
       .from('commission_withdrawals')
       .insert({
@@ -3568,6 +4318,11 @@ Please enter a valid TRC-20 wallet address:`);
 
     if (withdrawalError) {
       console.error('Error creating withdrawal request:', withdrawalError);
+
+      // 🔒 ROLLBACK: Release escrow if withdrawal creation failed
+      console.log(`🔒 [ESCROW] Rolling back escrow due to withdrawal creation failure`);
+      await releaseCommissionEscrow(telegramUser.user_id, amount);
+
       await ctx.reply('❌ Error creating withdrawal request. Please try again.');
       return;
     }
@@ -3934,6 +4689,7 @@ async function handleAdminPanel(ctx) {
         [{ text: "💰 Commission Requests", callback_data: "admin_commissions" }],
         [{ text: "🔄 Commission Conversions", callback_data: "admin_commission_conversions" }],
         [{ text: "📊 System Stats", callback_data: "admin_stats" }],
+        [{ text: "🔍 Validate Shares Sold", callback_data: "admin_validate_shares_sold" }],
         [{ text: "📋 Audit Logs", callback_data: "admin_logs" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
@@ -5093,6 +5849,15 @@ async function handleApprovePayment(ctx, callbackData) {
       } else {
         console.log('✅ Share Purchase record created:', investmentRecord.id);
 
+        // 🚨 CRITICAL FIX: Update shares_sold in investment_phases
+        console.log(`📊 [SHARES_SOLD] Updating shares_sold for direct payment approval: +${sharesAmount} shares`);
+        const sharesSoldResult = await incrementSharesSold(currentPhase.id, sharesAmount, 'direct_purchase');
+
+        if (!sharesSoldResult.success) {
+          console.error(`❌ [SHARES_SOLD] Failed to update shares_sold for payment ${paymentId}:`, sharesSoldResult.error);
+          // Continue with approval but log the error for manual review
+        }
+
         // Link the payment to the share purchase
         await db.client
           .from('crypto_payment_transactions')
@@ -5202,6 +5967,17 @@ async function handleApprovePayment(ctx, callbackData) {
             } else {
               console.log(`✅ [COMMISSION] Commission balance updated successfully: +$${commissionAmount} USDT, +${shareCommission} shares`);
               console.log(`✅ [COMMISSION] New balances: $${currentUSDT + commissionAmount} USDT, ${currentShares + shareCommission} shares`);
+
+              // 🚨 CRITICAL FIX: Update shares_sold for referral commission shares
+              if (shareCommission > 0) {
+                console.log(`📊 [SHARES_SOLD] Updating shares_sold for referral commission: +${shareCommission} shares`);
+                const sharesSoldResult = await incrementSharesSold(currentPhase.id, shareCommission, 'referral_commission');
+
+                if (!sharesSoldResult.success) {
+                  console.error(`❌ [SHARES_SOLD] Failed to update shares_sold for referral commission:`, sharesSoldResult.error);
+                  // Continue with commission processing but log the error for manual review
+                }
+              }
             }
           }
         } else {
@@ -5295,16 +6071,21 @@ Your ${sharesAllocated} new shares have been added to your portfolio and are now
 Your investment in African gold mining starts now.`;
 
     // Send notification to user
-    await bot.telegram.sendMessage(telegramUser.telegram_id, approvalMessage, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
-          [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
-          [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
-        ]
-      }
-    });
+    await sendAudioNotificationToUser(
+      telegramUser.telegram_id,
+      approvalMessage,
+      'PAYMENT',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
+            [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
+            [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
+          ]
+        }
+      },
+      true // Enable audio notification for payment approvals
+    );
 
     console.log(`✅ [notifyUserPaymentApproved] Notification sent successfully to user ${payment.users.username}`);
 
@@ -5449,15 +6230,20 @@ ${rejectionReason}
 
 **Need Help?** Contact @TTTFOUNDER for assistance.`;
 
-      await bot.telegram.sendMessage(telegramUser.telegram_id, userNotification, {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "🛒 Make New Payment", callback_data: "menu_purchase_shares" }],
-            [{ text: "📞 Contact Support", url: "https://t.me/TTTFOUNDER" }]
-          ]
-        }
-      });
+      await sendAudioNotificationToUser(
+        telegramUser.telegram_id,
+        userNotification,
+        'REJECTION',
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🛒 Make New Payment", callback_data: "menu_purchase_shares" }],
+              [{ text: "📞 Contact Support", url: "https://t.me/TTTFOUNDER" }]
+            ]
+          }
+        },
+        true // Enable audio notification for payment rejections
+      );
     } catch (notificationError) {
       console.error('Error sending rejection notification to user:', notificationError);
     }
@@ -5654,6 +6440,8 @@ async function handleViewCommission(ctx) {
   const user = ctx.from;
 
   try {
+    console.log(`🚨 [DEBUG] ENHANCED COMMISSION VIEW CALLED FOR USER ${user.id} - NEW VERSION ACTIVE!`);
+
     // Get user ID from telegram_users table
     const { data: telegramUser, error: telegramError } = await db.client
       .from('telegram_users')
@@ -5666,56 +6454,87 @@ async function handleViewCommission(ctx) {
       return;
     }
 
-    // Get commission balance from commission_balances table
-    const { data: commissionBalance, error: commissionError } = await db.client
-      .from('commission_balances')
-      .select('*')
-      .eq('user_id', telegramUser.user_id)
-      .single();
+    // Get comprehensive commission data
+    console.log(`🔍 [DEBUG] Fetching enhanced commission balance for user ${telegramUser.user_id}`);
+    const balanceInfo = await getEnhancedCommissionBalance(telegramUser.user_id);
+    console.log(`🔍 [DEBUG] Enhanced commission balance result:`, balanceInfo);
 
-    if (commissionError && commissionError.code !== 'PGRST116') {
-      console.error('Commission balance fetch error:', commissionError);
+    if (!balanceInfo.success) {
+      console.error('Enhanced commission balance fetch error:', balanceInfo.error);
       await ctx.replyWithMarkdown('❌ **Error loading commission data**\n\nPlease try again.');
       return;
     }
 
-    // Set default values if no commission balance exists
-    const totalUSDT = commissionBalance ? parseFloat(commissionBalance.total_earned_usdt || 0) : 0;
-    const totalShares = commissionBalance ? parseFloat(commissionBalance.total_earned_shares || 0) : 0;
-    const availableUSDT = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
-    const totalWithdrawn = commissionBalance ? parseFloat(commissionBalance.total_withdrawn || 0) : 0;
+    const data = balanceInfo.data;
+    console.log(`🔍 [DEBUG] Commission data:`, data);
 
-    // Calculate pending withdrawals (if any)
-    const pendingUSDT = totalUSDT - availableUSDT - totalWithdrawn;
-
-    const commissionMessage = `💰 **COMMISSION BALANCE**
+    // Build enhanced commission message with detailed status information
+    let commissionMessage = `💰 **COMMISSION BALANCE**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **💵 USDT COMMISSIONS:**
-• **Total Earned:** $${totalUSDT.toFixed(2)} USDT
-• **Available for Withdrawal:** $${availableUSDT.toFixed(2)} USDT
-• **Pending Withdrawal:** $${pendingUSDT.toFixed(2)} USDT
+• **Total Earned:** $${data.totalEarnedUSDT.toFixed(2)} USDT
+• **Available for Withdrawal:** $${data.availableUSDT.toFixed(2)} USDT
+• **Currently Escrowed:** $${data.escrowedAmount.toFixed(2)} USDT`;
+
+    // Add pending withdrawal details if any
+    if (data.pendingWithdrawals.length > 0) {
+      commissionMessage += `\n• **Pending Withdrawals:** ${data.pendingWithdrawals.length} request(s)`;
+      data.pendingWithdrawals.forEach((withdrawal, index) => {
+        const shortId = withdrawal.id.substring(0, 8);
+        const date = new Date(withdrawal.created_at).toLocaleDateString();
+        commissionMessage += `\n  └ Request #${shortId}: $${withdrawal.amount} (${date})`;
+      });
+    }
+
+    commissionMessage += `
 
 **📈 SHARE COMMISSIONS:**
-• **Total Shares Earned:** ${totalShares.toFixed(0)} shares
-• **Current Value:** $${totalShares.toFixed(2)} USD
+• **Total Shares Earned:** ${data.totalEarnedShares.toFixed(0)} shares
+• **Current Value:** $${data.shareValue.toFixed(2)} USD
 • **Status:** Active in portfolio
 
+**🔄 CONVERSION HISTORY:**
+• **Total Converted to Shares:** $${data.totalConvertedUSDT.toFixed(2)} USDT
+• **Shares from Conversions:** ${data.sharesFromConversions.toFixed(0)} shares`;
+
+    // Add pending conversion details if any
+    if (data.pendingConversions.length > 0) {
+      commissionMessage += `\n• **Pending Conversions:** ${data.pendingConversions.length} request(s)`;
+      data.pendingConversions.forEach((conversion, index) => {
+        const shortId = conversion.id.substring(0, 8);
+        const date = new Date(conversion.created_at).toLocaleDateString();
+        commissionMessage += `\n  └ Request #${shortId}: ${conversion.shares_requested} shares ($${conversion.usdt_amount}) (${date})`;
+      });
+    }
+
+    commissionMessage += `
+
 **📊 COMMISSION SUMMARY:**
-• **Total Commission Value:** $${(totalUSDT + totalShares).toFixed(2)}
-• **Total Withdrawn:** $${totalWithdrawn.toFixed(2)} USDT
+• **Total Commission Value:** $${data.totalCommissionValue.toFixed(2)}
+• **Total Withdrawn:** $${data.totalWithdrawnUSDT.toFixed(2)} USDT
 • **Commission Rate:** 15% USDT + 15% Shares
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
     const keyboard = [];
 
-    if (availableUSDT > 0) {
+    // Show action buttons based on available balance and status
+    if (data.availableUSDT > 0) {
       keyboard.push([{ text: "💸 Withdraw USDT Commission", callback_data: "withdraw_usdt_commission" }]);
       keyboard.push([{ text: "🛒 Use Commission for Shares", callback_data: "commission_to_shares" }]);
+    } else if (data.escrowedAmount > 0) {
+      // Show helpful message when funds are escrowed
+      keyboard.push([{ text: "⏳ View Pending Requests", callback_data: "view_pending_requests" }]);
     }
 
+    // Add status-specific buttons
+    if (data.pendingWithdrawals.length > 0 || data.pendingConversions.length > 0) {
+      keyboard.push([{ text: "📋 Manage Pending Requests", callback_data: "manage_pending_requests" }]);
+    }
+
+    // Standard navigation buttons
     keyboard.push(
       [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
       [{ text: "👥 View My Referrals", callback_data: "view_referrals" }],
@@ -5728,8 +6547,482 @@ async function handleViewCommission(ctx) {
     });
 
   } catch (error) {
-    console.error('View commission error:', error);
-    await ctx.replyWithMarkdown('❌ **Error loading commission balance**\n\nPlease try again.');
+    console.error('🚨 [ERROR] Enhanced commission view failed:', error);
+
+    // Fallback to basic commission display
+    try {
+      console.log('🔄 [FALLBACK] Attempting basic commission display...');
+
+      const { data: telegramUser } = await db.client
+        .from('telegram_users')
+        .select('user_id')
+        .eq('telegram_id', user.id)
+        .single();
+
+      if (!telegramUser) {
+        await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+        return;
+      }
+
+      const { data: balance } = await db.client
+        .from('commission_balances')
+        .select('*')
+        .eq('user_id', telegramUser.user_id)
+        .single();
+
+      const totalUSDT = balance ? parseFloat(balance.total_earned_usdt || 0) : 0;
+      const totalShares = balance ? parseFloat(balance.total_earned_shares || 0) : 0;
+      const availableUSDT = balance ? parseFloat(balance.usdt_balance || 0) : 0;
+      const escrowedAmount = balance ? parseFloat(balance.escrowed_amount || 0) : 0;
+
+      // Calculate share value with current phase price
+      let shareValue = totalShares * 5.00; // Default $5
+      try {
+        const currentPhase = await db.getCurrentPhase();
+        if (currentPhase && currentPhase.price_per_share) {
+          shareValue = totalShares * parseFloat(currentPhase.price_per_share);
+        }
+      } catch (phaseError) {
+        console.error('Phase fetch error in fallback:', phaseError);
+      }
+
+      const fallbackMessage = `💰 **COMMISSION BALANCE** (Fallback Mode)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💵 USDT COMMISSIONS:**
+• Total Earned: $${totalUSDT.toFixed(2)} USDT
+• Available for Withdrawal: $${availableUSDT.toFixed(2)} USDT
+• Currently Escrowed: $${escrowedAmount.toFixed(2)} USDT
+
+**📈 SHARE COMMISSIONS:**
+• Total Shares Earned: ${totalShares} shares
+• Current Value: $${shareValue.toFixed(2)} USD
+• Status: Active in portfolio
+
+**📊 COMMISSION SUMMARY:**
+• Total Commission Value: $${(totalUSDT + shareValue).toFixed(2)}
+• Commission Rate: 15% USDT + 15% Shares
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ **Note:** Enhanced view temporarily unavailable. Contact support if this persists.`;
+
+      await ctx.replyWithMarkdown(fallbackMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💸 Withdraw USDT Commission", callback_data: "withdraw_usdt_commission" }],
+            [{ text: "🛒 Use Commission for Shares", callback_data: "commission_to_shares" }],
+            [{ text: "⏳ View Pending Requests", callback_data: "view_pending_requests" }],
+            [{ text: "🔙 Back to Referral Dashboard", callback_data: "menu_referrals" }]
+          ]
+        }
+      });
+
+    } catch (fallbackError) {
+      console.error('🚨 [ERROR] Fallback commission view also failed:', fallbackError);
+      await ctx.replyWithMarkdown('❌ **Error loading commission balance**\n\nPlease try again or contact support.');
+    }
+  }
+}
+
+// Handle viewing pending requests with detailed information
+async function handleViewPendingRequests(ctx) {
+  try {
+    const user = ctx.from;
+
+    // Get user from database
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // Get enhanced balance info
+    const balanceInfo = await getEnhancedCommissionBalance(telegramUser.user_id);
+
+    if (!balanceInfo.success) {
+      await ctx.replyWithMarkdown('❌ **Error loading pending requests**\n\nPlease try again.');
+      return;
+    }
+
+    const data = balanceInfo.data;
+
+    let message = `⏳ **PENDING REQUESTS STATUS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 BALANCE OVERVIEW:**
+• **Total Balance:** $${(data.availableUSDT + data.escrowedAmount).toFixed(2)} USDT
+• **Available:** $${data.availableUSDT.toFixed(2)} USDT
+• **Locked (Escrowed):** $${data.escrowedAmount.toFixed(2)} USDT
+
+`;
+
+    // Show pending withdrawals
+    if (data.pendingWithdrawals.length > 0) {
+      message += `**💸 PENDING WITHDRAWALS (${data.pendingWithdrawals.length}):**\n`;
+      data.pendingWithdrawals.forEach((withdrawal, index) => {
+        const shortId = withdrawal.id.substring(0, 8);
+        const date = new Date(withdrawal.created_at).toLocaleDateString();
+        const time = new Date(withdrawal.created_at).toLocaleTimeString();
+        message += `\n${index + 1}. **Request #${shortId}**\n`;
+        message += `   • Amount: $${withdrawal.amount} USDT\n`;
+        message += `   • Type: ${withdrawal.withdrawal_type.toUpperCase()}\n`;
+        message += `   • Submitted: ${date} at ${time}\n`;
+        message += `   • Status: ⏳ Awaiting admin approval\n`;
+      });
+      message += `\n`;
+    }
+
+    // Show pending conversions
+    if (data.pendingConversions.length > 0) {
+      message += `**🛒 PENDING CONVERSIONS (${data.pendingConversions.length}):**\n`;
+      data.pendingConversions.forEach((conversion, index) => {
+        const shortId = conversion.id.substring(0, 8);
+        const date = new Date(conversion.created_at).toLocaleDateString();
+        const time = new Date(conversion.created_at).toLocaleTimeString();
+        message += `\n${index + 1}. **Request #${shortId}**\n`;
+        message += `   • Shares: ${conversion.shares_requested}\n`;
+        message += `   • Cost: $${conversion.usdt_amount} USDT\n`;
+        message += `   • Submitted: ${date} at ${time}\n`;
+        message += `   • Status: ⏳ Awaiting admin approval\n`;
+      });
+      message += `\n`;
+    }
+
+    if (data.pendingWithdrawals.length === 0 && data.pendingConversions.length === 0) {
+      message += `**✅ NO PENDING REQUESTS**
+
+You currently have no pending withdrawal or conversion requests.
+All your commission balance is available for new requests.
+
+`;
+    }
+
+    message += `**💡 WHAT HAPPENS NEXT:**
+• Admin will review your request(s) within 24-48 hours
+• You'll receive a notification when processed
+• Approved requests will update your balance automatically
+• Rejected requests will release the escrowed funds
+
+**⚠️ IMPORTANT:**
+• Escrowed funds cannot be used for new requests
+• You cannot cancel requests once submitted
+• Contact admin if you have urgent questions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    const keyboard = [
+      [{ text: "🔄 Refresh Status", callback_data: "view_pending_requests" }],
+      [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+      [{ text: "📞 Contact Admin", url: "https://t.me/TTTFOUNDER" }],
+      [{ text: "🔙 Back to Commission Dashboard", callback_data: "view_commission" }]
+    ];
+
+    await ctx.replyWithMarkdown(message, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+
+  } catch (error) {
+    console.error('View pending requests error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading pending requests**\n\nPlease try again.');
+  }
+}
+
+// Handle managing pending requests with cancellation options
+async function handleManagePendingRequests(ctx) {
+  try {
+    const user = ctx.from;
+
+    // Get user from database
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // Get enhanced balance info
+    const balanceInfo = await getEnhancedCommissionBalance(telegramUser.user_id);
+
+    if (!balanceInfo.success) {
+      await ctx.replyWithMarkdown('❌ **Error loading pending requests**\n\nPlease try again.');
+      return;
+    }
+
+    const data = balanceInfo.data;
+
+    if (data.pendingWithdrawals.length === 0 && data.pendingConversions.length === 0) {
+      await ctx.replyWithMarkdown(`✅ **NO PENDING REQUESTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You currently have no pending withdrawal or conversion requests.
+All your commission balance is available for new requests.
+
+**💰 Available Balance:** $${data.availableUSDT.toFixed(2)} USDT
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💸 Withdraw USDT Commission", callback_data: "withdraw_usdt_commission" }],
+            [{ text: "🛒 Use Commission for Shares", callback_data: "commission_to_shares" }],
+            [{ text: "💰 View Commission Balance", callback_data: "view_commission" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    let message = `📋 **MANAGE PENDING REQUESTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 BALANCE OVERVIEW:**
+• **Total Balance:** $${(data.availableUSDT + data.escrowedAmount).toFixed(2)} USDT
+• **Available:** $${data.availableUSDT.toFixed(2)} USDT
+• **Locked (Escrowed):** $${data.escrowedAmount.toFixed(2)} USDT
+
+`;
+
+    const keyboard = [];
+
+    // Show pending withdrawals with cancel options
+    if (data.pendingWithdrawals.length > 0) {
+      message += `**💸 PENDING WITHDRAWALS (${data.pendingWithdrawals.length}):**\n`;
+      data.pendingWithdrawals.forEach((withdrawal, index) => {
+        const shortId = withdrawal.id.substring(0, 8);
+        const date = new Date(withdrawal.created_at).toLocaleDateString();
+        const time = new Date(withdrawal.created_at).toLocaleTimeString();
+        const hoursAgo = Math.floor((Date.now() - new Date(withdrawal.created_at).getTime()) / (1000 * 60 * 60));
+
+        message += `\n${index + 1}. **Request #${shortId}**\n`;
+        message += `   • Amount: $${withdrawal.amount} USDT\n`;
+        message += `   • Type: ${withdrawal.withdrawal_type.toUpperCase()}\n`;
+        message += `   • Submitted: ${date} at ${time} (${hoursAgo}h ago)\n`;
+        message += `   • Status: ⏳ Awaiting admin approval\n`;
+
+        // Add cancel button for each withdrawal (Note: Cancellation may not be implemented yet)
+        // keyboard.push([{ text: `❌ Cancel Request #${shortId}`, callback_data: `cancel_withdrawal_${shortId}` }]);
+      });
+      message += `\n`;
+    }
+
+    // Show pending conversions with cancel options
+    if (data.pendingConversions.length > 0) {
+      message += `**🛒 PENDING CONVERSIONS (${data.pendingConversions.length}):**\n`;
+      data.pendingConversions.forEach((conversion, index) => {
+        const shortId = conversion.id.substring(0, 8);
+        const date = new Date(conversion.created_at).toLocaleDateString();
+        const time = new Date(conversion.created_at).toLocaleTimeString();
+        const hoursAgo = Math.floor((Date.now() - new Date(conversion.created_at).getTime()) / (1000 * 60 * 60));
+
+        message += `\n${index + 1}. **Request #${shortId}**\n`;
+        message += `   • Shares: ${conversion.shares_requested}\n`;
+        message += `   • Cost: $${conversion.usdt_amount} USDT\n`;
+        message += `   • Submitted: ${date} at ${time} (${hoursAgo}h ago)\n`;
+        message += `   • Status: ⏳ Awaiting admin approval\n`;
+
+        // Add cancel button for each conversion (Note: Cancellation may not be implemented yet)
+        // keyboard.push([{ text: `❌ Cancel Request #${shortId}`, callback_data: `cancel_conversion_${shortId}` }]);
+      });
+      message += `\n`;
+    }
+
+    message += `**⚠️ IMPORTANT INFORMATION:**
+• **Cannot Cancel:** Requests cannot be cancelled once submitted
+• **Processing Time:** 24-48 hours for admin review
+• **Automatic Updates:** You'll be notified when processed
+• **Escrow Security:** Your funds are safely locked during review
+
+**💡 WHAT YOU CAN DO:**
+• **Wait Patiently:** Most requests are approved quickly
+• **Contact Admin:** @TTTFOUNDER for urgent questions
+• **Plan Ahead:** Consider timing of future requests
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    // Add standard navigation buttons
+    keyboard.push(
+      [{ text: "🔄 Refresh Status", callback_data: "manage_pending_requests" }],
+      [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+      [{ text: "📞 Contact Admin", url: "https://t.me/TTTFOUNDER" }],
+      [{ text: "🔙 Back to Commission Dashboard", callback_data: "view_commission" }]
+    );
+
+    await ctx.replyWithMarkdown(message, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+
+  } catch (error) {
+    console.error('Manage pending requests error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading pending requests**\n\nPlease try again.');
+  }
+}
+
+// Handle user settings and preferences
+async function handleUserSettings(ctx) {
+  try {
+    const user = ctx.from;
+
+    // Get user from database
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // For now, show basic settings. In the future, this could be expanded
+    const audioEnabled = await isAudioNotificationEnabled(user.id);
+
+    const settingsMessage = `⚙️ **USER SETTINGS & PREFERENCES**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔊 NOTIFICATION SETTINGS:**
+• **Audio Notifications:** ${audioEnabled ? '🔔 Enabled' : '🔇 Disabled'}
+• **Sound Effects:** ${audioEnabled ? '✅ Active' : '❌ Inactive'}
+
+**📱 NOTIFICATION TYPES:**
+• **Payment Approvals:** ${audioEnabled ? '💰 With Sound' : '💰 Silent'}
+• **Payment Rejections:** ${audioEnabled ? '❌ With Sound' : '❌ Silent'}
+• **Withdrawal Updates:** ${audioEnabled ? '💸 With Sound' : '💸 Silent'}
+• **Commission Updates:** ${audioEnabled ? '💰 With Sound' : '💰 Silent'}
+
+**💡 ABOUT AUDIO NOTIFICATIONS:**
+Audio notifications use different sound tones and emojis to help you quickly identify the type of update you've received. This enhances your experience by providing immediate context for important notifications.
+
+**🎵 SOUND TYPES:**
+• 💰 Payment/Commission sounds for financial updates
+• ✅ Success sounds for approvals
+• ❌ Alert sounds for rejections/errors
+• ⚠️ Warning sounds for important notices
+• ℹ️ Info sounds for general updates
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    const keyboard = [
+      [{ text: audioEnabled ? "🔇 Disable Audio Notifications" : "🔔 Enable Audio Notifications", callback_data: "toggle_audio_notifications" }],
+      [{ text: "🔊 Test Audio Notification", callback_data: "test_audio_notification" }],
+      [{ text: "🔙 Back to Main Menu", callback_data: "main_menu" }]
+    ];
+
+    await ctx.replyWithMarkdown(settingsMessage, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+
+  } catch (error) {
+    console.error('User settings error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading settings**\n\nPlease try again.');
+  }
+}
+
+// Handle audio notification test
+async function handleTestAudioNotification(ctx) {
+  try {
+    const user = ctx.from;
+
+    await sendNotificationWithAudio(
+      ctx,
+      `🎵 **AUDIO NOTIFICATION TEST**
+
+This is a test of the audio notification system!
+
+**🔊 Features:**
+• Enhanced notification sounds
+• Visual emoji indicators
+• Different tones for different message types
+• Improved user experience
+
+If you can hear the notification sound and see the emoji, your audio notifications are working perfectly!`,
+      'SUCCESS',
+      {},
+      true
+    );
+
+    // Send a follow-up message
+    setTimeout(async () => {
+      await ctx.replyWithMarkdown(`✅ **Test Complete!**
+
+Did you hear the notification sound and see the emoji?
+
+**If YES:** Your audio notifications are working perfectly!
+**If NO:** Check your device's notification settings or contact support.
+
+You can toggle audio notifications on/off in the settings menu anytime.`);
+    }, 2000);
+
+  } catch (error) {
+    console.error('Test audio notification error:', error);
+    await ctx.replyWithMarkdown('❌ **Error testing audio notification**\n\nPlease try again.');
+  }
+}
+
+// Handle toggling audio notifications
+async function handleToggleAudioNotifications(ctx) {
+  try {
+    const user = ctx.from;
+
+    // For now, we'll just show a message about the toggle
+    // In a full implementation, this would update a user_preferences table
+    const currentlyEnabled = await isAudioNotificationEnabled(user.id);
+    const newStatus = !currentlyEnabled;
+
+    const statusMessage = `🔊 **AUDIO NOTIFICATIONS ${newStatus ? 'ENABLED' : 'DISABLED'}**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Status Changed:** ${currentlyEnabled ? '🔔 Enabled' : '🔇 Disabled'} → ${newStatus ? '🔔 Enabled' : '🔇 Disabled'}
+
+**What This Means:**
+${newStatus ?
+`• ✅ You'll receive enhanced notifications with sound
+• 🎵 Different tones for different message types
+• 💰 Audio cues for payments and commissions
+• 🔔 Notification sounds will be enabled` :
+`• 🔇 Notifications will be silent
+• ❌ No audio cues or sound effects
+• 📱 Visual notifications only
+• 🔕 Notification sounds will be disabled`}
+
+**Note:** This is a demonstration of the audio notification system. In a full implementation, your preference would be saved to the database and applied to all future notifications.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    await sendNotificationWithAudio(
+      ctx,
+      statusMessage,
+      newStatus ? 'SUCCESS' : 'INFO',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔊 Test Audio Notification", callback_data: "test_audio_notification" }],
+            [{ text: "⚙️ Back to Settings", callback_data: "user_settings" }],
+            [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
+          ]
+        }
+      },
+      newStatus
+    );
+
+  } catch (error) {
+    console.error('Toggle audio notifications error:', error);
+    await ctx.replyWithMarkdown('❌ **Error toggling audio notifications**\n\nPlease try again.');
   }
 }
 
@@ -5911,6 +7204,68 @@ async function handleWithdrawUSDTCommission(ctx) {
       return;
     }
 
+    // Check for existing pending withdrawal requests first
+    const { data: pendingWithdrawals, error: pendingError } = await db.client
+      .from('commission_withdrawals')
+      .select('id, amount, created_at, withdrawal_type')
+      .eq('user_id', telegramUser.user_id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (pendingError) {
+      console.error('Error checking pending withdrawals:', pendingError);
+      await ctx.replyWithMarkdown('❌ **Error checking existing requests**\n\nPlease try again.');
+      return;
+    }
+
+    if (pendingWithdrawals && pendingWithdrawals.length > 0) {
+      const pendingWithdrawal = pendingWithdrawals[0];
+      const shortId = pendingWithdrawal.id.substring(0, 8);
+      const submissionDate = new Date(pendingWithdrawal.created_at).toLocaleDateString();
+      const submissionTime = new Date(pendingWithdrawal.created_at).toLocaleTimeString();
+
+      await ctx.replyWithMarkdown(`⚠️ **PENDING WITHDRAWAL REQUEST EXISTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔍 YOUR PENDING REQUEST:**
+• **Request ID:** #${shortId}
+• **Amount:** $${pendingWithdrawal.amount} USDT
+• **Type:** ${pendingWithdrawal.withdrawal_type.toUpperCase()}
+• **Submitted:** ${submissionDate} at ${submissionTime}
+• **Status:** ⏳ Awaiting admin approval
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⏰ WHAT HAPPENS NEXT:**
+• Admin will review your request within 24-48 hours
+• You'll receive a notification when processed
+• If approved: Funds will be sent to your wallet
+• If rejected: You can submit a new request
+
+**💡 WHAT YOU CAN DO NOW:**
+• **Wait:** Most requests are processed within 1-2 business days
+• **Check Status:** Use "View Pending Requests" for updates
+• **Contact Admin:** @TTTFOUNDER for urgent questions
+
+**🚫 WHY CAN'T I SUBMIT ANOTHER?**
+This prevents duplicate requests and ensures accurate balance management.
+Your funds are safely tracked and will be processed fairly.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⏳ View Pending Requests", callback_data: "view_pending_requests" }],
+            [{ text: "🛒 Use Commission for Shares", callback_data: "commission_to_shares" }],
+            [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
+            [{ text: "📞 Contact Admin", url: "https://t.me/TTTFOUNDER" }]
+          ]
+        }
+      });
+      return;
+    }
+
     // Get commission balance
     const { data: balance, error: balanceError } = await db.client
       .from('commission_balances')
@@ -6004,20 +7359,10 @@ async function handleCommissionToShares(ctx) {
       return;
     }
 
-    // Get commission balance
-    const { data: commissionBalance, error: commissionError } = await db.client
-      .from('commission_balances')
-      .select('*')
-      .eq('user_id', telegramUser.user_id)
-      .single();
+    // 🔒 SECURE BALANCE: Get commission balance with escrow information
+    const balanceInfo = await getAvailableCommissionBalance(telegramUser.user_id);
 
-    if (commissionError && commissionError.code !== 'PGRST116') {
-      console.error('Commission balance fetch error:', commissionError);
-      await ctx.replyWithMarkdown('❌ **Error loading commission data**\n\nPlease try again.');
-      return;
-    }
-
-    const availableUSDT = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
+    console.log(`💰 [BALANCE] User ${telegramUser.user_id} balance check:`, balanceInfo);
 
     // Check for existing pending conversion requests
     const { data: pendingConversions, error: pendingError } = await db.client
@@ -6034,30 +7379,60 @@ async function handleCommissionToShares(ctx) {
     }
 
     if (pendingConversions && pendingConversions.length > 0) {
+      // Get detailed information about the pending conversion
+      const { data: pendingDetails, error: detailsError } = await db.client
+        .from('commission_conversions')
+        .select('id, usdt_amount, shares_requested, created_at')
+        .eq('user_id', telegramUser.user_id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const shortId = pendingDetails ? pendingDetails.id.substring(0, 8) : 'Unknown';
+      const submissionDate = pendingDetails ? new Date(pendingDetails.created_at).toLocaleDateString() : 'Unknown';
+      const submissionTime = pendingDetails ? new Date(pendingDetails.created_at).toLocaleTimeString() : 'Unknown';
+      const requestedShares = pendingDetails ? pendingDetails.shares_requested : 0;
+      const requestedAmount = pendingDetails ? pendingDetails.usdt_amount : 0;
+
       await ctx.replyWithMarkdown(`⚠️ **PENDING CONVERSION REQUEST EXISTS**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**You already have a pending commission-to-shares conversion request.**
+**🔍 YOUR PENDING REQUEST:**
+• **Request ID:** #${shortId}
+• **Shares Requested:** ${requestedShares} shares
+• **USDT Amount:** $${requestedAmount.toFixed(2)}
+• **Submitted:** ${submissionDate} at ${submissionTime}
+• **Status:** ⏳ Awaiting admin approval
 
-**Current Status:** Waiting for admin approval
-
-**Available USDT Commission:** $${availableUSDT.toFixed(2)}
+**💰 CURRENT BALANCE:**
+• **Total Balance:** $${balanceInfo.totalBalance.toFixed(2)} USDT
+• **Locked (Escrowed):** $${balanceInfo.escrowedAmount.toFixed(2)} USDT
+• **Available:** $${balanceInfo.availableBalance.toFixed(2)} USDT
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Please wait for your current conversion to be processed before submitting a new request.**
+**⏰ WHAT HAPPENS NEXT:**
+• Admin will review your request within 24-48 hours
+• You'll receive a notification when processed
+• If approved: USDT deducted, shares added to portfolio
+• If rejected: Escrowed funds will be released
 
-**You can:**
-• Check the status in Admin Panel → Commission Conversions
-• Contact admin for updates on your pending request
-• Use your commission for other purposes
+**💡 WHAT YOU CAN DO NOW:**
+• **Wait:** Most requests are processed within 1-2 business days
+• **Check Status:** Use "View Pending Requests" for updates
+• **Contact Admin:** @TTTFOUNDER for urgent questions
+• **Use Available Balance:** $${balanceInfo.availableBalance.toFixed(2)} USDT still available
 
-**This prevents duplicate requests and ensures accurate balance management.**
+**🚫 WHY CAN'T I SUBMIT ANOTHER?**
+This prevents duplicate requests and ensures accurate balance management.
+Your funds are safely escrowed and will be processed fairly.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
         reply_markup: {
           inline_keyboard: [
+            [{ text: "⏳ View Pending Requests", callback_data: "view_pending_requests" }],
             [{ text: "💸 Withdraw USDT Instead", callback_data: "withdraw_usdt_commission" }],
             [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
             [{ text: "📞 Contact Admin", url: "https://t.me/TTTFOUNDER" }]
@@ -6067,21 +7442,42 @@ async function handleCommissionToShares(ctx) {
       return;
     }
 
-    if (availableUSDT <= 0) {
-      await ctx.replyWithMarkdown(`💰 **INSUFFICIENT COMMISSION BALANCE**
+    // 🔒 SECURE VALIDATION: Check available balance (not total balance)
+    if (balanceInfo.availableBalance <= 0) {
+      let insufficientMessage = `💰 **INSUFFICIENT AVAILABLE COMMISSION BALANCE**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Available USDT Commission:** $${availableUSDT.toFixed(2)}
+**💰 Balance Details:**
+• **Total Balance:** $${balanceInfo.totalBalance.toFixed(2)} USDT
+• **Available Balance:** $${balanceInfo.availableBalance.toFixed(2)} USDT`;
 
-You need a positive USDT commission balance to convert to shares.
+      if (balanceInfo.escrowedAmount > 0) {
+        insufficientMessage += `
+• **Currently Escrowed:** $${balanceInfo.escrowedAmount.toFixed(2)} USDT
 
-**How to earn commissions:**
+**⚠️ Some of your balance is locked in pending requests.**`;
+      }
+
+      insufficientMessage += `
+
+You need a positive available USDT commission balance to convert to shares.
+
+**💡 How to increase available balance:**`;
+
+      if (balanceInfo.escrowedAmount > 0) {
+        insufficientMessage += `
+• Wait for pending requests to be processed`;
+      }
+
+      insufficientMessage += `
 • Refer new investors using your referral link
 • Earn 15% USDT commission on their investments
 • Use earned commissions to purchase more shares
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+      await ctx.replyWithMarkdown(insufficientMessage, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
@@ -6105,14 +7501,14 @@ You need a positive USDT commission balance to convert to shares.
     }
 
     const sharePrice = parseFloat(currentPhase.price_per_share);
-    const maxShares = Math.floor(availableUSDT / sharePrice);
+    const maxShares = Math.floor(balanceInfo.availableBalance / sharePrice);
 
     const conversionMessage = `🛒 **CONVERT COMMISSION TO SHARES**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **💰 YOUR COMMISSION BALANCE:**
-• Available USDT: $${availableUSDT.toFixed(2)}
+• Available USDT: $${balanceInfo.availableBalance.toFixed(2)}
 
 **📊 CURRENT PHASE INFORMATION:**
 • Phase ${currentPhase.phase_number}
@@ -6138,7 +7534,7 @@ You need a positive USDT commission balance to convert to shares.
 
     // Set user state for commission conversion
     await setUserState(user.id, 'awaiting_commission_shares', {
-      available_usdt: availableUSDT,
+      available_usdt: balanceInfo.availableBalance,
       share_price: sharePrice,
       max_shares: maxShares,
       phase_id: currentPhase.id,

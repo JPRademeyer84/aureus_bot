@@ -1641,9 +1641,9 @@ async function setMaintenanceMode(enabled) {
 async function handleCustomAmountPurchase(ctx) {
   const user = ctx.from;
 
-  // Check maintenance mode first
+  // Check maintenance mode first (admin bypass)
   const isMaintenanceMode = await getMaintenanceMode();
-  if (isMaintenanceMode) {
+  if (isMaintenanceMode && user.username !== 'TTTFOUNDER') {
     await ctx.replyWithMarkdown(`🔧 **SYSTEM MAINTENANCE**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1661,7 +1661,9 @@ async function handleCustomAmountPurchase(ctx) {
 • 👥 Referral program
 • 📋 Company information
 
-**Maintenance will be completed soon. Thank you for your patience!**`, {
+**Maintenance will be completed soon. Thank you for your patience!**
+
+*Note: Admin users can still access all functions for testing purposes.*`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "📊 View Portfolio", callback_data: "menu_portfolio" }],

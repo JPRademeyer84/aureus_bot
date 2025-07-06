@@ -2601,19 +2601,46 @@ async function handleApproveWithdrawalShort(ctx, callbackData) {
 
   try {
     const shortId = callbackData.replace('approve_withdrawal_', '');
+    console.log(`🔍 Looking for withdrawal with short ID: ${shortId}`);
 
-    // Find the withdrawal by short ID
-    const { data: withdrawal, error: withdrawalError } = await db.client
+    // Find the withdrawal by short ID - try different approaches
+    let withdrawal = null;
+    let withdrawalError = null;
+
+    // First try: exact match with LIKE
+    const { data: withdrawalData1, error: error1 } = await db.client
       .from('commission_withdrawals')
       .select(`
         *,
         users!commission_withdrawals_user_id_fkey!inner(full_name, username)
       `)
-      .ilike('id', `${shortId}%`)
-      .eq('status', 'pending')
-      .single();
+      .like('id', `${shortId}%`)
+      .eq('status', 'pending');
+
+    if (error1) {
+      console.error('Error with LIKE query:', error1);
+      // Try second approach: get all pending and filter in code
+      const { data: allPending, error: error2 } = await db.client
+        .from('commission_withdrawals')
+        .select(`
+          *,
+          users!commission_withdrawals_user_id_fkey!inner(full_name, username)
+        `)
+        .eq('status', 'pending');
+
+      if (error2) {
+        withdrawalError = error2;
+      } else if (allPending && allPending.length > 0) {
+        withdrawal = allPending.find(w => w.id.startsWith(shortId));
+      }
+    } else if (withdrawalData1 && withdrawalData1.length > 0) {
+      withdrawal = withdrawalData1[0];
+    }
+
+    console.log(`🔍 Found withdrawal:`, withdrawal ? `ID: ${withdrawal.id}` : 'Not found');
 
     if (withdrawalError || !withdrawal) {
+      console.error('Withdrawal lookup failed:', { shortId, withdrawalError });
       await ctx.answerCbQuery('❌ Withdrawal request not found or already processed');
       return;
     }
@@ -2780,19 +2807,27 @@ async function handleRejectWithdrawalPrompt(ctx, callbackData) {
 
   try {
     const shortId = callbackData.replace('reject_withdrawal_', '');
+    console.log(`🔍 Looking for withdrawal to reject with short ID: ${shortId}`);
 
-    // Find the withdrawal by short ID
-    const { data: withdrawal, error: withdrawalError } = await db.client
+    // Find the withdrawal by short ID - robust approach
+    const { data: allPending, error: withdrawalError } = await db.client
       .from('commission_withdrawals')
       .select(`
         *,
         users!commission_withdrawals_user_id_fkey!inner(full_name, username)
       `)
-      .ilike('id', `${shortId}%`)
-      .eq('status', 'pending')
-      .single();
+      .eq('status', 'pending');
 
-    if (withdrawalError || !withdrawal) {
+    if (withdrawalError) {
+      console.error('Error fetching pending withdrawals:', withdrawalError);
+      await ctx.answerCbQuery('❌ Error loading withdrawal data');
+      return;
+    }
+
+    const withdrawal = allPending?.find(w => w.id.startsWith(shortId));
+
+    if (!withdrawal) {
+      console.error('Withdrawal not found:', { shortId, availableIds: allPending?.map(w => w.id.substring(0, 8)) });
       await ctx.answerCbQuery('❌ Withdrawal request not found');
       return;
     }

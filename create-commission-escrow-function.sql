@@ -1,3 +1,13 @@
+-- Add missing escrowed_amount column to commission_balances table
+-- This column is required for the escrow system to work properly
+ALTER TABLE commission_balances
+ADD COLUMN IF NOT EXISTS escrowed_amount DECIMAL(15,2) DEFAULT 0.00;
+
+-- Update any existing records to have zero escrow
+UPDATE commission_balances
+SET escrowed_amount = 0.00
+WHERE escrowed_amount IS NULL;
+
 -- Create the missing create_commission_escrow function
 -- This function atomically checks available balance and creates escrow for commission requests
 

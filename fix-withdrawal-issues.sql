@@ -4,11 +4,30 @@
 -- 3. Fix function overloading conflicts
 
 -- Step 1: Add missing columns to commission_balances if they don't exist
-ALTER TABLE commission_balances 
+ALTER TABLE commission_balances
 ADD COLUMN IF NOT EXISTS total_withdrawn DECIMAL(15,2) DEFAULT 0.00;
 
-ALTER TABLE commission_balances 
+ALTER TABLE commission_balances
 ADD COLUMN IF NOT EXISTS escrowed_amount DECIMAL(15,2) DEFAULT 0.00;
+
+-- Step 1.5: Add missing columns to commission_withdrawals if they don't exist
+ALTER TABLE commission_withdrawals
+ADD COLUMN IF NOT EXISTS transaction_hash VARCHAR(255);
+
+ALTER TABLE commission_withdrawals
+ADD COLUMN IF NOT EXISTS approved_by_admin_id BIGINT;
+
+ALTER TABLE commission_withdrawals
+ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
+
+ALTER TABLE commission_withdrawals
+ADD COLUMN IF NOT EXISTS rejected_by_admin_id BIGINT;
+
+ALTER TABLE commission_withdrawals
+ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMP WITH TIME ZONE;
+
+ALTER TABLE commission_withdrawals
+ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;
 
 -- Step 2: If total_withdrawn_usdt exists but total_withdrawn doesn't, copy the data
 DO $$

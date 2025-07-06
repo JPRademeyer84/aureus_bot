@@ -1088,6 +1088,10 @@ bot.on('callback_query', async (ctx) => {
           await handleApproveCommissionConversion(ctx, callbackData);
         } else if (callbackData.startsWith('reject_commission_conversion_')) {
           await handleRejectCommissionConversion(ctx, callbackData);
+        } else if (callbackData.startsWith('approve_conv_')) {
+          await handleApproveCommissionConversionShort(ctx, callbackData);
+        } else if (callbackData.startsWith('reject_conv_')) {
+          await handleRejectCommissionConversionShort(ctx, callbackData);
         } else if (callbackData === 'withdrawal_history') {
           await handleWithdrawalHistory(ctx);
         } else if (callbackData.startsWith('copy_referral_link_')) {
@@ -2388,10 +2392,10 @@ All conversion requests have been processed.
       message += `• **Phase:** ${conversion.phase_number}\n`;
       message += `• **Date:** ${createdDate}\n\n`;
 
-      // Add approve/reject buttons for each conversion
+      // Add approve/reject buttons for each conversion (using short ID to avoid 64-byte limit)
       keyboard.push([
-        { text: `✅ Approve #${shortId}`, callback_data: `approve_commission_conversion_${conversion.id}` },
-        { text: `❌ Reject #${shortId}`, callback_data: `reject_commission_conversion_${conversion.id}` }
+        { text: `✅ Approve #${shortId}`, callback_data: `approve_conv_${shortId}` },
+        { text: `❌ Reject #${shortId}`, callback_data: `reject_conv_${shortId}` }
       ]);
     });
 
@@ -2408,6 +2412,74 @@ All conversion requests have been processed.
   } catch (error) {
     console.error('Error handling admin commission conversions:', error);
     await ctx.reply('❌ Error loading commission conversions');
+  }
+}
+
+// Handle admin approval of commission conversion (short callback)
+async function handleApproveCommissionConversionShort(ctx, callbackData) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  try {
+    const shortId = callbackData.replace('approve_conv_', '');
+
+    // Find the conversion by short ID
+    const { data: conversion, error: conversionError } = await db.client
+      .from('commission_conversions')
+      .select('id')
+      .ilike('id', `${shortId}%`)
+      .eq('status', 'pending')
+      .single();
+
+    if (conversionError || !conversion) {
+      await ctx.answerCbQuery('❌ Conversion request not found');
+      return;
+    }
+
+    // Call the original approval handler with the full ID
+    await handleApproveCommissionConversion(ctx, `approve_commission_conversion_${conversion.id}`);
+
+  } catch (error) {
+    console.error('Error handling short approval:', error);
+    await ctx.answerCbQuery('❌ Error processing approval');
+  }
+}
+
+// Handle admin rejection of commission conversion (short callback)
+async function handleRejectCommissionConversionShort(ctx, callbackData) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  try {
+    const shortId = callbackData.replace('reject_conv_', '');
+
+    // Find the conversion by short ID
+    const { data: conversion, error: conversionError } = await db.client
+      .from('commission_conversions')
+      .select('id')
+      .ilike('id', `${shortId}%`)
+      .eq('status', 'pending')
+      .single();
+
+    if (conversionError || !conversion) {
+      await ctx.answerCbQuery('❌ Conversion request not found');
+      return;
+    }
+
+    // Call the original rejection handler with the full ID
+    await handleRejectCommissionConversion(ctx, `reject_commission_conversion_${conversion.id}`);
+
+  } catch (error) {
+    console.error('Error handling short rejection:', error);
+    await ctx.answerCbQuery('❌ Error processing rejection');
   }
 }
 
@@ -4766,7 +4838,7 @@ async function handleRejectPayment(ctx, paymentId, rejectionReason) {
         updated_at: new Date().toISOString()
       })
       .eq('id', paymentId)
-      .select('*, users!inner(username, full_name, telegram_id)')
+      .select('*, users!inner(username, full_name)')
       .single();
 
     if (updateError) {
@@ -4791,6 +4863,18 @@ async function handleRejectPayment(ctx, paymentId, rejectionReason) {
 
     // Send notification to user
     try {
+      // Get user's telegram_id from telegram_users table
+      const { data: telegramUser, error: telegramError } = await db.client
+        .from('telegram_users')
+        .select('telegram_id')
+        .eq('user_id', updatedPayment.user_id)
+        .single();
+
+      if (telegramError || !telegramUser) {
+        console.error('Error finding user telegram_id:', telegramError);
+        return;
+      }
+
       const userNotification = `❌ **PAYMENT REJECTED**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -4812,7 +4896,7 @@ ${rejectionReason}
 
 **Need Help?** Contact @TTTFOUNDER for assistance.`;
 
-      await bot.telegram.sendMessage(updatedPayment.users.telegram_id, userNotification, {
+      await bot.telegram.sendMessage(telegramUser.telegram_id, userNotification, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [

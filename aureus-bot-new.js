@@ -4,17 +4,17 @@ const { db } = require('./src/database/supabase-client');
 require("dotenv").config();
 
 console.log("🚀 Starting Aureus Alliance Holdings Telegram Bot...");
-console.log("🔗 VERSION CHECK: Bot links are https://t.me/AureusAllianceBot (NEW BOT TOKEN)");
-console.log("🔥 DEPLOYMENT VERSION: 2025-01-05-NEW-BOT-TOKEN-CREATED");
+console.log("🔗 VERSION CHECK: Bot links are https://t.me/AureusAllianceBot (PRODUCTION BOT)");
+console.log("🔥 DEPLOYMENT VERSION: 2025-01-05-PRODUCTION-BOT-RAILWAY");
 console.log("📅 DEPLOYMENT: " + new Date().toISOString());
 console.log("🔧 FIXED: Share calculation using phase pricing + database wallet addresses");
 console.log("🚨 CRITICAL FIX DEPLOYED: $100 payment = 20 shares (not 100 shares)");
 console.log("💰 SHARE CALCULATION: amount ÷ phase_price = shares");
 console.log("🛠️ SCOPE FIX: sharesAmount variable moved to outer scope - ReferenceError resolved");
-console.log("🔗 BOT LINK FIX: All referral links use AureusAllianceBot (NEW BOT TOKEN)");
-console.log("🚨 NEW BOT: AureusAllianceBot token created - old bot issues resolved!");
+console.log("🔗 BOT LINK FIX: All referral links use AureusAllianceBot (PRODUCTION BOT)");
+console.log("🚨 PRODUCTION BOT: AureusAllianceBot running on Railway!");
 
-// Bot configuration
+// Bot configuration - Production only
 const BOT_TOKEN = "7858706839:AAFRXBSlREW0wPvIyI57uFpHfYopi2CY464";
 const ADMIN_USERNAME = "TTTFOUNDER";
 
@@ -22,6 +22,19 @@ console.log("📊 Database: Supabase PostgreSQL");
 
 // Create bot instance
 const bot = new Telegraf(BOT_TOKEN);
+
+// Simple session storage for temporary data
+const sessions = new Map();
+
+// Session middleware
+bot.use((ctx, next) => {
+  const sessionKey = `${ctx.from.id}`;
+  ctx.session = sessions.get(sessionKey) || {};
+
+  return next().then(() => {
+    sessions.set(sessionKey, ctx.session);
+  });
+});
 
 // Utility functions
 function formatCurrency(amount) {
@@ -997,6 +1010,10 @@ bot.on('callback_query', async (ctx) => {
         await handleAdminCommissions(ctx);
         break;
 
+      case 'admin_commission_conversions':
+        await handleAdminCommissionConversions(ctx);
+        break;
+
       case 'admin_stats':
         await handleAdminAnalytics(ctx);
         break;
@@ -1021,6 +1038,10 @@ bot.on('callback_query', async (ctx) => {
         await handleAdminSettings(ctx);
         break;
 
+      case 'toggle_maintenance':
+        await handleToggleMaintenance(ctx);
+        break;
+
       case 'admin_user_sponsors':
         await handleAdminUserSponsors(ctx);
         break;
@@ -1042,7 +1063,7 @@ bot.on('callback_query', async (ctx) => {
         } else if (callbackData.startsWith('approve_payment_')) {
           await handleApprovePayment(ctx, callbackData);
         } else if (callbackData.startsWith('reject_payment_')) {
-          await handleRejectPayment(ctx, callbackData);
+          await handleRejectPaymentPrompt(ctx, callbackData);
         } else if (callbackData.startsWith('view_screenshot_')) {
           await handleViewScreenshot(ctx, callbackData);
         } else if (callbackData === 'view_portfolio') {
@@ -1059,6 +1080,14 @@ bot.on('callback_query', async (ctx) => {
           await handleWithdrawUSDTCommission(ctx);
         } else if (callbackData === 'commission_to_shares') {
           await handleCommissionToShares(ctx);
+        } else if (callbackData === 'commission_to_shares') {
+          await handleCommissionToShares(ctx);
+        } else if (callbackData.startsWith('confirm_commission_conversion_')) {
+          await handleConfirmCommissionConversion(ctx, callbackData);
+        } else if (callbackData.startsWith('approve_commission_conversion_')) {
+          await handleApproveCommissionConversion(ctx, callbackData);
+        } else if (callbackData.startsWith('reject_commission_conversion_')) {
+          await handleRejectCommissionConversion(ctx, callbackData);
         } else if (callbackData === 'withdrawal_history') {
           await handleWithdrawalHistory(ctx);
         } else if (callbackData.startsWith('copy_referral_link_')) {
@@ -1521,6 +1550,180 @@ bot.catch((err, ctx) => {
   ctx.reply("Sorry, something went wrong. Please try again later.");
 });
 
+// Database setup for new features
+async function setupNewFeaturesTables() {
+  try {
+    console.log("🔧 Setting up new features tables...");
+
+    // Create system_settings table
+    const { error: settingsError } = await db.client.rpc('exec', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS system_settings (
+          id SERIAL PRIMARY KEY,
+          setting_name VARCHAR(100) UNIQUE NOT NULL,
+          setting_value TEXT NOT NULL,
+          description TEXT,
+          updated_by_admin_id BIGINT,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_system_settings_name ON system_settings(setting_name);
+
+        -- Insert default maintenance mode setting
+        INSERT INTO system_settings (setting_name, setting_value, description)
+        VALUES ('maintenance_mode', 'false', 'Controls whether share purchasing is disabled for maintenance')
+        ON CONFLICT (setting_name) DO NOTHING;
+      `
+    });
+
+    if (settingsError) {
+      console.error('❌ Error creating system_settings table:', settingsError);
+    } else {
+      console.log('✅ System settings table ready');
+    }
+
+    // Add rejection_reason column to crypto_payment_transactions if not exists
+    const { error: paymentError } = await db.client.rpc('exec', {
+      sql: `
+        ALTER TABLE crypto_payment_transactions
+        ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+      `
+    });
+
+    if (paymentError) {
+      console.error('❌ Error adding rejection_reason column:', paymentError);
+    } else {
+      console.log('✅ Payment rejection reason column ready');
+    }
+
+    // Create commission_conversions table for USDT to shares conversion
+    const { error: conversionError } = await db.client.rpc('exec', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS commission_conversions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          shares_requested INTEGER NOT NULL,
+          usdt_amount DECIMAL(15,2) NOT NULL,
+          share_price DECIMAL(15,2) NOT NULL,
+          phase_id UUID NOT NULL REFERENCES investment_phases(id),
+          phase_number INTEGER NOT NULL,
+          status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+          approved_by_admin_id BIGINT,
+          approved_at TIMESTAMP WITH TIME ZONE,
+          rejected_by_admin_id BIGINT,
+          rejected_at TIMESTAMP WITH TIME ZONE,
+          rejection_reason TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_commission_conversions_user_id ON commission_conversions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_commission_conversions_status ON commission_conversions(status);
+        CREATE INDEX IF NOT EXISTS idx_commission_conversions_created_at ON commission_conversions(created_at);
+      `
+    });
+
+    if (conversionError) {
+      console.error('❌ Error creating commission_conversions table:', conversionError);
+    } else {
+      console.log('✅ Commission conversions table ready');
+    }
+
+    // Create database function for processing commission conversions
+    const { error: functionError } = await db.client.rpc('exec', {
+      sql: `
+        CREATE OR REPLACE FUNCTION process_commission_conversion(
+          p_conversion_id UUID,
+          p_admin_id BIGINT,
+          p_admin_username TEXT
+        ) RETURNS VOID AS $$
+        DECLARE
+          v_conversion RECORD;
+          v_user_id INTEGER;
+          v_current_balance DECIMAL(15,2);
+          v_current_shares INTEGER;
+        BEGIN
+          -- Get conversion details
+          SELECT * INTO v_conversion
+          FROM commission_conversions
+          WHERE id = p_conversion_id AND status = 'pending';
+
+          IF NOT FOUND THEN
+            RAISE EXCEPTION 'Conversion request not found or already processed';
+          END IF;
+
+          -- Get current commission balance
+          SELECT COALESCE(usdt_balance, 0) INTO v_current_balance
+          FROM commission_balances
+          WHERE user_id = v_conversion.user_id;
+
+          -- Check if user has sufficient balance
+          IF v_current_balance < v_conversion.usdt_amount THEN
+            RAISE EXCEPTION 'Insufficient commission balance';
+          END IF;
+
+          -- Update commission balance
+          UPDATE commission_balances
+          SET
+            usdt_balance = usdt_balance - v_conversion.usdt_amount,
+            updated_at = NOW()
+          WHERE user_id = v_conversion.user_id;
+
+          -- Get current shares
+          SELECT COALESCE(total_shares, 0) INTO v_current_shares
+          FROM user_investments
+          WHERE user_id = v_conversion.user_id;
+
+          -- Update user investments (add shares)
+          INSERT INTO user_investments (user_id, total_shares, total_invested, updated_at)
+          VALUES (v_conversion.user_id, v_conversion.shares_requested, v_conversion.usdt_amount, NOW())
+          ON CONFLICT (user_id)
+          DO UPDATE SET
+            total_shares = user_investments.total_shares + v_conversion.shares_requested,
+            total_invested = user_investments.total_invested + v_conversion.usdt_amount,
+            updated_at = NOW();
+
+          -- Record commission transaction
+          INSERT INTO commission_transactions (
+            user_id,
+            transaction_type,
+            amount,
+            description,
+            created_at
+          ) VALUES (
+            v_conversion.user_id,
+            'conversion_to_shares',
+            -v_conversion.usdt_amount,
+            'Converted ' || v_conversion.usdt_amount || ' USDT to ' || v_conversion.shares_requested || ' shares at $' || v_conversion.share_price || ' per share (Phase ' || v_conversion.phase_number || ')',
+            NOW()
+          );
+
+          -- Update conversion status
+          UPDATE commission_conversions
+          SET
+            status = 'approved',
+            approved_by_admin_id = p_admin_id,
+            approved_at = NOW(),
+            updated_at = NOW()
+          WHERE id = p_conversion_id;
+
+        END;
+        $$ LANGUAGE plpgsql;
+      `
+    });
+
+    if (functionError) {
+      console.error('❌ Error creating commission conversion function:', functionError);
+    } else {
+      console.log('✅ Commission conversion function ready');
+    }
+
+  } catch (error) {
+    console.error('❌ Error setting up new features tables:', error);
+  }
+}
+
 // Start bot
 async function startBot() {
   try {
@@ -1531,10 +1734,13 @@ async function startBot() {
       console.log("⚠️ Database connection failed, but starting bot anyway...");
     }
 
+    // Setup new features tables
+    await setupNewFeaturesTables();
+
     console.log("🤖 Starting bot in polling mode...");
     await bot.launch();
     console.log("✅ Aureus Alliance Holdings Bot is running!");
-    console.log("🤖 Bot username: @AureusAllianceBot");
+    console.log(`🤖 Bot username: @${BOT_USERNAME} (${NODE_ENV.toUpperCase()})`);
   } catch (error) {
     console.error("❌ Failed to start bot:", error);
     process.exit(1);
@@ -1554,9 +1760,87 @@ process.once("SIGTERM", () => {
 
 // RESTORED PAYMENT SYSTEM FUNCTIONS
 
+// Maintenance Mode Helper Functions
+async function getMaintenanceMode() {
+  try {
+    const { data, error } = await db.client
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_name', 'maintenance_mode')
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error getting maintenance mode:', error);
+      return false;
+    }
+
+    return data?.setting_value === 'true';
+  } catch (error) {
+    console.error('Error checking maintenance mode:', error);
+    return false;
+  }
+}
+
+async function setMaintenanceMode(enabled) {
+  try {
+    const { error } = await db.client
+      .from('system_settings')
+      .upsert({
+        setting_name: 'maintenance_mode',
+        setting_value: enabled ? 'true' : 'false',
+        description: 'Controls whether share purchasing is disabled for maintenance',
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'setting_name'
+      });
+
+    if (error) {
+      console.error('Error setting maintenance mode:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error updating maintenance mode:', error);
+    return false;
+  }
+}
+
 // Custom Amount Purchase System
 async function handleCustomAmountPurchase(ctx) {
   const user = ctx.from;
+
+  // Check maintenance mode first
+  const isMaintenanceMode = await getMaintenanceMode();
+  if (isMaintenanceMode) {
+    await ctx.replyWithMarkdown(`🔧 **SYSTEM MAINTENANCE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**System is currently under maintenance and being upgraded.**
+
+🚫 **Share purchasing is temporarily disabled**
+✅ **All other functions remain available**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**You can still access:**
+• 📊 Portfolio management
+• 💳 Payment status
+• 👥 Referral program
+• 📋 Company information
+
+**Maintenance will be completed soon. Thank you for your patience!**`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📊 View Portfolio", callback_data: "menu_portfolio" }],
+          [{ text: "💳 Payment Status", callback_data: "menu_payments" }],
+          [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+    return;
+  }
 
   // Check for existing pending payments before showing purchase options
   const { data: telegramUser, error: telegramError } = await db.client
@@ -1700,10 +1984,605 @@ bot.on('text', async (ctx) => {
   } else if (userState && userState.state === 'awaiting_withdrawal_wallet') {
     console.log(`💳 [TEXT HANDLER] Processing withdrawal wallet address input`);
     await handleWithdrawalWalletInput(ctx, text, userState.data);
+  } else if (userState && userState.state === 'awaiting_commission_shares') {
+    console.log(`🛒 [TEXT HANDLER] Processing commission shares input`);
+    await handleCommissionSharesInput(ctx, text, userState.data);
+  } else if (ctx.session && ctx.session.pendingRejection) {
+    console.log(`❌ [TEXT HANDLER] Processing payment rejection reason`);
+    await handleRejectionReasonInput(ctx, text);
   } else {
     console.log(`❓ [TEXT HANDLER] No matching state handler for: ${userState?.state || 'null'}`);
   }
 });
+
+// Handle payment rejection reason input
+async function handleRejectionReasonInput(ctx, rejectionReason) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.reply('❌ Access denied');
+    return;
+  }
+
+  try {
+    const paymentId = ctx.session.pendingRejection;
+
+    if (!paymentId) {
+      await ctx.reply('❌ No pending rejection found. Please try again.');
+      return;
+    }
+
+    // Clear the session data
+    delete ctx.session.pendingRejection;
+
+    // Validate rejection reason
+    if (!rejectionReason || rejectionReason.trim().length < 5) {
+      await ctx.reply('❌ Rejection reason must be at least 5 characters long. Please try again.');
+      return;
+    }
+
+    // Process the rejection with the custom reason
+    await handleRejectPayment(ctx, paymentId, rejectionReason.trim());
+
+  } catch (error) {
+    console.error('Error processing rejection reason:', error);
+    await ctx.reply('❌ Error processing rejection. Please try again.');
+  }
+}
+
+// Handle commission shares input
+async function handleCommissionSharesInput(ctx, text, conversionData) {
+  const user = ctx.from;
+
+  try {
+    // Clear user state first
+    await clearUserState(user.id);
+
+    // Validate input
+    const sharesRequested = parseInt(text.trim());
+
+    if (isNaN(sharesRequested) || sharesRequested <= 0) {
+      await ctx.reply('❌ Please enter a valid number of shares (greater than 0).');
+      return;
+    }
+
+    if (sharesRequested > conversionData.max_shares) {
+      await ctx.reply(`❌ You can only purchase up to ${conversionData.max_shares} shares with your current commission balance.`);
+      return;
+    }
+
+    const totalCost = sharesRequested * conversionData.share_price;
+
+    if (totalCost > conversionData.available_usdt) {
+      await ctx.reply(`❌ Insufficient commission balance. Cost: $${totalCost.toFixed(2)}, Available: $${conversionData.available_usdt.toFixed(2)}`);
+      return;
+    }
+
+    // Show confirmation
+    const confirmationMessage = `✅ **COMMISSION TO SHARES CONVERSION**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**CONVERSION DETAILS:**
+• **Shares to Purchase:** ${sharesRequested} shares
+• **Share Price:** $${conversionData.share_price.toFixed(2)} per share
+• **Total Cost:** $${totalCost.toFixed(2)} USDT
+• **Phase:** ${conversionData.phase_number}
+
+**YOUR COMMISSION:**
+• **Available:** $${conversionData.available_usdt.toFixed(2)} USDT
+• **After Conversion:** $${(conversionData.available_usdt - totalCost).toFixed(2)} USDT
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⚠️ IMPORTANT:**
+• This request will be sent to admin for approval
+• Your commission will be deducted only after approval
+• Shares will be added to your portfolio once approved
+
+**Confirm this conversion?**`;
+
+    await ctx.replyWithMarkdown(confirmationMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "✅ Confirm Conversion", callback_data: `confirm_commission_conversion_${sharesRequested}_${totalCost.toFixed(2)}_${conversionData.phase_id}` }],
+          [{ text: "❌ Cancel", callback_data: "view_commission" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error processing commission shares input:', error);
+    await ctx.reply('❌ Error processing your request. Please try again.');
+  }
+}
+
+// Handle commission conversion confirmation
+async function handleConfirmCommissionConversion(ctx, callbackData) {
+  const user = ctx.from;
+
+  try {
+    // Parse callback data: confirm_commission_conversion_SHARES_COST_PHASEID
+    const parts = callbackData.replace('confirm_commission_conversion_', '').split('_');
+    const sharesRequested = parseInt(parts[0]);
+    const totalCost = parseFloat(parts[1]);
+    const phaseId = parts[2];
+
+    // Get user ID
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.answerCbQuery('❌ User not found');
+      return;
+    }
+
+    // Get current phase info
+    const { data: phase, error: phaseError } = await db.client
+      .from('investment_phases')
+      .select('*')
+      .eq('id', phaseId)
+      .single();
+
+    if (phaseError || !phase) {
+      await ctx.answerCbQuery('❌ Phase information not found');
+      return;
+    }
+
+    // Verify user still has sufficient commission balance
+    const { data: commissionBalance, error: commissionError } = await db.client
+      .from('commission_balances')
+      .select('usdt_balance')
+      .eq('user_id', telegramUser.user_id)
+      .single();
+
+    const availableUSDT = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
+
+    if (availableUSDT < totalCost) {
+      await ctx.replyWithMarkdown('❌ **Insufficient commission balance**\n\nYour commission balance has changed. Please try again.');
+      return;
+    }
+
+    // Create commission conversion request
+    const { data: conversion, error: insertError } = await db.client
+      .from('commission_conversions')
+      .insert({
+        user_id: telegramUser.user_id,
+        shares_requested: sharesRequested,
+        usdt_amount: totalCost,
+        share_price: phase.price_per_share,
+        phase_id: phaseId,
+        phase_number: phase.phase_number,
+        status: 'pending'
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      console.error('Error creating commission conversion:', insertError);
+      await ctx.answerCbQuery('❌ Error creating conversion request');
+      return;
+    }
+
+    // Notify user
+    await ctx.replyWithMarkdown(`✅ **CONVERSION REQUEST SUBMITTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${conversion.id.substring(0, 8)}
+**Shares:** ${sharesRequested} shares
+**Cost:** $${totalCost.toFixed(2)} USDT
+**Phase:** ${phase.phase_number}
+
+**Status:** Pending admin approval
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Your conversion request has been submitted to the admin for approval. You will be notified once it's processed.
+
+**Your commission balance will be deducted only after approval.**`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📊 View Commission Dashboard", callback_data: "view_commission" }],
+          [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+    // Notify admin
+    try {
+      const adminNotification = `🛒 **NEW COMMISSION CONVERSION REQUEST**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${conversion.id.substring(0, 8)}
+**User:** ${user.first_name} (@${user.username || 'N/A'})
+**Shares Requested:** ${sharesRequested} shares
+**USDT Amount:** $${totalCost.toFixed(2)}
+**Share Price:** $${phase.price_per_share.toFixed(2)}
+**Phase:** ${phase.phase_number}
+
+**User's Available Commission:** $${availableUSDT.toFixed(2)} USDT
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Action Required:** Please review and approve/reject this conversion request.`;
+
+      await bot.telegram.sendMessage(process.env.ADMIN_TELEGRAM_ID || '1234567890', adminNotification, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "✅ Approve", callback_data: `approve_commission_conversion_${conversion.id}` },
+              { text: "❌ Reject", callback_data: `reject_commission_conversion_${conversion.id}` }
+            ],
+            [{ text: "👥 View All Requests", callback_data: "admin_commission_conversions" }]
+          ]
+        }
+      });
+    } catch (adminNotifyError) {
+      console.error('Error notifying admin:', adminNotifyError);
+    }
+
+  } catch (error) {
+    console.error('Error confirming commission conversion:', error);
+    await ctx.answerCbQuery('❌ Error processing conversion');
+  }
+}
+
+// Handle admin approval of commission conversion
+async function handleApproveCommissionConversion(ctx, callbackData) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  try {
+    const conversionId = callbackData.replace('approve_commission_conversion_', '');
+
+    // Get conversion details
+    const { data: conversion, error: conversionError } = await db.client
+      .from('commission_conversions')
+      .select(`
+        *,
+        users!inner(id, full_name, username),
+        investment_phases!inner(phase_number, price_per_share)
+      `)
+      .eq('id', conversionId)
+      .eq('status', 'pending')
+      .single();
+
+    if (conversionError || !conversion) {
+      await ctx.answerCbQuery('❌ Conversion request not found or already processed');
+      return;
+    }
+
+    // Verify user still has sufficient commission balance
+    const { data: commissionBalance, error: balanceError } = await db.client
+      .from('commission_balances')
+      .select('usdt_balance')
+      .eq('user_id', conversion.user_id)
+      .single();
+
+    const availableUSDT = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
+
+    if (availableUSDT < conversion.usdt_amount) {
+      await ctx.replyWithMarkdown(`❌ **INSUFFICIENT USER COMMISSION BALANCE**
+
+**User:** ${conversion.users.full_name || conversion.users.username}
+**Required:** $${conversion.usdt_amount.toFixed(2)} USDT
+**Available:** $${availableUSDT.toFixed(2)} USDT
+
+Cannot approve this conversion due to insufficient balance.`);
+      return;
+    }
+
+    // Start transaction
+    const { error: transactionError } = await db.client.rpc('process_commission_conversion', {
+      p_conversion_id: conversionId,
+      p_admin_id: user.id,
+      p_admin_username: user.username
+    });
+
+    if (transactionError) {
+      console.error('Commission conversion transaction error:', transactionError);
+      await ctx.answerCbQuery('❌ Error processing conversion');
+      return;
+    }
+
+    // Success notification to admin
+    await ctx.replyWithMarkdown(`✅ **COMMISSION CONVERSION APPROVED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${conversionId.substring(0, 8)}
+**User:** ${conversion.users.full_name || conversion.users.username}
+**Shares Added:** ${conversion.shares_requested} shares
+**USDT Deducted:** $${conversion.usdt_amount.toFixed(2)}
+**Phase:** ${conversion.phase_number}
+
+**✅ Transaction completed successfully**
+• User's commission balance updated
+• Shares added to user's portfolio
+• Commission history recorded
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "👥 View All Requests", callback_data: "admin_commission_conversions" }],
+          [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+        ]
+      }
+    });
+
+    // Notify user of approval
+    try {
+      const { data: telegramUser } = await db.client
+        .from('telegram_users')
+        .select('telegram_id')
+        .eq('user_id', conversion.user_id)
+        .single();
+
+      if (telegramUser) {
+        const userNotification = `✅ **COMMISSION CONVERSION APPROVED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${conversionId.substring(0, 8)}
+**Shares Purchased:** ${conversion.shares_requested} shares
+**USDT Used:** $${conversion.usdt_amount.toFixed(2)}
+**Share Price:** $${conversion.share_price.toFixed(2)}
+**Phase:** ${conversion.phase_number}
+
+**✅ Your conversion has been completed!**
+
+Your commission balance has been updated and the shares have been added to your portfolio.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+        await bot.telegram.sendMessage(telegramUser.telegram_id, userNotification, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📊 View Portfolio", callback_data: "menu_portfolio" }],
+              [{ text: "💰 View Commission", callback_data: "view_commission" }]
+            ]
+          }
+        });
+      }
+    } catch (notifyError) {
+      console.error('Error notifying user of approval:', notifyError);
+    }
+
+  } catch (error) {
+    console.error('Error approving commission conversion:', error);
+    await ctx.answerCbQuery('❌ Error processing approval');
+  }
+}
+
+// Handle admin rejection of commission conversion
+async function handleRejectCommissionConversion(ctx, callbackData) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  try {
+    const conversionId = callbackData.replace('reject_commission_conversion_', '');
+
+    // Get conversion details
+    const { data: conversion, error: conversionError } = await db.client
+      .from('commission_conversions')
+      .select(`
+        *,
+        users!inner(id, full_name, username)
+      `)
+      .eq('id', conversionId)
+      .eq('status', 'pending')
+      .single();
+
+    if (conversionError || !conversion) {
+      await ctx.answerCbQuery('❌ Conversion request not found or already processed');
+      return;
+    }
+
+    // Update conversion status to rejected
+    const { error: updateError } = await db.client
+      .from('commission_conversions')
+      .update({
+        status: 'rejected',
+        rejected_by_admin_id: user.id,
+        rejected_at: new Date().toISOString(),
+        rejection_reason: 'Rejected by admin',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', conversionId);
+
+    if (updateError) {
+      console.error('Error rejecting commission conversion:', updateError);
+      await ctx.answerCbQuery('❌ Error rejecting conversion');
+      return;
+    }
+
+    // Log admin action
+    await logAdminAction(
+      user.id,
+      user.username,
+      'commission_conversion_rejected',
+      'commission_conversion',
+      conversionId,
+      {
+        user: conversion.users.username,
+        shares: conversion.shares_requested,
+        amount: conversion.usdt_amount
+      }
+    );
+
+    // Success notification to admin
+    await ctx.replyWithMarkdown(`❌ **COMMISSION CONVERSION REJECTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${conversionId.substring(0, 8)}
+**User:** ${conversion.users.full_name || conversion.users.username}
+**Shares:** ${conversion.shares_requested} shares
+**Amount:** $${conversion.usdt_amount.toFixed(2)} USDT
+
+**✅ Conversion request has been rejected**
+
+The user will be notified of the rejection.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "👥 View All Requests", callback_data: "admin_commission_conversions" }],
+          [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+        ]
+      }
+    });
+
+    // Notify user of rejection
+    try {
+      const { data: telegramUser } = await db.client
+        .from('telegram_users')
+        .select('telegram_id')
+        .eq('user_id', conversion.user_id)
+        .single();
+
+      if (telegramUser) {
+        const userNotification = `❌ **COMMISSION CONVERSION REJECTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Request ID:** #${conversionId.substring(0, 8)}
+**Shares Requested:** ${conversion.shares_requested} shares
+**Amount:** $${conversion.usdt_amount.toFixed(2)} USDT
+
+**Status:** Rejected by Admin
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Your commission conversion request has been rejected. Your commission balance remains unchanged.
+
+**You can:**
+• Try submitting a new conversion request
+• Contact support for more information
+• Use your commission for other purposes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+        await bot.telegram.sendMessage(telegramUser.telegram_id, userNotification, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🛒 Try Again", callback_data: "commission_to_shares" }],
+              [{ text: "💰 View Commission", callback_data: "view_commission" }],
+              [{ text: "📞 Contact Support", url: "https://t.me/TTTFOUNDER" }]
+            ]
+          }
+        });
+      }
+    } catch (notifyError) {
+      console.error('Error notifying user of rejection:', notifyError);
+    }
+
+  } catch (error) {
+    console.error('Error rejecting commission conversion:', error);
+    await ctx.answerCbQuery('❌ Error processing rejection');
+  }
+}
+
+// Handle admin commission conversions view
+async function handleAdminCommissionConversions(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  try {
+    // Get pending commission conversions
+    const { data: conversions, error: conversionsError } = await db.client
+      .from('commission_conversions')
+      .select(`
+        *,
+        users!inner(full_name, username)
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (conversionsError) {
+      console.error('Error fetching commission conversions:', conversionsError);
+      await ctx.reply('❌ Error loading commission conversions');
+      return;
+    }
+
+    if (!conversions || conversions.length === 0) {
+      await ctx.replyWithMarkdown(`🔄 **COMMISSION CONVERSIONS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**No pending commission conversion requests**
+
+All conversion requests have been processed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    let message = `🔄 **COMMISSION CONVERSIONS**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**${conversions.length} Pending Request${conversions.length > 1 ? 's' : ''}:**\n\n`;
+
+    const keyboard = [];
+
+    conversions.forEach((conversion, index) => {
+      const shortId = conversion.id.substring(0, 8);
+      const userName = conversion.users.full_name || conversion.users.username;
+      const createdDate = new Date(conversion.created_at).toLocaleDateString();
+
+      message += `**${index + 1}. Request #${shortId}**\n`;
+      message += `• **User:** ${userName}\n`;
+      message += `• **Shares:** ${conversion.shares_requested} shares\n`;
+      message += `• **Amount:** $${conversion.usdt_amount} USDT\n`;
+      message += `• **Phase:** ${conversion.phase_number}\n`;
+      message += `• **Date:** ${createdDate}\n\n`;
+
+      // Add approve/reject buttons for each conversion
+      keyboard.push([
+        { text: `✅ Approve #${shortId}`, callback_data: `approve_commission_conversion_${conversion.id}` },
+        { text: `❌ Reject #${shortId}`, callback_data: `reject_commission_conversion_${conversion.id}` }
+      ]);
+    });
+
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**Select an action for each request above.**`;
+
+    keyboard.push([{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]);
+
+    await ctx.replyWithMarkdown(message, {
+      reply_markup: {
+        inline_keyboard: keyboard
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling admin commission conversions:', error);
+    await ctx.reply('❌ Error loading commission conversions');
+  }
+}
 
 // Handle sponsor username input
 async function handleSponsorUsernameInput(ctx, text) {
@@ -2560,11 +3439,18 @@ async function handleAdminPanel(ctx) {
     return;
   }
 
+  // Get current maintenance mode status
+  const isMaintenanceMode = await getMaintenanceMode();
+  const maintenanceStatus = isMaintenanceMode ? '🔧 **MAINTENANCE MODE ACTIVE**' : '✅ **ALL SYSTEMS OPERATIONAL**';
+  const maintenanceButton = isMaintenanceMode
+    ? { text: "✅ Disable Maintenance Mode", callback_data: "toggle_maintenance" }
+    : { text: "🔧 Enable Maintenance Mode", callback_data: "toggle_maintenance" };
+
   const adminMessage = `🔑 **ADMIN CONTROL PANEL**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**⚡ SYSTEM STATUS:** All systems operational
+**⚡ SYSTEM STATUS:** ${maintenanceStatus}
 
 **🔧 ADMIN FUNCTIONS:**
 • Payment approvals and management
@@ -2572,6 +3458,7 @@ async function handleAdminPanel(ctx) {
 • Commission processing
 • System monitoring and analytics
 • Audit logs and reporting
+• Maintenance mode control
 
 **📊 QUICK STATS:**
 • Active users and transactions
@@ -2589,15 +3476,75 @@ async function handleAdminPanel(ctx) {
   await ctx.replyWithMarkdown(adminMessage, {
     reply_markup: {
       inline_keyboard: [
+        [maintenanceButton],
         [{ text: "⏳ Pending Payments", callback_data: "admin_pending" }],
         [{ text: "👥 User Management", callback_data: "admin_users" }],
         [{ text: "💰 Commission Requests", callback_data: "admin_commissions" }],
+        [{ text: "🔄 Commission Conversions", callback_data: "admin_commission_conversions" }],
         [{ text: "📊 System Stats", callback_data: "admin_stats" }],
         [{ text: "📋 Audit Logs", callback_data: "admin_logs" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
     }
   });
+}
+
+// Admin Maintenance Mode Toggle Handler
+async function handleToggleMaintenance(ctx) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  try {
+    const currentMode = await getMaintenanceMode();
+    const newMode = !currentMode;
+
+    const success = await setMaintenanceMode(newMode);
+
+    if (success) {
+      const statusText = newMode ? 'ENABLED' : 'DISABLED';
+      const statusIcon = newMode ? '🔧' : '✅';
+
+      // Log the admin action
+      await logAdminAction(
+        user.id,
+        user.username,
+        `maintenance_mode_${newMode ? 'enabled' : 'disabled'}`,
+        'system',
+        'maintenance_mode',
+        { previous_state: currentMode, new_state: newMode }
+      );
+
+      await ctx.replyWithMarkdown(`${statusIcon} **MAINTENANCE MODE ${statusText}**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Status:** ${newMode ? 'Share purchasing is now DISABLED' : 'Share purchasing is now ENABLED'}
+
+${newMode ?
+  '🚫 **Users will see maintenance message when trying to purchase shares**\n✅ **All other bot functions remain available**' :
+  '✅ **All bot functions are now fully operational**\n🛒 **Users can purchase shares normally**'
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Action logged for audit purposes.**`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+          ]
+        }
+      });
+    } else {
+      await ctx.replyWithMarkdown('❌ **Error updating maintenance mode**\n\nPlease try again.');
+    }
+  } catch (error) {
+    console.error('Error toggling maintenance mode:', error);
+    await ctx.answerCbQuery('❌ Error updating maintenance mode');
+  }
 }
 
 // Admin Status Handler
@@ -3914,7 +4861,8 @@ Your investment in African gold mining starts now.`;
   }
 }
 
-async function handleRejectPayment(ctx, callbackData) {
+// Payment Rejection Prompt Handler
+async function handleRejectPaymentPrompt(ctx, callbackData) {
   const user = ctx.from;
 
   if (user.username !== 'TTTFOUNDER') {
@@ -3925,31 +4873,141 @@ async function handleRejectPayment(ctx, callbackData) {
   const paymentId = callbackData.replace('reject_payment_', '');
 
   try {
-    // Update payment status to rejected
+    // Get payment details for context
+    const { data: payment, error: paymentError } = await db.client
+      .from('crypto_payment_transactions')
+      .select('*, users!inner(username, full_name)')
+      .eq('id', paymentId)
+      .single();
+
+    if (paymentError || !payment) {
+      await ctx.answerCbQuery('❌ Payment not found');
+      return;
+    }
+
+    const promptMessage = `❌ **REJECT PAYMENT CONFIRMATION**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Payment Details:**
+• **ID:** #${paymentId.substring(0, 8)}
+• **Amount:** $${payment.amount} USDT
+• **User:** ${payment.users.full_name || payment.users.username}
+• **Network:** ${payment.network}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Please enter the reason for rejecting this payment:**
+
+*This message will be sent to the user along with the rejection notification.*`;
+
+    await ctx.replyWithMarkdown(promptMessage, {
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: "Enter rejection reason..."
+      }
+    });
+
+    // Store the payment ID in a temporary way for the next message
+    ctx.session = ctx.session || {};
+    ctx.session.pendingRejection = paymentId;
+
+  } catch (error) {
+    console.error('Error showing rejection prompt:', error);
+    await ctx.answerCbQuery('❌ Error processing rejection');
+  }
+}
+
+// Updated Payment Rejection Handler with Custom Message
+async function handleRejectPayment(ctx, paymentId, rejectionReason) {
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.reply('❌ Access denied');
+    return;
+  }
+
+  try {
+    // Update payment status to rejected with custom reason
     const { data: updatedPayment, error: updateError } = await db.client
       .from('crypto_payment_transactions')
       .update({
         status: 'rejected',
         rejected_at: new Date().toISOString(),
+        rejected_by_admin_id: user.id,
+        rejection_reason: rejectionReason,
         updated_at: new Date().toISOString()
       })
       .eq('id', paymentId)
-      .select('*, users!inner(username, full_name)')
+      .select('*, users!inner(username, full_name, telegram_id)')
       .single();
 
     if (updateError) {
       console.error('Payment rejection error:', updateError);
-      await ctx.answerCbQuery('❌ Error rejecting payment');
+      await ctx.reply('❌ Error rejecting payment');
       return;
     }
 
+    // Log admin action
+    await logAdminAction(
+      user.id,
+      user.username,
+      'payment_rejected',
+      'payment',
+      paymentId,
+      {
+        amount: updatedPayment.amount,
+        user: updatedPayment.users.username,
+        rejection_reason: rejectionReason
+      }
+    );
+
+    // Send notification to user
+    try {
+      const userNotification = `❌ **PAYMENT REJECTED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Payment ID:** #${paymentId.substring(0, 8)}
+**Amount:** $${updatedPayment.amount} USDT
+**Status:** Rejected by Admin
+
+**Reason for Rejection:**
+${rejectionReason}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Next Steps:**
+• Review the rejection reason above
+• Correct any issues mentioned
+• Submit a new payment if needed
+• Contact support if you have questions
+
+**Need Help?** Contact @TTTFOUNDER for assistance.`;
+
+      await bot.telegram.sendMessage(updatedPayment.users.telegram_id, userNotification, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🛒 Make New Payment", callback_data: "menu_purchase_shares" }],
+            [{ text: "📞 Contact Support", url: "https://t.me/TTTFOUNDER" }]
+          ]
+        }
+      });
+    } catch (notificationError) {
+      console.error('Error sending rejection notification to user:', notificationError);
+    }
+
+    // Confirm to admin
     await ctx.replyWithMarkdown(`❌ **PAYMENT REJECTED**
 
 **Payment ID:** #${paymentId.substring(0, 8)}
 **Amount:** $${updatedPayment.amount} USDT
 **User:** ${updatedPayment.users.full_name || updatedPayment.users.username}
 
-The user will be notified of the rejection.`, {
+**Rejection Reason:** ${rejectionReason}
+
+✅ User has been notified with the custom rejection message.`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "🔙 Back to Payments", callback_data: "admin_payments" }]
@@ -3959,7 +5017,7 @@ The user will be notified of the rejection.`, {
 
   } catch (error) {
     console.error('Payment rejection error:', error);
-    await ctx.answerCbQuery('❌ Error rejecting payment');
+    await ctx.reply('❌ Error rejecting payment');
   }
 }
 
@@ -4467,36 +5525,118 @@ async function handleWithdrawUSDTCommission(ctx) {
 
 // Handle Commission to Shares Conversion
 async function handleCommissionToShares(ctx) {
-  await ctx.replyWithMarkdown(`🛒 **USE COMMISSION FOR SHARE PURCHASE**
+  const user = ctx.from;
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  try {
+    // Get user ID from telegram_users table
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
 
-**🚧 FEATURE COMING SOON**
-
-This feature will allow you to use your commission balance to purchase additional gold mining shares directly.
-
-**📋 PLANNED FEATURES:**
-• Use USDT commission balance for share purchases
-• Automatic conversion at current share price
-• No withdrawal fees when used for shares
-• Instant processing (no admin approval needed)
-• Commission + additional payment combinations
-
-**💡 CURRENT WORKAROUND:**
-1. Withdraw your commission balance
-2. Use the withdrawn funds for new share purchase
-3. Contact @TTTFOUNDER for manual processing
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**⏳ This feature will be available soon!**`, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "💸 Withdraw USDT Instead", callback_data: "withdraw_usdt_commission" }],
-        [{ text: "🔙 Back to Commission Dashboard", callback_data: "view_commission" }]
-      ]
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
     }
-  });
+
+    // Get commission balance
+    const { data: commissionBalance, error: commissionError } = await db.client
+      .from('commission_balances')
+      .select('*')
+      .eq('user_id', telegramUser.user_id)
+      .single();
+
+    if (commissionError && commissionError.code !== 'PGRST116') {
+      console.error('Commission balance fetch error:', commissionError);
+      await ctx.replyWithMarkdown('❌ **Error loading commission data**\n\nPlease try again.');
+      return;
+    }
+
+    const availableUSDT = commissionBalance ? parseFloat(commissionBalance.usdt_balance || 0) : 0;
+
+    if (availableUSDT <= 0) {
+      await ctx.replyWithMarkdown(`💰 **INSUFFICIENT COMMISSION BALANCE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Available USDT Commission:** $${availableUSDT.toFixed(2)}
+
+You need a positive USDT commission balance to convert to shares.
+
+**How to earn commissions:**
+• Refer new investors using your referral link
+• Earn 15% USDT commission on their investments
+• Use earned commissions to purchase more shares
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
+            [{ text: "🔙 Back to Commission Dashboard", callback_data: "view_commission" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Get current phase information
+    const { data: currentPhase, error: phaseError } = await db.client
+      .from('investment_phases')
+      .select('*')
+      .eq('is_active', true)
+      .single();
+
+    if (phaseError || !currentPhase) {
+      await ctx.replyWithMarkdown('❌ **Error loading current phase information**\n\nPlease try again.');
+      return;
+    }
+
+    const sharePrice = parseFloat(currentPhase.price_per_share);
+    const maxShares = Math.floor(availableUSDT / sharePrice);
+
+    const conversionMessage = `🛒 **CONVERT COMMISSION TO SHARES**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 YOUR COMMISSION BALANCE:**
+• Available USDT: $${availableUSDT.toFixed(2)}
+
+**📊 CURRENT PHASE INFORMATION:**
+• Phase ${currentPhase.phase_number}
+• Share Price: $${sharePrice.toFixed(2)} per share
+• Maximum Shares You Can Buy: ${maxShares} shares
+
+**💡 CONVERSION PROCESS:**
+1. Enter the number of shares you want to purchase
+2. System calculates total cost
+3. Request goes to admin for approval
+4. Once approved: USDT deducted, shares added to portfolio
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Enter the number of shares you want to purchase (1-${maxShares}):**`;
+
+    await ctx.replyWithMarkdown(conversionMessage, {
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: `Enter shares (1-${maxShares})`
+      }
+    });
+
+    // Set user state for commission conversion
+    await setUserState(user.id, 'awaiting_commission_shares', {
+      available_usdt: availableUSDT,
+      share_price: sharePrice,
+      max_shares: maxShares,
+      phase_id: currentPhase.id,
+      phase_number: currentPhase.phase_number
+    });
+
+  } catch (error) {
+    console.error('Commission to shares error:', error);
+    await ctx.replyWithMarkdown('❌ **Error processing request**\n\nPlease try again.');
+  }
 }
 
 // Handle Withdrawal History

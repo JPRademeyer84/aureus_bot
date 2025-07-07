@@ -10831,26 +10831,27 @@ async function completeKYCProcess(ctx) {
   const kycData = ctx.session.kyc.data;
 
   try {
-    // Get user's country from database
+    // Get user's country and ID from database
     const { data: userData, error: userError } = await db.client
       .from('users')
-      .select('country_of_residence')
+      .select('id, country_of_residence')
       .eq('telegram_id', user.id)
       .single();
 
     if (userError) {
-      console.error('❌ [KYC] Error getting user country:', userError);
-      await ctx.reply('❌ Error retrieving your country information. Please try again.');
+      console.error('❌ [KYC] Error getting user data:', userError);
+      await ctx.reply('❌ Error retrieving your user information. Please try again.');
       return;
     }
 
     const countryCode = userData?.country_of_residence || 'ZAF';
+    const userId = userData?.id;
 
     // Save KYC data to database
     const { data: kycRecord, error: kycError } = await db.client
       .from('kyc_information')
       .insert({
-        user_id: userData.id,
+        user_id: userId,
         first_name: kycData.first_name,
         last_name: kycData.last_name,
         id_type: ctx.session.kyc.id_type,

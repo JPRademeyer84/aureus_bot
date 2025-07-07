@@ -11493,32 +11493,6 @@ Thank you for your patience!`;
   }
 }
 
-Thank you for your patience!`;
-
-    await ctx.replyWithMarkdown(confirmationMessage, {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
-          [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
-        ]
-      }
-    });
-
-    // Notify admin about proof upload
-    await sendAdminNotification('bank_transfer_proof_uploaded', {
-      username: telegramUser.username || user.first_name || 'Unknown',
-      payment_id: paymentId,
-      file_id: fileId,
-      file_name: fileName,
-      user_id: telegramUser.user_id
-    }, 'high');
-
-  } catch (error) {
-    console.error('Error in handleBankTransferProofUpload:', error);
-    await ctx.reply('❌ Error processing payment proof. Please try again.');
-  }
-}
-
 // Handle viewing bank transfer proof for admin
 async function handleViewBankProof(ctx, callbackData) {
   const user = ctx.from;

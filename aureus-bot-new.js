@@ -4536,7 +4536,22 @@ async function handleTransactionHashInput(ctx, transactionHash, sessionData) {
 
     if (updateError) {
       console.error('Error updating payment with hash:', updateError);
-      await ctx.reply('❌ Error saving transaction hash. Please try again.');
+
+      // Handle duplicate transaction hash specifically
+      if (updateError.code === '23505' && updateError.message.includes('transaction_hash')) {
+        await ctx.reply(`❌ **DUPLICATE TRANSACTION HASH**
+
+This transaction hash has already been used for another payment.
+
+**Please provide a different transaction hash:**
+• Each transaction must have a unique hash
+• Double-check your transaction details
+• If you believe this is an error, contact support
+
+**Try again with a different transaction hash:**`);
+      } else {
+        await ctx.reply('❌ Error saving transaction hash. Please try again.');
+      }
       return;
     }
 

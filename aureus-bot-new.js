@@ -2044,6 +2044,8 @@ bot.on('callback_query', async (ctx) => {
           await showAfricaCountries(ctx);
         } else if (callbackData === 'show_americas_countries') {
           await showAmericasCountries(ctx);
+        } else if (callbackData === 'show_oceania_countries') {
+          await showOceaniaCountries(ctx);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");
         }
@@ -10667,71 +10669,122 @@ async function showAsiaCountries(ctx) {
   await ctx.replyWithMarkdown(asiaMessage, { reply_markup: keyboard });
 }
 
-// Show Africa countries
+// Show Africa countries - Complete coverage with alphabetical ordering
 async function showAfricaCountries(ctx) {
   const africaMessage = `🌍 **AFRICAN COUNTRIES**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**📍 SELECT YOUR COUNTRY:**`;
+**📍 SELECT YOUR COUNTRY (Alphabetical):**`;
 
   const keyboard = {
     inline_keyboard: [
       [
-        { text: "🇪🇬 Egypt", callback_data: "select_country_EGY" },
-        { text: "🇲🇦 Morocco", callback_data: "select_country_MAR" }
-      ],
-      [
         { text: "🇩🇿 Algeria", callback_data: "select_country_DZA" },
-        { text: "🇹🇳 Tunisia", callback_data: "select_country_TUN" }
+        { text: "🇦🇴 Angola", callback_data: "select_country_AGO" }
       ],
       [
-        { text: "🇱🇾 Libya", callback_data: "select_country_LBY" },
-        { text: "🇸🇩 Sudan", callback_data: "select_country_SDN" }
-      ],
-      [
-        { text: "🇪🇹 Ethiopia", callback_data: "select_country_ETH" },
-        { text: "🇰🇪 Kenya", callback_data: "select_country_KEN" }
-      ],
-      [
-        { text: "🇺🇬 Uganda", callback_data: "select_country_UGA" },
-        { text: "🇹🇿 Tanzania", callback_data: "select_country_TZA" }
-      ],
-      [
-        { text: "🇷🇼 Rwanda", callback_data: "select_country_RWA" },
-        { text: "🇬🇭 Ghana", callback_data: "select_country_GHA" }
-      ],
-      [
-        { text: "🇳🇬 Nigeria", callback_data: "select_country_NGA" },
-        { text: "🇸🇳 Senegal", callback_data: "select_country_SEN" }
-      ],
-      [
-        { text: "🇨🇮 Ivory Coast", callback_data: "select_country_CIV" },
-        { text: "🇲🇱 Mali", callback_data: "select_country_MLI" }
-      ],
-      [
-        { text: "🇧🇫 Burkina Faso", callback_data: "select_country_BFA" },
-        { text: "🇳🇪 Niger", callback_data: "select_country_NER" }
-      ],
-      [
-        { text: "🇹🇩 Chad", callback_data: "select_country_TCD" },
-        { text: "🇨🇲 Cameroon", callback_data: "select_country_CMR" }
-      ],
-      [
-        { text: "🇦🇴 Angola", callback_data: "select_country_AGO" },
-        { text: "🇿🇲 Zambia", callback_data: "select_country_ZMB" }
-      ],
-      [
-        { text: "🇿🇼 Zimbabwe", callback_data: "select_country_ZWE" },
+        { text: "🇧🇯 Benin", callback_data: "select_country_BEN" },
         { text: "🇧🇼 Botswana", callback_data: "select_country_BWA" }
       ],
       [
-        { text: "🇳🇦 Namibia", callback_data: "select_country_NAM" },
+        { text: "🇧🇫 Burkina Faso", callback_data: "select_country_BFA" },
+        { text: "🇧🇮 Burundi", callback_data: "select_country_BDI" }
+      ],
+      [
+        { text: "🇨🇲 Cameroon", callback_data: "select_country_CMR" },
+        { text: "🇨🇻 Cape Verde", callback_data: "select_country_CPV" }
+      ],
+      [
+        { text: "🇨🇫 Central African Rep.", callback_data: "select_country_CAF" },
+        { text: "🇹🇩 Chad", callback_data: "select_country_TCD" }
+      ],
+      [
+        { text: "🇰🇲 Comoros", callback_data: "select_country_COM" },
+        { text: "🇨🇬 Congo", callback_data: "select_country_COG" }
+      ],
+      [
+        { text: "🇨🇩 DR Congo", callback_data: "select_country_COD" },
+        { text: "🇩🇯 Djibouti", callback_data: "select_country_DJI" }
+      ],
+      [
+        { text: "🇪🇬 Egypt", callback_data: "select_country_EGY" },
+        { text: "🇬🇶 Equatorial Guinea", callback_data: "select_country_GNQ" }
+      ],
+      [
+        { text: "🇪🇷 Eritrea", callback_data: "select_country_ERI" },
+        { text: "🇸🇿 Eswatini", callback_data: "select_country_SWZ" }
+      ],
+      [
+        { text: "🇪🇹 Ethiopia", callback_data: "select_country_ETH" },
+        { text: "🇬🇦 Gabon", callback_data: "select_country_GAB" }
+      ],
+      [
+        { text: "🇬🇲 Gambia", callback_data: "select_country_GMB" },
+        { text: "🇬🇭 Ghana", callback_data: "select_country_GHA" }
+      ],
+      [
+        { text: "🇬🇳 Guinea", callback_data: "select_country_GIN" },
+        { text: "🇬🇼 Guinea-Bissau", callback_data: "select_country_GNB" }
+      ],
+      [
+        { text: "🇨🇮 Ivory Coast", callback_data: "select_country_CIV" },
+        { text: "🇰🇪 Kenya", callback_data: "select_country_KEN" }
+      ],
+      [
+        { text: "🇱🇸 Lesotho", callback_data: "select_country_LSO" },
+        { text: "🇱🇷 Liberia", callback_data: "select_country_LBR" }
+      ],
+      [
+        { text: "🇱🇾 Libya", callback_data: "select_country_LBY" },
+        { text: "🇲🇬 Madagascar", callback_data: "select_country_MDG" }
+      ],
+      [
+        { text: "🇲🇼 Malawi", callback_data: "select_country_MWI" },
+        { text: "🇲🇱 Mali", callback_data: "select_country_MLI" }
+      ],
+      [
+        { text: "🇲🇷 Mauritania", callback_data: "select_country_MRT" },
+        { text: "🇲🇺 Mauritius", callback_data: "select_country_MUS" }
+      ],
+      [
+        { text: "🇲🇦 Morocco", callback_data: "select_country_MAR" },
         { text: "🇲🇿 Mozambique", callback_data: "select_country_MOZ" }
       ],
       [
-        { text: "🇲🇬 Madagascar", callback_data: "select_country_MDG" },
-        { text: "🇲🇺 Mauritius", callback_data: "select_country_MUS" }
+        { text: "🇳🇦 Namibia", callback_data: "select_country_NAM" },
+        { text: "🇳🇪 Niger", callback_data: "select_country_NER" }
+      ],
+      [
+        { text: "🇳🇬 Nigeria", callback_data: "select_country_NGA" },
+        { text: "🇷🇼 Rwanda", callback_data: "select_country_RWA" }
+      ],
+      [
+        { text: "🇸🇹 Sao Tome & Principe", callback_data: "select_country_STP" },
+        { text: "🇸🇳 Senegal", callback_data: "select_country_SEN" }
+      ],
+      [
+        { text: "🇸🇨 Seychelles", callback_data: "select_country_SYC" },
+        { text: "🇸🇱 Sierra Leone", callback_data: "select_country_SLE" }
+      ],
+      [
+        { text: "🇸🇴 Somalia", callback_data: "select_country_SOM" },
+        { text: "🇸🇩 Sudan", callback_data: "select_country_SDN" }
+      ],
+      [
+        { text: "🇸🇸 South Sudan", callback_data: "select_country_SSD" },
+        { text: "🇹🇿 Tanzania", callback_data: "select_country_TZA" }
+      ],
+      [
+        { text: "🇹🇬 Togo", callback_data: "select_country_TGO" },
+        { text: "🇹🇳 Tunisia", callback_data: "select_country_TUN" }
+      ],
+      [
+        { text: "🇺🇬 Uganda", callback_data: "select_country_UGA" },
+        { text: "🇿🇲 Zambia", callback_data: "select_country_ZMB" }
+      ],
+      [
+        { text: "🇿🇼 Zimbabwe", callback_data: "select_country_ZWE" }
       ],
       [
         { text: "🌎 Show Americas", callback_data: "show_americas_countries" }
@@ -10746,6 +10799,117 @@ async function showAfricaCountries(ctx) {
   };
 
   await ctx.replyWithMarkdown(africaMessage, { reply_markup: keyboard });
+}
+
+// Show Americas countries
+async function showAmericasCountries(ctx) {
+  const americasMessage = `🌎 **AMERICAN COUNTRIES**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📍 SELECT YOUR COUNTRY (Alphabetical):**`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🇦🇷 Argentina", callback_data: "select_country_ARG" },
+        { text: "🇧🇧 Barbados", callback_data: "select_country_BRB" }
+      ],
+      [
+        { text: "🇧🇿 Belize", callback_data: "select_country_BLZ" },
+        { text: "🇧🇴 Bolivia", callback_data: "select_country_BOL" }
+      ],
+      [
+        { text: "🇧🇷 Brazil", callback_data: "select_country_BRA" },
+        { text: "🇨🇱 Chile", callback_data: "select_country_CHL" }
+      ],
+      [
+        { text: "🇨🇴 Colombia", callback_data: "select_country_COL" },
+        { text: "🇨🇷 Costa Rica", callback_data: "select_country_CRI" }
+      ],
+      [
+        { text: "🇨🇺 Cuba", callback_data: "select_country_CUB" },
+        { text: "🇩🇴 Dominican Republic", callback_data: "select_country_DOM" }
+      ],
+      [
+        { text: "🇪🇨 Ecuador", callback_data: "select_country_ECU" },
+        { text: "🇸🇻 El Salvador", callback_data: "select_country_SLV" }
+      ],
+      [
+        { text: "🇬🇹 Guatemala", callback_data: "select_country_GTM" },
+        { text: "🇬🇾 Guyana", callback_data: "select_country_GUY" }
+      ],
+      [
+        { text: "🇭🇹 Haiti", callback_data: "select_country_HTI" },
+        { text: "🇭🇳 Honduras", callback_data: "select_country_HND" }
+      ],
+      [
+        { text: "🇯🇲 Jamaica", callback_data: "select_country_JAM" },
+        { text: "🇲🇽 Mexico", callback_data: "select_country_MEX" }
+      ],
+      [
+        { text: "🇳🇮 Nicaragua", callback_data: "select_country_NIC" },
+        { text: "🇵🇦 Panama", callback_data: "select_country_PAN" }
+      ],
+      [
+        { text: "🇵🇾 Paraguay", callback_data: "select_country_PRY" },
+        { text: "🇵🇪 Peru", callback_data: "select_country_PER" }
+      ],
+      [
+        { text: "🇸🇷 Suriname", callback_data: "select_country_SUR" },
+        { text: "🇹🇹 Trinidad & Tobago", callback_data: "select_country_TTO" }
+      ],
+      [
+        { text: "🇺🇾 Uruguay", callback_data: "select_country_URY" },
+        { text: "🇻🇪 Venezuela", callback_data: "select_country_VEN" }
+      ],
+      [
+        { text: "🏝️ Show Oceania", callback_data: "show_oceania_countries" }
+      ],
+      [
+        { text: "🔙 Back to Africa", callback_data: "show_africa_countries" }
+      ],
+      [
+        { text: "🌎 Type Your Country", callback_data: "country_selection_other" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(americasMessage, { reply_markup: keyboard });
+}
+
+// Show Oceania countries
+async function showOceaniaCountries(ctx) {
+  const oceaniaMessage = `🏝️ **OCEANIA COUNTRIES**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📍 SELECT YOUR COUNTRY:**`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🇫🇯 Fiji", callback_data: "select_country_FJI" },
+        { text: "🇳🇨 New Caledonia", callback_data: "select_country_NCL" }
+      ],
+      [
+        { text: "🇵🇬 Papua New Guinea", callback_data: "select_country_PNG" },
+        { text: "🇵🇫 French Polynesia", callback_data: "select_country_PYF" }
+      ],
+      [
+        { text: "🇸🇧 Solomon Islands", callback_data: "select_country_SLB" },
+        { text: "🇻🇺 Vanuatu", callback_data: "select_country_VUT" }
+      ],
+      [
+        { text: "🔙 Back to Americas", callback_data: "show_americas_countries" }
+      ],
+      [
+        { text: "🌎 Type Your Country", callback_data: "country_selection_other" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(oceaniaMessage, { reply_markup: keyboard });
 }
 
 // Get country information by code
@@ -10812,50 +10976,96 @@ function getCountryInfo(countryCode) {
     'IRN': { name: 'Iran', flag: '🇮🇷' },
     'IRQ': { name: 'Iraq', flag: '🇮🇶' },
 
-    // Africa
-    'EGY': { name: 'Egypt', flag: '🇪🇬' },
-    'MAR': { name: 'Morocco', flag: '🇲🇦' },
+    // Africa (Complete coverage - alphabetical)
     'DZA': { name: 'Algeria', flag: '🇩🇿' },
-    'TUN': { name: 'Tunisia', flag: '🇹🇳' },
-    'LBY': { name: 'Libya', flag: '🇱🇾' },
-    'SDN': { name: 'Sudan', flag: '🇸🇩' },
-    'ETH': { name: 'Ethiopia', flag: '🇪🇹' },
-    'KEN': { name: 'Kenya', flag: '🇰🇪' },
-    'UGA': { name: 'Uganda', flag: '🇺🇬' },
-    'TZA': { name: 'Tanzania', flag: '🇹🇿' },
-    'RWA': { name: 'Rwanda', flag: '🇷🇼' },
-    'GHA': { name: 'Ghana', flag: '🇬🇭' },
-    'NGA': { name: 'Nigeria', flag: '🇳🇬' },
-    'SEN': { name: 'Senegal', flag: '🇸🇳' },
-    'CIV': { name: 'Ivory Coast', flag: '🇨🇮' },
-    'MLI': { name: 'Mali', flag: '🇲🇱' },
-    'BFA': { name: 'Burkina Faso', flag: '🇧🇫' },
-    'NER': { name: 'Niger', flag: '🇳🇪' },
-    'TCD': { name: 'Chad', flag: '🇹🇩' },
-    'CMR': { name: 'Cameroon', flag: '🇨🇲' },
     'AGO': { name: 'Angola', flag: '🇦🇴' },
+    'BEN': { name: 'Benin', flag: '🇧🇯' },
+    'BWA': { name: 'Botswana', flag: '🇧🇼' },
+    'BFA': { name: 'Burkina Faso', flag: '🇧🇫' },
+    'BDI': { name: 'Burundi', flag: '🇧🇮' },
+    'CMR': { name: 'Cameroon', flag: '🇨🇲' },
+    'CPV': { name: 'Cape Verde', flag: '🇨🇻' },
+    'CAF': { name: 'Central African Republic', flag: '🇨🇫' },
+    'TCD': { name: 'Chad', flag: '🇹🇩' },
+    'COM': { name: 'Comoros', flag: '🇰🇲' },
+    'COG': { name: 'Congo', flag: '🇨🇬' },
+    'COD': { name: 'Democratic Republic of Congo', flag: '🇨🇩' },
+    'DJI': { name: 'Djibouti', flag: '🇩🇯' },
+    'EGY': { name: 'Egypt', flag: '🇪🇬' },
+    'GNQ': { name: 'Equatorial Guinea', flag: '🇬🇶' },
+    'ERI': { name: 'Eritrea', flag: '🇪🇷' },
+    'SWZ': { name: 'Eswatini', flag: '🇸🇿' },
+    'ETH': { name: 'Ethiopia', flag: '🇪🇹' },
+    'GAB': { name: 'Gabon', flag: '🇬🇦' },
+    'GMB': { name: 'Gambia', flag: '🇬🇲' },
+    'GHA': { name: 'Ghana', flag: '🇬🇭' },
+    'GIN': { name: 'Guinea', flag: '🇬🇳' },
+    'GNB': { name: 'Guinea-Bissau', flag: '🇬🇼' },
+    'CIV': { name: 'Ivory Coast', flag: '🇨🇮' },
+    'KEN': { name: 'Kenya', flag: '🇰🇪' },
+    'LSO': { name: 'Lesotho', flag: '🇱🇸' },
+    'LBR': { name: 'Liberia', flag: '🇱🇷' },
+    'LBY': { name: 'Libya', flag: '🇱🇾' },
+    'MDG': { name: 'Madagascar', flag: '🇲🇬' },
+    'MWI': { name: 'Malawi', flag: '🇲🇼' },
+    'MLI': { name: 'Mali', flag: '🇲🇱' },
+    'MRT': { name: 'Mauritania', flag: '🇲🇷' },
+    'MUS': { name: 'Mauritius', flag: '🇲🇺' },
+    'MAR': { name: 'Morocco', flag: '🇲🇦' },
+    'MOZ': { name: 'Mozambique', flag: '🇲🇿' },
+    'NAM': { name: 'Namibia', flag: '🇳🇦' },
+    'NER': { name: 'Niger', flag: '🇳🇪' },
+    'NGA': { name: 'Nigeria', flag: '🇳🇬' },
+    'RWA': { name: 'Rwanda', flag: '🇷🇼' },
+    'STP': { name: 'Sao Tome and Principe', flag: '🇸🇹' },
+    'SEN': { name: 'Senegal', flag: '🇸🇳' },
+    'SYC': { name: 'Seychelles', flag: '🇸🇨' },
+    'SLE': { name: 'Sierra Leone', flag: '🇸🇱' },
+    'SOM': { name: 'Somalia', flag: '🇸🇴' },
+    'SDN': { name: 'Sudan', flag: '🇸🇩' },
+    'SSD': { name: 'South Sudan', flag: '🇸🇸' },
+    'TZA': { name: 'Tanzania', flag: '🇹🇿' },
+    'TGO': { name: 'Togo', flag: '🇹🇬' },
+    'TUN': { name: 'Tunisia', flag: '🇹🇳' },
+    'UGA': { name: 'Uganda', flag: '🇺🇬' },
     'ZMB': { name: 'Zambia', flag: '🇿🇲' },
     'ZWE': { name: 'Zimbabwe', flag: '🇿🇼' },
-    'BWA': { name: 'Botswana', flag: '🇧🇼' },
-    'NAM': { name: 'Namibia', flag: '🇳🇦' },
-    'MOZ': { name: 'Mozambique', flag: '🇲🇿' },
-    'MDG': { name: 'Madagascar', flag: '🇲🇬' },
-    'MUS': { name: 'Mauritius', flag: '🇲🇺' },
 
-    // Americas
-    'BRA': { name: 'Brazil', flag: '🇧🇷' },
-    'MEX': { name: 'Mexico', flag: '🇲🇽' },
+    // Americas (alphabetical)
     'ARG': { name: 'Argentina', flag: '🇦🇷' },
+    'BRB': { name: 'Barbados', flag: '🇧🇧' },
+    'BLZ': { name: 'Belize', flag: '🇧🇿' },
+    'BOL': { name: 'Bolivia', flag: '🇧🇴' },
+    'BRA': { name: 'Brazil', flag: '🇧🇷' },
     'CHL': { name: 'Chile', flag: '🇨🇱' },
     'COL': { name: 'Colombia', flag: '🇨🇴' },
-    'PER': { name: 'Peru', flag: '🇵🇪' },
-    'VEN': { name: 'Venezuela', flag: '🇻🇪' },
+    'CRI': { name: 'Costa Rica', flag: '🇨🇷' },
+    'CUB': { name: 'Cuba', flag: '🇨🇺' },
+    'DOM': { name: 'Dominican Republic', flag: '🇩🇴' },
     'ECU': { name: 'Ecuador', flag: '🇪🇨' },
-    'BOL': { name: 'Bolivia', flag: '🇧🇴' },
-    'PRY': { name: 'Paraguay', flag: '🇵🇾' },
-    'URY': { name: 'Uruguay', flag: '🇺🇾' },
+    'SLV': { name: 'El Salvador', flag: '🇸🇻' },
+    'GTM': { name: 'Guatemala', flag: '🇬🇹' },
     'GUY': { name: 'Guyana', flag: '🇬🇾' },
+    'HTI': { name: 'Haiti', flag: '🇭🇹' },
+    'HND': { name: 'Honduras', flag: '🇭🇳' },
+    'JAM': { name: 'Jamaica', flag: '🇯🇲' },
+    'MEX': { name: 'Mexico', flag: '🇲🇽' },
+    'NIC': { name: 'Nicaragua', flag: '🇳🇮' },
+    'PAN': { name: 'Panama', flag: '🇵🇦' },
+    'PRY': { name: 'Paraguay', flag: '🇵🇾' },
+    'PER': { name: 'Peru', flag: '🇵🇪' },
     'SUR': { name: 'Suriname', flag: '🇸🇷' },
+    'TTO': { name: 'Trinidad and Tobago', flag: '🇹🇹' },
+    'URY': { name: 'Uruguay', flag: '🇺🇾' },
+    'VEN': { name: 'Venezuela', flag: '🇻🇪' },
+
+    // Oceania
+    'FJI': { name: 'Fiji', flag: '🇫🇯' },
+    'NCL': { name: 'New Caledonia', flag: '🇳🇨' },
+    'PNG': { name: 'Papua New Guinea', flag: '🇵🇬' },
+    'PYF': { name: 'French Polynesia', flag: '🇵🇫' },
+    'SLB': { name: 'Solomon Islands', flag: '🇸🇧' },
+    'VUT': { name: 'Vanuatu', flag: '🇻🇺' },
 
     // Other
     'OTH': { name: 'Other Country', flag: '🌎' }

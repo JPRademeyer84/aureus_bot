@@ -1952,6 +1952,8 @@ bot.on('callback_query', async (ctx) => {
           await handleConfirmPurchase(ctx, callbackData);
         } else if (callbackData.startsWith('upload_proof_')) {
           await handleUploadProof(ctx, callbackData);
+        } else if (callbackData.startsWith('upload_bank_proof_')) {
+          await handleBankTransferProofUpload(ctx, callbackData);
         } else if (callbackData.startsWith('review_payment_')) {
           await handleReviewPayment(ctx, callbackData);
         } else if (callbackData.startsWith('approve_payment_')) {
@@ -4397,6 +4399,8 @@ bot.on('photo', async (ctx) => {
       await handleProofScreenshot(ctx, userState.data);
     } else if (userState && userState.state === 'uploading_payment_proof') {
       await handleBankTransferProofUpload(ctx);
+    } else if (userState && userState.state === 'uploading_bank_proof') {
+      await handleBankTransferFileUpload(ctx, false); // false = photo
     }
   } catch (error) {
     console.error('Error in photo handler:', error);
@@ -4423,6 +4427,13 @@ bot.on('document', async (ctx) => {
         await handleBankTransferProofUpload(ctx, true);
       } else {
         await ctx.reply('📷 Please upload an image file (JPG, PNG) or PDF for payment proof.');
+      }
+    } else if (userState && userState.state === 'uploading_bank_proof') {
+      const document = ctx.message.document;
+      if (document.mime_type && (document.mime_type.startsWith('image/') || document.mime_type === 'application/pdf')) {
+        await handleBankTransferFileUpload(ctx, true); // true = document
+      } else {
+        await ctx.reply('📷 Please upload an image file (JPG, PNG) or PDF for bank transfer proof.');
       }
     }
   } catch (error) {
@@ -11219,7 +11230,7 @@ Verify bank details: [FNB Confirmation Document](https://fgubaqoftdeefcakejwu.su
   await ctx.replyWithMarkdown(bankTransferMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "💳 Submit Payment Proof", callback_data: `upload_proof_${payment.id}` }],
+        [{ text: "💳 Submit Payment Proof", callback_data: `upload_bank_proof_${payment.id}` }],
         [{ text: "🔗 View Bank Confirmation", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets//fnb.pdf" }],
         [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
         [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
@@ -11315,17 +11326,77 @@ Upload proof within 24 hours or payment will be cancelled.
   }
 }
 
-// Handle bank transfer proof upload
-async function handleBankTransferProofUpload(ctx, isDocument = false) {
+// Handle bank transfer proof upload (SEPARATE from crypto proof upload)
+async function handleBankTransferProofUpload(ctx, callbackData) {
+  const paymentId = callbackData.replace('upload_bank_proof_', '');
   const user = ctx.from;
 
   try {
-    // Get payment ID from session
-    const paymentId = ctx.session.uploadingProofForPayment;
-    if (!paymentId) {
-      await ctx.reply('❌ No payment found for proof upload. Please start the process again.');
+    // Verify payment exists and is a bank transfer
+    const { data: payment, error: paymentError } = await db.client
+      .from('crypto_payment_transactions')
+      .select('*')
+      .eq('id', paymentId)
+      .eq('network', 'BANK_TRANSFER')
+      .single();
+
+    if (paymentError || !payment) {
+      await ctx.answerCbQuery('❌ Bank transfer payment not found');
       return;
     }
+
+    // Set user state for bank transfer proof upload
+    await setUserState(user.id, 'uploading_bank_proof', { paymentId });
+
+    const bankProofMessage = `🏦 BANK TRANSFER PROOF UPLOAD
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 PAYMENT DETAILS:
+• Payment ID: #${paymentId.substring(0, 8)}
+• Amount: ${formatCurrency(payment.amount)}
+• ZAR Amount: R${payment.transaction_hash.match(/ZAR:([0-9.]+)/)?.[1] || 'N/A'}
+• Bank Account: FNB - 63154323041
+
+📤 UPLOAD REQUIREMENTS:
+
+1. Bank transfer receipt/proof
+2. Screenshot showing:
+   - Transaction amount (R${payment.transaction_hash.match(/ZAR:([0-9.]+)/)?.[1] || 'N/A'})
+   - Recipient account (FNB 63154323041)
+   - Transaction date/time
+   - Your bank reference number
+
+⚠️ Important: Upload clear, readable proof of your bank transfer
+
+Please send your bank transfer proof now (photo or document):`;
+
+    await ctx.reply(bankProofMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "❌ Cancel Upload", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in handleBankTransferProofUpload:', error);
+    await ctx.answerCbQuery('❌ Error processing bank transfer proof upload');
+  }
+}
+
+// Handle actual bank transfer file upload (when user sends photo/document)
+async function handleBankTransferFileUpload(ctx, isDocument = false) {
+  const user = ctx.from;
+
+  try {
+    // Check if user is in bank transfer upload state
+    const userState = await getUserState(user.id);
+    if (!userState || userState.state !== 'uploading_bank_proof') {
+      return; // Not in bank transfer upload state
+    }
+
+    const { paymentId } = userState.data;
 
     // Get file info
     let fileId, fileName, fileSize;
@@ -11333,13 +11404,13 @@ async function handleBankTransferProofUpload(ctx, isDocument = false) {
     if (isDocument) {
       const document = ctx.message.document;
       fileId = document.file_id;
-      fileName = document.file_name || 'payment_proof';
+      fileName = document.file_name || 'bank_transfer_proof';
       fileSize = document.file_size;
     } else {
       const photo = ctx.message.photo;
       const largestPhoto = photo[photo.length - 1]; // Get highest resolution
       fileId = largestPhoto.file_id;
-      fileName = 'payment_proof.jpg';
+      fileName = 'bank_transfer_proof.jpg';
       fileSize = largestPhoto.file_size;
     }
 
@@ -11378,32 +11449,49 @@ async function handleBankTransferProofUpload(ctx, isDocument = false) {
       return;
     }
 
-    // Clear session data
-    delete ctx.session.uploadingProofForPayment;
+    // Clear user state
     await setUserState(user.id, null);
 
     // Send confirmation to user
-    const confirmationMessage = `✅ **PAYMENT PROOF UPLOADED**
+    const confirmationMessage = `✅ BANK TRANSFER PROOF UPLOADED
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**📤 PROOF SUCCESSFULLY SUBMITTED**
+🏦 Your bank transfer proof has been successfully uploaded!
 
-Payment ID: #${paymentId.substring(0, 8)}
-File: ${fileName}
-Status: Pending Admin Review
+📋 NEXT STEPS:
+• Admin will review your bank transfer proof
+• You will be notified once approved
+• Shares will be allocated after approval
+• Check your portfolio for updates
 
-**⏳ WHAT HAPPENS NEXT:**
-1. Admin will review your payment proof
-2. Bank transfer will be verified
-3. You'll receive confirmation once approved
-4. Shares will be allocated to your portfolio
+⏰ PROCESSING TIME:
+Typically 24-48 hours during business days
 
-**⏰ REVIEW TIME:**
-Typically 2-24 hours during business days
+Thank you for your patience!`;
 
-**📱 NOTIFICATIONS:**
-You'll receive a message when your payment is approved or if additional information is needed.
+    await ctx.reply(confirmationMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📊 View Portfolio", callback_data: "view_portfolio" }],
+          [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+    // Notify admin about new bank transfer proof
+    await sendAdminNotification('bank_transfer_proof_uploaded', {
+      username: user.username || user.first_name || 'Unknown',
+      payment_id: paymentId,
+      file_name: fileName,
+      user_id: telegramUser.user_id
+    }, 'medium');
+
+  } catch (error) {
+    console.error('Error in handleBankTransferFileUpload:', error);
+    await ctx.reply('❌ Error uploading bank transfer proof. Please try again.');
+  }
+}
 
 Thank you for your patience!`;
 

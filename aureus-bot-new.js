@@ -909,7 +909,7 @@ function createTermsKeyboard() {
         { text: "✅ I Accept Terms & Conditions", callback_data: "accept_terms" }
       ],
       [
-        { text: "📋 Read Full Terms", url: "https://aureusalliance.com/terms" }
+        { text: "📋 Read Full Terms", url: "https://aureus.africa/terms" }
       ],
       [
         { text: "🔙 Back to Dashboard", callback_data: "main_menu" }
@@ -1657,7 +1657,7 @@ Regular community meetings and transparent communication about our operations.
       inline_keyboard: [
         [{ text: "📅 Community Meetings", callback_data: "community_meetings" }],
         [{ text: "🏗️ Development Plans", callback_data: "community_development" }],
-        [{ text: "📞 Contact Community Liaison", url: "mailto:community@aureusalliance.com" }],
+        [{ text: "📞 Contact Community Liaison", url: "mailto:support@aureus.africa" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
     }
@@ -2096,8 +2096,8 @@ async function handleSupportCenter(ctx) {
 **24/7 PREMIUM SUPPORT**
 
 🌟 **CONTACT OPTIONS:**
-• 📧 **Email:** support@aureusalliance.com
-• 🌐 **Website:** https://aureusalliance.com
+• 📧 **Email:** support@aureus.africa
+• 🌐 **Website:** https://aureus.africa
 • 💬 **Live Chat:** Available on website
 • 📱 **WhatsApp:** +27 XX XXX XXXX
 
@@ -2117,8 +2117,8 @@ async function handleSupportCenter(ctx) {
   await ctx.replyWithMarkdown(supportMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📧 Email Support", url: "mailto:support@aureusalliance.com" }],
-        [{ text: "🌐 Visit Website", url: "https://aureusalliance.com" }],
+        [{ text: "📧 Email Support", url: "mailto:support@aureus.africa" }],
+        [{ text: "🌐 Visit Website", url: "https://aureus.africa" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
     }
@@ -2379,7 +2379,7 @@ async function showPrivacyPolicy(ctx) {
 • Withdraw consent anytime
 
 **📞 PRIVACY CONTACT:**
-• Email: privacy@aureusalliance.com
+• Email: support@aureus.africa
 • Telegram: @TTTFOUNDER
 • Response: 30 days maximum
 
@@ -9968,7 +9968,7 @@ Data collection is necessary for:
 Your data may be processed in secure facilities outside your country in compliance with applicable data protection laws.
 
 **📞 CONTACT:**
-For privacy questions: support@aureusalliance.com
+For privacy questions: support@aureus.africa
 
 **✅ By proceeding, you consent to the collection and processing of your personal data as described above.**`;
 

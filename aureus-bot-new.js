@@ -2012,6 +2012,14 @@ bot.on('callback_query', async (ctx) => {
           await handleNDADecline(ctx);
         } else if (callbackData.startsWith('view_document_')) {
           await handleDocumentView(ctx, callbackData);
+        } else if (callbackData === 'start_kyc_process') {
+          await handleStartKYCProcess(ctx);
+        } else if (callbackData === 'kyc_info') {
+          await handleKYCInfo(ctx);
+        } else if (callbackData === 'kyc_later') {
+          await handleKYCLater(ctx);
+        } else if (callbackData.startsWith('kyc_')) {
+          await handleKYCStep(ctx, callbackData);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");
         }
@@ -2917,6 +2925,9 @@ bot.on('text', async (ctx) => {
   } else if (ctx.session && ctx.session.pendingWithdrawalRejection) {
     console.log(`💸 [TEXT HANDLER] Processing withdrawal rejection reason`);
     await handleWithdrawalRejectionReasonInput(ctx, text);
+  } else if (ctx.session && ctx.session.kyc && ctx.session.kyc.step) {
+    console.log(`📋 [TEXT HANDLER] Processing KYC input for step: ${ctx.session.kyc.step}`);
+    await handleKYCTextInput(ctx, text);
   } else {
     console.log(`❓ [TEXT HANDLER] No matching state handler for: ${userState?.state || 'null'}`);
   }
@@ -7166,6 +7177,10 @@ async function handleApprovePayment(ctx, callbackData) {
     console.log(`📱 Notifying user ${updatedPayment.users.username} of payment approval...`);
     await notifyUserPaymentApproved(updatedPayment, sharesAmount, currentPhase);
 
+    // TRIGGER KYC COLLECTION FOR SHARE CERTIFICATE
+    console.log(`📋 Checking KYC status for user ${updatedPayment.users.username}...`);
+    await triggerKYCCollectionIfNeeded(updatedPayment.user_id);
+
     await ctx.replyWithMarkdown(`✅ **PAYMENT APPROVED**
 
 **Payment ID:** #${paymentId.substring(0, 8)}
@@ -9411,6 +9426,661 @@ async function logDocumentAccess(telegramUserId, documentType, documentUrl, user
   } catch (error) {
     console.error('Error in logDocumentAccess:', error);
   }
+}
+
+// KYC (KNOW YOUR CUSTOMER) SYSTEM
+// Trigger KYC collection if needed after successful payment
+async function triggerKYCCollectionIfNeeded(userId) {
+  try {
+    console.log(`🔍 [KYC] Checking KYC status for user ID: ${userId}`);
+
+    // Check if user has already completed KYC
+    const hasKYC = await checkKYCCompletion(userId);
+
+    if (hasKYC) {
+      console.log(`✅ [KYC] User ${userId} already has completed KYC - skipping collection`);
+      return;
+    }
+
+    console.log(`📋 [KYC] User ${userId} needs to complete KYC - triggering collection`);
+
+    // Get user's Telegram ID to send KYC request
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('telegram_id, username')
+      .eq('user_id', userId)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      console.error('❌ [KYC] Error getting user Telegram ID:', telegramError);
+      return;
+    }
+
+    // Send KYC collection request to user
+    await sendKYCCollectionRequest(telegramUser.telegram_id, telegramUser.username);
+
+  } catch (error) {
+    console.error('❌ [KYC] Error in triggerKYCCollectionIfNeeded:', error);
+  }
+}
+
+// Check if user has completed KYC
+async function checkKYCCompletion(userId) {
+  try {
+    const { data: kycData, error: kycError } = await db.client
+      .from('kyc_information')
+      .select('id, kyc_status')
+      .eq('user_id', userId)
+      .eq('kyc_status', 'completed')
+      .single();
+
+    return !kycError && kycData;
+
+  } catch (error) {
+    console.error('❌ [KYC] Error checking KYC completion:', error);
+    return false;
+  }
+}
+
+// Send KYC collection request to user
+async function sendKYCCollectionRequest(telegramId, username) {
+  try {
+    console.log(`📋 [KYC] Sending KYC collection request to user ${username} (${telegramId})`);
+
+    const kycMessage = `🎉 **CONGRATULATIONS ON YOUR SHARE PURCHASE!**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 COMPLETE KYC FOR SHARE CERTIFICATE**
+
+To generate and send your official share certificate, we need to collect some additional information as required by financial regulations.
+
+**🔒 WHAT IS KYC?**
+KYC (Know Your Customer) is a regulatory requirement that helps us:
+• Verify your identity for legal compliance
+• Generate personalized share certificates
+• Ensure secure delivery of official documents
+• Meet international financial standards
+
+**📋 INFORMATION REQUIRED:**
+• Full legal name (as on government ID)
+• Government ID or Passport number
+• Complete physical address
+• Country of residence
+• Phone number and email address
+
+**⏰ CERTIFICATE TIMELINE:**
+Once KYC is completed, your share certificate will be generated and sent within 48 hours (Monday-Friday, excluding weekends and holidays).
+
+**🔐 PRIVACY & SECURITY:**
+• All information is encrypted and securely stored
+• Data is used only for certificate generation
+• Full compliance with privacy regulations
+• Your information is never shared with third parties
+
+**✅ Ready to complete your KYC and receive your share certificate?**`;
+
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: "📋 Start KYC Process", callback_data: "start_kyc_process" }
+        ],
+        [
+          { text: "ℹ️ Learn More About KYC", callback_data: "kyc_info" }
+        ],
+        [
+          { text: "⏰ Complete Later", callback_data: "kyc_later" }
+        ],
+        [
+          { text: "🏠 Back to Dashboard", callback_data: "main_menu" }
+        ]
+      ]
+    };
+
+    // Send KYC request message
+    await sendAudioNotificationToUser(
+      telegramId,
+      kycMessage,
+      'KYC',
+      {
+        reply_markup: keyboard
+      },
+      true // Enable audio notification for KYC requests
+    );
+
+    console.log(`✅ [KYC] KYC collection request sent successfully to user ${username}`);
+
+  } catch (error) {
+    console.error('❌ [KYC] Error sending KYC collection request:', error);
+  }
+}
+
+// Handle start KYC process
+async function handleStartKYCProcess(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Check if user already has KYC
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (userError || !telegramUser) {
+      await ctx.answerCbQuery('❌ User not found');
+      return;
+    }
+
+    const hasKYC = await checkKYCCompletion(telegramUser.user_id);
+
+    if (hasKYC) {
+      await ctx.answerCbQuery('✅ KYC already completed');
+      await showKYCAlreadyCompleted(ctx);
+      return;
+    }
+
+    // Initialize KYC session
+    ctx.session.kyc = {
+      step: 'privacy_consent',
+      data: {},
+      user_id: telegramUser.user_id
+    };
+
+    await showKYCPrivacyConsent(ctx);
+
+  } catch (error) {
+    console.error('Error starting KYC process:', error);
+    await ctx.answerCbQuery('❌ Error starting KYC process');
+  }
+}
+
+// Show KYC privacy consent
+async function showKYCPrivacyConsent(ctx) {
+  const consentMessage = `🔒 **DATA PRIVACY & CONSENT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 KYC DATA COLLECTION NOTICE**
+
+Before we collect your personal information, please review and accept our data privacy terms:
+
+**🔐 WHAT WE COLLECT:**
+• Full legal name (for certificate generation)
+• Government ID or Passport number (for identity verification)
+• Physical address (for document delivery)
+• Contact information (phone and email)
+
+**🛡️ HOW WE PROTECT YOUR DATA:**
+• All sensitive information is encrypted
+• Data is stored securely in compliance with regulations
+• Access is restricted to authorized personnel only
+• Information is used solely for certificate generation
+
+**📋 YOUR RIGHTS:**
+• Right to access your personal data
+• Right to correct inaccurate information
+• Right to request data deletion (subject to legal requirements)
+• Right to withdraw consent (may affect certificate generation)
+
+**⚖️ LEGAL BASIS:**
+Data collection is necessary for:
+• Regulatory compliance (KYC/AML requirements)
+• Contract fulfillment (share certificate generation)
+• Legal obligations under financial regulations
+
+**🌍 INTERNATIONAL TRANSFERS:**
+Your data may be processed in secure facilities outside your country in compliance with applicable data protection laws.
+
+**📞 CONTACT:**
+For privacy questions: support@aureusalliance.com
+
+**✅ By proceeding, you consent to the collection and processing of your personal data as described above.**`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "✅ I Accept & Continue", callback_data: "kyc_accept_privacy" }
+      ],
+      [
+        { text: "📋 Read Full Privacy Policy", callback_data: "view_privacy_policy" }
+      ],
+      [
+        { text: "❌ I Decline", callback_data: "kyc_decline_privacy" }
+      ],
+      [
+        { text: "🏠 Back to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(consentMessage, { reply_markup: keyboard });
+}
+
+// Handle KYC info request
+async function handleKYCInfo(ctx) {
+  const infoMessage = `ℹ️ **ABOUT KYC (KNOW YOUR CUSTOMER)**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔍 WHAT IS KYC?**
+KYC (Know Your Customer) is a regulatory process used by financial institutions to verify the identity of their clients.
+
+**⚖️ WHY IS IT REQUIRED?**
+• **Legal Compliance:** Required by financial regulations
+• **Anti-Money Laundering:** Prevents illegal financial activities
+• **Identity Verification:** Ensures legitimate transactions
+• **Document Security:** Enables secure certificate generation
+
+**📋 WHAT INFORMATION IS NEEDED?**
+• **Personal Details:** Full legal name as on government ID
+• **Identity Verification:** ID number or passport number
+• **Contact Information:** Phone number and email address
+• **Address Verification:** Complete physical address
+
+**🔒 IS MY DATA SAFE?**
+• All information is encrypted and securely stored
+• Data is used only for regulatory compliance and certificate generation
+• We follow international data protection standards
+• Your privacy is our top priority
+
+**⏰ HOW LONG DOES IT TAKE?**
+• KYC collection: 5-10 minutes
+• Certificate generation: 48 hours (business days)
+• Certificate delivery: Via secure email
+
+**📜 SHARE CERTIFICATE BENEFITS:**
+• Official proof of ownership
+• Legal document for your records
+• Required for dividend claims
+• Transferable investment asset
+
+**💡 WHEN SHOULD I COMPLETE KYC?**
+Complete KYC as soon as possible after your first share purchase to receive your certificate promptly.`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "📋 Start KYC Process", callback_data: "start_kyc_process" }
+      ],
+      [
+        { text: "🏠 Back to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(infoMessage, { reply_markup: keyboard });
+}
+
+// Handle KYC later
+async function handleKYCLater(ctx) {
+  await ctx.answerCbQuery('KYC postponed');
+
+  const laterMessage = `⏰ **KYC POSTPONED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 KYC COMPLETION REMINDER**
+
+You have chosen to complete your KYC later. Please note:
+
+**⚠️ IMPORTANT:**
+• Your share certificate cannot be generated without KYC
+• KYC is required for regulatory compliance
+• Certificate delivery will be delayed until KYC is completed
+
+**⏰ WHEN TO COMPLETE:**
+You can complete your KYC at any time by:
+• Going to your portfolio and clicking "Complete KYC"
+• Returning to this menu through the dashboard
+• Contacting support for assistance
+
+**📞 NEED HELP?**
+If you have questions about the KYC process, please contact our support team.
+
+**💡 RECOMMENDATION:**
+Complete KYC as soon as possible to receive your share certificate and ensure full compliance with your investment.`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "📋 Complete KYC Now", callback_data: "start_kyc_process" }
+      ],
+      [
+        { text: "💼 View Portfolio", callback_data: "view_portfolio" }
+      ],
+      [
+        { text: "🏠 Back to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(laterMessage, { reply_markup: keyboard });
+}
+
+// Handle KYC step processing
+async function handleKYCStep(ctx, callbackData) {
+  const user = ctx.from;
+
+  try {
+    if (callbackData === 'kyc_accept_privacy') {
+      // User accepted privacy terms, start data collection
+      ctx.session.kyc = ctx.session.kyc || {};
+      ctx.session.kyc.privacy_accepted = true;
+      ctx.session.kyc.step = 'first_name';
+
+      await showKYCFirstNameStep(ctx);
+
+    } else if (callbackData === 'kyc_decline_privacy') {
+      await handleKYCDeclinePrivacy(ctx);
+
+    } else if (callbackData === 'kyc_submit_data') {
+      await handleKYCSubmitData(ctx);
+
+    } else {
+      await ctx.answerCbQuery('Unknown KYC step');
+    }
+
+  } catch (error) {
+    console.error('Error handling KYC step:', error);
+    await ctx.answerCbQuery('❌ Error processing KYC step');
+  }
+}
+
+// Show first name collection step
+async function showKYCFirstNameStep(ctx) {
+  const firstNameMessage = `📝 **KYC STEP 1 OF 6: FIRST NAME**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**👤 ENTER YOUR FIRST NAME**
+
+Please enter your first name exactly as it appears on your government-issued ID or passport.
+
+**📋 REQUIREMENTS:**
+• Use your legal first name only
+• Match your official identification document
+• No nicknames or abbreviations
+• Letters only (no numbers or symbols)
+
+**💡 EXAMPLE:**
+If your ID shows "John Michael Smith", enter: **John**
+
+**⚠️ IMPORTANT:**
+This information will appear on your share certificate, so accuracy is essential.
+
+**✍️ Please type your first name below:**`;
+
+  ctx.session.kyc.step = 'awaiting_first_name';
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🔙 Back to Privacy Consent", callback_data: "start_kyc_process" }
+      ],
+      [
+        { text: "🏠 Cancel & Return to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(firstNameMessage, { reply_markup: keyboard });
+}
+
+// Handle KYC decline privacy
+async function handleKYCDeclinePrivacy(ctx) {
+  await ctx.answerCbQuery('Privacy consent declined');
+
+  const declineMessage = `❌ **PRIVACY CONSENT DECLINED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔒 KYC PROCESS CANCELLED**
+
+You have declined to provide consent for data collection.
+
+**📋 CONSEQUENCES:**
+• Cannot complete KYC verification
+• Share certificate cannot be generated
+• Regulatory compliance requirements not met
+• Investment documentation incomplete
+
+**💡 ALTERNATIVES:**
+• Review our privacy policy for more details
+• Contact support with privacy concerns
+• Complete KYC later when ready
+
+**🔄 CHANGE YOUR MIND?**
+You can restart the KYC process at any time by accepting the privacy terms.`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🔄 Restart KYC Process", callback_data: "start_kyc_process" }
+      ],
+      [
+        { text: "📋 Read Privacy Policy", callback_data: "view_privacy_policy" }
+      ],
+      [
+        { text: "🏠 Back to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(declineMessage, { reply_markup: keyboard });
+}
+
+// Show KYC already completed message
+async function showKYCAlreadyCompleted(ctx) {
+  const completedMessage = `✅ **KYC ALREADY COMPLETED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🎉 CONGRATULATIONS!**
+
+Your KYC (Know Your Customer) verification has already been completed successfully.
+
+**📜 SHARE CERTIFICATE STATUS:**
+Your share certificate has been requested and will be generated within 48 hours (business days).
+
+**📧 DELIVERY:**
+The certificate will be sent to your registered email address once ready.
+
+**💼 WHAT'S NEXT:**
+• Monitor your email for certificate delivery
+• View your portfolio to track your investments
+• Consider additional share purchases
+• Share your referral link to earn commissions
+
+**📞 NEED HELP?**
+Contact support if you have questions about your certificate or KYC status.`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "💼 View Portfolio", callback_data: "view_portfolio" }
+      ],
+      [
+        { text: "📤 Share Referral Link", callback_data: "share_referral" }
+      ],
+      [
+        { text: "🏠 Back to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(completedMessage, { reply_markup: keyboard });
+}
+
+// Handle KYC text input
+async function handleKYCTextInput(ctx, text) {
+  const user = ctx.from;
+  const kycSession = ctx.session.kyc;
+
+  try {
+    switch (kycSession.step) {
+      case 'awaiting_first_name':
+        await handleKYCFirstNameInput(ctx, text);
+        break;
+      case 'awaiting_last_name':
+        await handleKYCLastNameInput(ctx, text);
+        break;
+      case 'awaiting_id_type':
+        await handleKYCIdTypeInput(ctx, text);
+        break;
+      case 'awaiting_id_number':
+        await handleKYCIdNumberInput(ctx, text);
+        break;
+      case 'awaiting_phone':
+        await handleKYCPhoneInput(ctx, text);
+        break;
+      case 'awaiting_email':
+        await handleKYCEmailInput(ctx, text);
+        break;
+      case 'awaiting_address':
+        await handleKYCAddressInput(ctx, text);
+        break;
+      case 'awaiting_city':
+        await handleKYCCityInput(ctx, text);
+        break;
+      case 'awaiting_postal_code':
+        await handleKYCPostalCodeInput(ctx, text);
+        break;
+      case 'awaiting_country':
+        await handleKYCCountryInput(ctx, text);
+        break;
+      default:
+        await ctx.reply('❓ Unknown KYC step. Please restart the process.');
+        break;
+    }
+  } catch (error) {
+    console.error('Error handling KYC text input:', error);
+    await ctx.reply('❌ Error processing your input. Please try again.');
+  }
+}
+
+// Handle first name input
+async function handleKYCFirstNameInput(ctx, firstName) {
+  // Validate first name
+  if (!firstName || firstName.trim().length < 2) {
+    await ctx.reply('❌ Please enter a valid first name (at least 2 characters).');
+    return;
+  }
+
+  if (!/^[a-zA-Z\s'-]+$/.test(firstName.trim())) {
+    await ctx.reply('❌ First name can only contain letters, spaces, hyphens, and apostrophes.');
+    return;
+  }
+
+  // Store first name
+  ctx.session.kyc.data.first_name = firstName.trim();
+
+  // Move to next step
+  await showKYCLastNameStep(ctx);
+}
+
+// Show last name step
+async function showKYCLastNameStep(ctx) {
+  const lastNameMessage = `📝 **KYC STEP 2 OF 6: LAST NAME**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**👤 ENTER YOUR LAST NAME**
+
+Please enter your last name (surname) exactly as it appears on your government-issued ID or passport.
+
+**📋 REQUIREMENTS:**
+• Use your legal last name/surname only
+• Match your official identification document
+• No nicknames or abbreviations
+• Letters only (no numbers or symbols)
+
+**💡 EXAMPLE:**
+If your ID shows "John Michael Smith", enter: **Smith**
+
+**✅ FIRST NAME SAVED:** ${ctx.session.kyc.data.first_name}
+
+**✍️ Please type your last name below:**`;
+
+  ctx.session.kyc.step = 'awaiting_last_name';
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🔙 Back to First Name", callback_data: "kyc_back_first_name" }
+      ],
+      [
+        { text: "🏠 Cancel & Return to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(lastNameMessage, { reply_markup: keyboard });
+}
+
+// Handle last name input
+async function handleKYCLastNameInput(ctx, lastName) {
+  // Validate last name
+  if (!lastName || lastName.trim().length < 2) {
+    await ctx.reply('❌ Please enter a valid last name (at least 2 characters).');
+    return;
+  }
+
+  if (!/^[a-zA-Z\s'-]+$/.test(lastName.trim())) {
+    await ctx.reply('❌ Last name can only contain letters, spaces, hyphens, and apostrophes.');
+    return;
+  }
+
+  // Store last name
+  ctx.session.kyc.data.last_name = lastName.trim();
+
+  // Move to next step
+  await showKYCIdTypeStep(ctx);
+}
+
+// Show ID type step
+async function showKYCIdTypeStep(ctx) {
+  const idTypeMessage = `📝 **KYC STEP 3 OF 6: IDENTIFICATION TYPE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🆔 SELECT YOUR IDENTIFICATION TYPE**
+
+Please choose the type of government-issued identification you will provide:
+
+**📋 AVAILABLE OPTIONS:**
+
+**🇿🇦 SOUTH AFRICAN RESIDENTS:**
+• National ID Number (13-digit SA ID)
+
+**🌍 INTERNATIONAL RESIDENTS:**
+• Passport Number (from any country)
+
+**✅ NAME SAVED:** ${ctx.session.kyc.data.first_name} ${ctx.session.kyc.data.last_name}
+
+**💡 IMPORTANT:**
+Choose the document type that matches what you'll provide for verification.`;
+
+  ctx.session.kyc.step = 'awaiting_id_type';
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🇿🇦 South African ID Number", callback_data: "kyc_id_type_national" }
+      ],
+      [
+        { text: "🌍 International Passport", callback_data: "kyc_id_type_passport" }
+      ],
+      [
+        { text: "🔙 Back to Last Name", callback_data: "kyc_back_last_name" }
+      ],
+      [
+        { text: "🏠 Cancel & Return to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(idTypeMessage, { reply_markup: keyboard });
 }
 
 // Helper function to get network display information

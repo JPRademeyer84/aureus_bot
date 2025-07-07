@@ -10112,7 +10112,34 @@ async function handleKYCStep(ctx, callbackData) {
     } else if (callbackData === 'kyc_submit_data') {
       await handleKYCSubmitData(ctx);
 
+    } else if (callbackData === 'kyc_id_type_national') {
+      // User selected South African ID
+      ctx.session.kyc = ctx.session.kyc || {};
+      ctx.session.kyc.id_type = 'national_id';
+      ctx.session.kyc.step = 'awaiting_id_number';
+      await showKYCIdNumberStep(ctx, 'national');
+
+    } else if (callbackData === 'kyc_id_type_passport') {
+      // User selected International Passport
+      ctx.session.kyc = ctx.session.kyc || {};
+      ctx.session.kyc.id_type = 'passport';
+      ctx.session.kyc.step = 'awaiting_id_number';
+      await showKYCIdNumberStep(ctx, 'passport');
+
+    } else if (callbackData === 'kyc_back_last_name') {
+      // Go back to last name step
+      ctx.session.kyc = ctx.session.kyc || {};
+      ctx.session.kyc.step = 'awaiting_last_name';
+      await showKYCLastNameStep(ctx);
+
+    } else if (callbackData === 'kyc_back_id_type') {
+      // Go back to ID type selection step
+      ctx.session.kyc = ctx.session.kyc || {};
+      ctx.session.kyc.step = 'awaiting_id_type';
+      await showKYCIdTypeStep(ctx);
+
     } else {
+      console.log(`❌ [KYC] Unknown KYC step: ${callbackData}`);
       await ctx.answerCbQuery('Unknown KYC step');
     }
 
@@ -10416,6 +10443,49 @@ Choose the document type that matches what you'll provide for verification.`;
   };
 
   await ctx.replyWithMarkdown(idTypeMessage, { reply_markup: keyboard });
+}
+
+// Show ID number collection step
+async function showKYCIdNumberStep(ctx, idType) {
+  const isNational = idType === 'national';
+  const idTypeDisplay = isNational ? 'South African ID Number' : 'International Passport Number';
+  const requirements = isNational
+    ? '• 13-digit South African ID number\n• Format: YYMMDDGGGGGGG\n• No spaces or dashes'
+    : '• Valid passport number\n• As shown on your passport\n• Letters and numbers only';
+
+  const idNumberMessage = `📝 **KYC STEP 4 OF 6: ${idTypeDisplay.toUpperCase()}**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🆔 ENTER YOUR ${idTypeDisplay.toUpperCase()}**
+
+Please enter your ${idTypeDisplay.toLowerCase()} exactly as it appears on your identification document.
+
+**📋 REQUIREMENTS:**
+${requirements}
+
+**💡 EXAMPLE:**
+${isNational ? 'If your ID is 9001015009087, enter: **9001015009087**' : 'If your passport is AB1234567, enter: **AB1234567**'}
+
+**⚠️ IMPORTANT:**
+This information will be used for identity verification and must match your official documents.
+
+**✍️ Please type your ${idTypeDisplay.toLowerCase()} below:**`;
+
+  ctx.session.kyc.step = 'awaiting_id_number';
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🔙 Back to ID Type", callback_data: "kyc_back_id_type" }
+      ],
+      [
+        { text: "🏠 Cancel & Return to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(idNumberMessage, { reply_markup: keyboard });
 }
 
 // BANK TRANSFER SYSTEM FOR SOUTHERN AFRICAN REGION

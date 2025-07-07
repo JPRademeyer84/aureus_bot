@@ -2896,6 +2896,9 @@ async function handlePurchaseSharesStart(ctx) {
 
   const userId = telegramUser.user_id;
 
+  console.log(`🔍 [DEBUG] handlePurchaseSharesStart - userId: ${userId}, type: ${typeof userId}`);
+  console.log(`🔍 [DEBUG] handlePurchaseSharesStart - telegramUser:`, telegramUser);
+
   // Check for existing pending payments
   const { data: pendingPayments, error: pendingError } = await db.client
     .from('crypto_payment_transactions')
@@ -2905,8 +2908,11 @@ async function handlePurchaseSharesStart(ctx) {
     .order('created_at', { ascending: false });
 
   if (pendingError) {
-    console.error('Error checking pending payments:', pendingError);
+    console.error('🔍 [DEBUG] Error checking pending payments:', pendingError);
+    console.error('🔍 [DEBUG] Query details - userId:', userId, 'type:', typeof userId);
+    // Continue anyway, don't block the user
   } else if (pendingPayments && pendingPayments.length > 0) {
+    console.log(`🔍 [DEBUG] Found ${pendingPayments.length} pending payments for user ${userId}`);
     // User has pending payments - show management options
     const pendingPayment = pendingPayments[0];
     const paymentDate = new Date(pendingPayment.created_at);
@@ -11100,7 +11106,7 @@ async function handleBankTransferConfirmation(ctx, telegramUser, originalAmount,
         amount: totalCost,
         currency: 'ZAR',
         network: 'BANK_TRANSFER',
-        sender_wallet: '', // Will store proof file ID when user uploads proof
+        sender_wallet: 'PENDING_PROOF_UPLOAD', // Will store proof file ID when user uploads proof
         receiver_wallet: 'FNB-63154323041', // Bank account reference
         status: 'pending',
         created_at: new Date().toISOString(),

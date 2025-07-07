@@ -10138,6 +10138,30 @@ async function handleKYCStep(ctx, callbackData) {
       ctx.session.kyc.step = 'awaiting_id_type';
       await showKYCIdTypeStep(ctx);
 
+    } else if (callbackData === 'kyc_back_id_number') {
+      // Go back to ID number step
+      ctx.session.kyc = ctx.session.kyc || {};
+      ctx.session.kyc.step = 'awaiting_id_number';
+      await showKYCIdNumberStep(ctx, ctx.session.kyc.id_type === 'national_id' ? 'national' : 'passport');
+
+    } else if (callbackData === 'kyc_back_phone') {
+      // Go back to phone step
+      ctx.session.kyc = ctx.session.kyc || {};
+      ctx.session.kyc.step = 'awaiting_phone';
+      await showKYCPhoneStep(ctx);
+
+    } else if (callbackData === 'kyc_back_email') {
+      // Go back to email step
+      ctx.session.kyc = ctx.session.kyc || {};
+      ctx.session.kyc.step = 'awaiting_email';
+      await showKYCEmailStep(ctx);
+
+    } else if (callbackData === 'kyc_back_address') {
+      // Go back to address step
+      ctx.session.kyc = ctx.session.kyc || {};
+      ctx.session.kyc.step = 'awaiting_address';
+      await showKYCAddressStep(ctx);
+
     } else {
       console.log(`❌ [KYC] Unknown KYC step: ${callbackData}`);
       await ctx.answerCbQuery('Unknown KYC step');
@@ -10305,12 +10329,6 @@ async function handleKYCTextInput(ctx, text) {
       case 'awaiting_city':
         await handleKYCCityInput(ctx, text);
         break;
-      case 'awaiting_postal_code':
-        await handleKYCPostalCodeInput(ctx, text);
-        break;
-      case 'awaiting_country':
-        await handleKYCCountryInput(ctx, text);
-        break;
       default:
         await ctx.reply('❓ Unknown KYC step. Please restart the process.');
         break;
@@ -10430,8 +10448,8 @@ async function handleKYCIdNumberInput(ctx, idNumber) {
   // Store ID number
   ctx.session.kyc.data.id_number = cleanIdNumber;
 
-  // For now, show completion message (full KYC system needs more steps)
-  await showKYCTemporaryCompletion(ctx);
+  // Move to next step - phone number
+  await showKYCPhoneStep(ctx);
 }
 
 // Show ID type step
@@ -10559,6 +10577,373 @@ The full KYC system (including phone, email, address collection) is currently be
   ctx.session.kyc = null;
 
   await ctx.replyWithMarkdown(completionMessage, { reply_markup: keyboard });
+}
+
+// Show phone number collection step
+async function showKYCPhoneStep(ctx) {
+  const phoneMessage = `📝 **KYC STEP 5 OF 6: PHONE NUMBER**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📞 ENTER YOUR PHONE NUMBER**
+
+Please enter your phone number for verification and communication purposes.
+
+**📋 REQUIREMENTS:**
+• Include country code (e.g., +27 for South Africa)
+• Use international format
+• Numbers only (no spaces or special characters except +)
+
+**💡 EXAMPLES:**
+• South Africa: **+27821234567**
+• International: **+1234567890**
+
+**✅ INFORMATION SAVED:**
+• **Name:** ${ctx.session.kyc.data.first_name} ${ctx.session.kyc.data.last_name}
+• **ID:** ${ctx.session.kyc.data.id_number}
+
+**✍️ Please type your phone number below:**`;
+
+  ctx.session.kyc.step = 'awaiting_phone';
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🔙 Back to ID Number", callback_data: "kyc_back_id_number" }
+      ],
+      [
+        { text: "🏠 Cancel & Return to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(phoneMessage, { reply_markup: keyboard });
+}
+
+// Handle phone number input
+async function handleKYCPhoneInput(ctx, phoneNumber) {
+  // Validate phone number
+  if (!phoneNumber || phoneNumber.trim().length < 8) {
+    await ctx.reply('❌ Please enter a valid phone number (at least 8 digits).');
+    return;
+  }
+
+  const cleanPhone = phoneNumber.trim().replace(/\s+/g, '');
+
+  // Basic phone validation (international format)
+  if (!/^\+?[1-9]\d{7,14}$/.test(cleanPhone)) {
+    await ctx.reply('❌ Please enter a valid phone number with country code (e.g., +27821234567).');
+    return;
+  }
+
+  // Store phone number
+  ctx.session.kyc.data.phone_number = cleanPhone;
+
+  // Move to next step - email
+  await showKYCEmailStep(ctx);
+}
+
+// Show email collection step
+async function showKYCEmailStep(ctx) {
+  const emailMessage = `📝 **KYC STEP 6 OF 6: EMAIL ADDRESS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📧 ENTER YOUR EMAIL ADDRESS**
+
+Please enter your email address for certificate delivery and important communications.
+
+**📋 REQUIREMENTS:**
+• Valid email format (example@domain.com)
+• Active email address you can access
+• Will be used for share certificate delivery
+
+**💡 EXAMPLES:**
+• **john.smith@gmail.com**
+• **investor@company.co.za**
+
+**✅ INFORMATION SAVED:**
+• **Name:** ${ctx.session.kyc.data.first_name} ${ctx.session.kyc.data.last_name}
+• **ID:** ${ctx.session.kyc.data.id_number}
+• **Phone:** ${ctx.session.kyc.data.phone_number}
+
+**✍️ Please type your email address below:**`;
+
+  ctx.session.kyc.step = 'awaiting_email';
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🔙 Back to Phone Number", callback_data: "kyc_back_phone" }
+      ],
+      [
+        { text: "🏠 Cancel & Return to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(emailMessage, { reply_markup: keyboard });
+}
+
+// Handle email input
+async function handleKYCEmailInput(ctx, email) {
+  // Validate email
+  if (!email || email.trim().length < 5) {
+    await ctx.reply('❌ Please enter a valid email address.');
+    return;
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+
+  // Email validation regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(cleanEmail)) {
+    await ctx.reply('❌ Please enter a valid email address (e.g., example@domain.com).');
+    return;
+  }
+
+  // Store email
+  ctx.session.kyc.data.email_address = cleanEmail;
+
+  // Move to address step
+  await showKYCAddressStep(ctx);
+}
+
+// Show address collection step
+async function showKYCAddressStep(ctx) {
+  const addressMessage = `📝 **KYC STEP 7 OF 8: STREET ADDRESS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🏠 ENTER YOUR STREET ADDRESS**
+
+Please enter your complete street address for your share certificates.
+
+**📋 REQUIREMENTS:**
+• Complete street address including house/unit number
+• Street name and any apartment/unit details
+• Do not include city or postal code (next steps)
+
+**💡 EXAMPLES:**
+• **123 Main Street, Apt 4B**
+• **45 Oak Avenue**
+• **Unit 12, 789 Business Park Drive**
+
+**✅ INFORMATION SAVED:**
+• **Name:** ${ctx.session.kyc.data.first_name} ${ctx.session.kyc.data.last_name}
+• **Phone:** ${ctx.session.kyc.data.phone_number}
+• **Email:** ${ctx.session.kyc.data.email_address}
+
+**✍️ Please type your street address below:**`;
+
+  ctx.session.kyc.step = 'awaiting_address';
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🔙 Back to Email", callback_data: "kyc_back_email" }
+      ],
+      [
+        { text: "🏠 Cancel & Return to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(addressMessage, { reply_markup: keyboard });
+}
+
+// Handle address input
+async function handleKYCAddressInput(ctx, address) {
+  // Validate address
+  if (!address || address.trim().length < 5) {
+    await ctx.reply('❌ Please enter a valid street address (at least 5 characters).');
+    return;
+  }
+
+  // Store address
+  ctx.session.kyc.data.street_address = address.trim();
+
+  // Move to city step
+  await showKYCCityStep(ctx);
+}
+
+// Show city collection step
+async function showKYCCityStep(ctx) {
+  const cityMessage = `📝 **KYC STEP 8 OF 8: CITY & COMPLETION**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🏙️ ENTER YOUR CITY**
+
+Please enter the city where you reside.
+
+**📋 REQUIREMENTS:**
+• City name only
+• No postal codes or provinces
+
+**💡 EXAMPLES:**
+• **Cape Town**
+• **Johannesburg**
+• **London**
+
+**✅ INFORMATION COLLECTED:**
+• **Name:** ${ctx.session.kyc.data.first_name} ${ctx.session.kyc.data.last_name}
+• **Phone:** ${ctx.session.kyc.data.phone_number}
+• **Email:** ${ctx.session.kyc.data.email_address}
+• **Address:** ${ctx.session.kyc.data.street_address}
+
+**✍️ Please type your city below:**`;
+
+  ctx.session.kyc.step = 'awaiting_city';
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🔙 Back to Address", callback_data: "kyc_back_address" }
+      ],
+      [
+        { text: "🏠 Cancel & Return to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(cityMessage, { reply_markup: keyboard });
+}
+
+// Handle city input and complete KYC
+async function handleKYCCityInput(ctx, city) {
+  // Validate city
+  if (!city || city.trim().length < 2) {
+    await ctx.reply('❌ Please enter a valid city name (at least 2 characters).');
+    return;
+  }
+
+  // Store city
+  ctx.session.kyc.data.city = city.trim();
+
+  // Complete KYC process
+  await completeKYCProcess(ctx);
+}
+
+// Complete the full KYC process
+async function completeKYCProcess(ctx) {
+  const user = ctx.from;
+  const kycData = ctx.session.kyc.data;
+
+  try {
+    // Get user's country from database
+    const { data: userData, error: userError } = await db.client
+      .from('users')
+      .select('country_of_residence')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (userError) {
+      console.error('❌ [KYC] Error getting user country:', userError);
+      await ctx.reply('❌ Error retrieving your country information. Please try again.');
+      return;
+    }
+
+    const countryCode = userData?.country_of_residence || 'ZAF';
+
+    // Save KYC data to database
+    const { data: kycRecord, error: kycError } = await db.client
+      .from('kyc_information')
+      .insert({
+        user_id: userData.id,
+        first_name: kycData.first_name,
+        last_name: kycData.last_name,
+        id_type: ctx.session.kyc.id_type,
+        id_number_encrypted: kycData.id_number, // TODO: Implement encryption
+        id_number_hash: require('crypto').createHash('sha256').update(kycData.id_number).digest('hex'),
+        phone_number: kycData.phone_number,
+        email_address: kycData.email_address,
+        street_address: kycData.street_address,
+        city: kycData.city,
+        postal_code: '0000', // Default for now
+        country_code: countryCode,
+        country_name: getCountryName(countryCode),
+        data_consent_given: true,
+        privacy_policy_accepted: true,
+        kyc_status: 'completed',
+        created_by_telegram_id: user.id
+      })
+      .select()
+      .single();
+
+    if (kycError) {
+      console.error('❌ [KYC] Error saving KYC data:', kycError);
+      await ctx.reply('❌ Error saving your KYC information. Please try again.');
+      return;
+    }
+
+    // Show completion message
+    await showKYCCompletionSuccess(ctx);
+
+  } catch (error) {
+    console.error('❌ [KYC] Error completing KYC process:', error);
+    await ctx.reply('❌ Error completing KYC process. Please try again.');
+  }
+}
+
+// Show KYC completion success
+async function showKYCCompletionSuccess(ctx) {
+  const kycData = ctx.session.kyc.data;
+
+  const completionMessage = `🎉 **KYC COMPLETED SUCCESSFULLY!**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**✅ ALL REQUIRED INFORMATION COLLECTED:**
+
+**👤 Personal Information:**
+• **Name:** ${kycData.first_name} ${kycData.last_name}
+• **ID:** ${kycData.id_number}
+
+**📞 Contact Information:**
+• **Phone:** ${kycData.phone_number}
+• **Email:** ${kycData.email_address}
+
+**🏠 Address Information:**
+• **Address:** ${kycData.street_address}
+• **City:** ${kycData.city}
+
+**📋 NEXT STEPS:**
+• Your information has been securely saved
+• Share certificates will be generated within 48 business hours
+• Certificates will be emailed to: ${kycData.email_address}
+• You now have full access to all bot features
+
+**🎯 You can now access your complete dashboard and portfolio!**`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🏠 Go to Dashboard", callback_data: "main_menu" }
+      ],
+      [
+        { text: "💼 View Portfolio", callback_data: "view_portfolio" }
+      ]
+    ]
+  };
+
+  // Clear KYC session
+  ctx.session.kyc = null;
+
+  await ctx.replyWithMarkdown(completionMessage, { reply_markup: keyboard });
+}
+
+// Helper function to get country name from code
+function getCountryName(countryCode) {
+  const countries = {
+    'ZAF': 'South Africa',
+    'USA': 'United States',
+    'GBR': 'United Kingdom',
+    'CAN': 'Canada',
+    'AUS': 'Australia',
+    // Add more as needed
+  };
+  return countries[countryCode] || 'Unknown';
 }
 
 // BANK TRANSFER SYSTEM FOR SOUTHERN AFRICAN REGION

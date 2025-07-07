@@ -1657,7 +1657,7 @@ Regular community meetings and transparent communication about our operations.
       inline_keyboard: [
         [{ text: "📅 Community Meetings", callback_data: "community_meetings" }],
         [{ text: "🏗️ Development Plans", callback_data: "community_development" }],
-        [{ text: "📞 Contact Community Liaison", url: "mailto:support@aureus.africa" }],
+        [{ text: "📞 Contact Community Liaison", callback_data: "community_contact" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
     }
@@ -1854,6 +1854,23 @@ bot.on('callback_query', async (ctx) => {
 
       case 'community_development':
         await showDevelopmentPlans(ctx);
+        break;
+
+      case 'community_contact':
+        await showCommunityContact(ctx);
+        break;
+
+      case 'copy_community_email':
+        await ctx.answerCbQuery('📧 Email: support@aureus.africa', { show_alert: true });
+        break;
+
+      // Support Center Handlers
+      case 'support_email':
+        await ctx.answerCbQuery('📧 Support Email: support@aureus.africa', { show_alert: true });
+        break;
+
+      case 'support_faq':
+        await showSupportFAQ(ctx);
         break;
 
       // RESTORED PAYMENT SYSTEM HANDLERS
@@ -2119,9 +2136,69 @@ async function handleSupportCenter(ctx) {
   await ctx.replyWithMarkdown(supportMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📧 Email Support", url: "mailto:support@aureus.africa" }],
+        [{ text: "📧 Get Email Address", callback_data: "support_email" }],
         [{ text: "🌐 Visit Website", url: "https://aureus.africa" }],
+        [{ text: "❓ FAQ & Common Issues", callback_data: "support_faq" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+async function showSupportFAQ(ctx) {
+  const faqMessage = `❓ **FREQUENTLY ASKED QUESTIONS**
+🆘 **AUREUS SUPPORT CENTER**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 PAYMENT & INVESTMENT QUESTIONS:**
+
+**Q: How do I purchase shares?**
+A: Use the "💰 Purchase Shares" button from the main menu. Choose your payment method (crypto or bank transfer) and follow the guided process.
+
+**Q: What payment methods are accepted?**
+A: We accept USDT (on BSC, POL, TRON, ETH networks) and bank transfers (ZAR for SA/Eswatini/Namibia residents only).
+
+**Q: How long does payment approval take?**
+A: Crypto payments: 1-24 hours | Bank transfers: 1-3 business days
+
+**Q: Can I buy more shares if I have pending payments?**
+A: Yes! You can make additional purchases while previous payments are being processed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔐 ACCOUNT & SECURITY:**
+
+**Q: I forgot my account details**
+A: Contact support@aureus.africa with your registered information for assistance.
+
+**Q: How do I complete KYC verification?**
+A: KYC starts automatically after your first successful payment. Follow the step-by-step process to provide required documents.
+
+**Q: Is my personal information secure?**
+A: Yes, we follow GDPR/POPIA compliance standards for data protection.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📊 PORTFOLIO & RETURNS:**
+
+**Q: How do I track my investment?**
+A: Use "📊 My Portfolio" from the main menu to view your shares, value, and performance.
+
+**Q: When will I receive returns?**
+A: Returns are distributed based on mining operations performance. Check your portfolio for updates.
+
+**Q: Can I withdraw my investment?**
+A: Investment terms and withdrawal conditions are detailed in the legal documents section.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(faqMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📧 Contact Support", callback_data: "support_email" }],
+        [{ text: "🔙 Back to Support Center", callback_data: "menu_help" }],
+        [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
       ]
     }
   });
@@ -2612,6 +2689,50 @@ async function showDevelopmentPlans(ctx) {
   await ctx.replyWithMarkdown(developmentMessage, {
     reply_markup: {
       inline_keyboard: [
+        [{ text: "🔙 Back to Community Relations", callback_data: "menu_community" }],
+        [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+async function showCommunityContact(ctx) {
+  const contactMessage = `📞 **COMMUNITY LIAISON CONTACT**
+⛏️ **AUREUS ALLIANCE HOLDINGS**
+*Direct Communication Channel*
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📧 **EMAIL CONTACT:**
+support@aureus.africa
+
+📱 **COMMUNICATION CHANNELS:**
+• Email: Primary contact method
+• Community Meetings: Monthly in-person sessions
+• Stakeholder Reports: Quarterly updates
+• Emergency Contact: 24/7 availability for urgent matters
+
+🤝 **WHAT WE CAN HELP WITH:**
+• Employment Opportunities & Applications
+• Community Development Questions
+• Environmental Concerns & Feedback
+• Infrastructure Project Updates
+• General Mining Operation Inquiries
+
+⏰ **RESPONSE TIME:**
+• Email: Within 24-48 hours
+• Urgent Matters: Same day response
+• Community Meetings: Immediate discussion
+
+📋 **WHEN CONTACTING US:**
+Please include your name, community/area, and specific inquiry details for faster assistance.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+  await ctx.replyWithMarkdown(contactMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📧 Copy Email Address", callback_data: "copy_community_email" }],
         [{ text: "🔙 Back to Community Relations", callback_data: "menu_community" }],
         [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
       ]
@@ -10399,12 +10520,49 @@ async function handleKYCTextInput(ctx, text) {
         await handleKYCCityInput(ctx, text);
         break;
       default:
-        await ctx.reply('❓ Unknown KYC step. Please restart the process.');
+        await ctx.reply(`❌ **Unexpected KYC Step Error**
+
+🔍 **What happened:** The system encountered an unknown step in your KYC process.
+
+✅ **What to do:** Please click "🏠 Cancel & Return to Dashboard" below and restart your KYC process from the main menu.
+
+📧 **Need help?** Contact support@aureus.africa`);
+        await ctx.reply('🏠 Return to Dashboard', {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "🏠 Return to Dashboard", callback_data: "main_menu" }
+            ]]
+          }
+        });
         break;
     }
   } catch (error) {
     console.error('Error handling KYC text input:', error);
-    await ctx.reply('❌ Error processing your input. Please try again.');
+
+    // Provide specific error message based on the step
+    const stepName = kycSession?.step || 'unknown';
+    let errorMessage = `❌ **KYC Processing Error**
+
+🔍 **What happened:** There was a technical error while processing your ${stepName.replace('awaiting_', '').replace('_', ' ')} information.
+
+✅ **What to do:**
+1. Please try entering your information again
+2. Make sure your input follows the format requirements
+3. If the error continues, click "🏠 Cancel & Return to Dashboard" and restart the process
+
+📧 **Need help?** Contact support@aureus.africa`;
+
+    await ctx.reply(errorMessage);
+
+    // Provide navigation options
+    await ctx.reply('Choose an option:', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🔄 Try Again", callback_data: `kyc_back_${stepName.replace('awaiting_', '')}` }],
+          [{ text: "🏠 Cancel & Return to Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
   }
 }
 
@@ -10487,13 +10645,155 @@ async function handleKYCLastNameInput(ctx, lastName) {
   await showKYCIdTypeStep(ctx);
 }
 
+// Handle ID type input (when user types instead of clicking buttons)
+async function handleKYCIdTypeInput(ctx, text) {
+  const input = text.trim();
+  const inputLower = input.toLowerCase();
+
+  // Check if user is trying to enter a South African ID number directly
+  if (/^\d{13}$/.test(input)) {
+    await ctx.reply(`❌ **Hold on! You entered an ID number too early**
+
+🔍 **What you entered:** ${input} (looks like a 13-digit South African ID number)
+
+✅ **What to do next:**
+1. First click the "🇿🇦 **South African ID Number**" button below
+2. Then you'll be asked to enter your ID number
+3. After that, enter: ${input}
+
+💡 **Why this step?** We need to know your document type first so we can validate your number correctly.`);
+    await showKYCIdTypeStep(ctx);
+    return;
+  }
+
+  // Check if user is trying to enter a passport number directly
+  if (/^[a-zA-Z0-9]{6,15}$/.test(input) && /[a-zA-Z]/.test(input)) {
+    await ctx.reply(`❌ **Hold on! You entered a passport number too early**
+
+🔍 **What you entered:** ${input} (looks like a passport number)
+
+✅ **What to do next:**
+1. First click the "🌍 **International Passport**" button below
+2. Then you'll be asked to enter your passport number
+3. After that, enter: ${input}
+
+💡 **Why this step?** We need to know your document type first so we can validate your number correctly.`);
+    await showKYCIdTypeStep(ctx);
+    return;
+  }
+
+  // Check if user is trying to enter other numeric codes
+  if (/^\d{6,20}$/.test(input)) {
+    await ctx.reply(`❌ **You entered a number, but we need document type selection first**
+
+🔍 **What you entered:** ${input}
+
+✅ **What to do next:**
+1. Click either "🇿🇦 **South African ID Number**" or "🌍 **International Passport**" button below
+2. Then enter your number when prompted
+
+💡 **Which should you choose?**
+• **South African ID:** If you have a 13-digit SA ID number
+• **International Passport:** If you have a passport from any country`);
+    await showKYCIdTypeStep(ctx);
+    return;
+  }
+
+  // Check for hash codes or special formats (if applicable)
+  if (/^[a-fA-F0-9]{32,64}$/.test(input)) {
+    await ctx.reply(`❌ **Invalid input format detected**
+
+🔍 **What you entered:** Looks like a hash code or encrypted string
+
+✅ **What to do:**
+Please use the buttons below to select your document type. Do not enter hash codes or encrypted strings.
+
+💡 **Expected input:** Click either "🇿🇦 South African ID Number" or "🌍 International Passport" button.`);
+    await showKYCIdTypeStep(ctx);
+    return;
+  }
+
+  // Handle text-based selection attempts
+  if (inputLower.includes('south') || inputLower.includes('sa') || inputLower.includes('national') || inputLower.includes('id')) {
+    // User typed something like "south african" - help them
+    await ctx.reply(`✅ **Great! You want to use a South African ID**
+
+🔍 **What you typed:** "${input}"
+
+✅ **I'll select that for you:** Proceeding with South African ID Number option.
+
+⏭️ **Next step:** You'll now be asked to enter your 13-digit ID number.`);
+
+    ctx.session.kyc.id_type = 'national_id';
+    ctx.session.kyc.step = 'awaiting_id_number';
+    await showKYCIdNumberStep(ctx, 'national');
+    return;
+  }
+
+  if (inputLower.includes('passport') || inputLower.includes('international')) {
+    // User typed something like "passport" - help them
+    await ctx.reply(`✅ **Great! You want to use an International Passport**
+
+🔍 **What you typed:** "${input}"
+
+✅ **I'll select that for you:** Proceeding with International Passport option.
+
+⏭️ **Next step:** You'll now be asked to enter your passport number.`);
+
+    ctx.session.kyc.id_type = 'passport';
+    ctx.session.kyc.step = 'awaiting_id_number';
+    await showKYCIdNumberStep(ctx, 'passport');
+    return;
+  }
+
+  // Unrecognized text input
+  await ctx.reply(`❌ **I don't understand what you typed**
+
+🔍 **What you entered:** "${input}"
+
+✅ **What to do instead:**
+Please use the **buttons below** instead of typing. Click either:
+
+🇿🇦 **"South African ID Number"** - if you have a 13-digit SA ID
+🌍 **"International Passport"** - if you have a passport from any country
+
+💡 **Why buttons?** Using buttons ensures we capture your choice correctly and prevents errors.`);
+
+  await showKYCIdTypeStep(ctx);
+}
+
 // Handle ID number input
 async function handleKYCIdNumberInput(ctx, idNumber) {
   const idType = ctx.session.kyc.id_type;
 
-  // Validate ID number
+  // Check if input is empty or too short
   if (!idNumber || idNumber.trim().length < 5) {
-    await ctx.reply('❌ Please enter a valid ID/passport number (at least 5 characters).');
+    if (idType === 'national_id') {
+      await ctx.reply(`❌ **South African ID Number Required**
+
+🔍 **What's wrong:** You need to enter your 13-digit South African ID number.
+
+✅ **What to do:**
+Enter your complete ID number exactly as it appears on your ID document.
+
+💡 **Example format:** 9403105191081 (13 digits, no spaces)
+
+📝 **Where to find it:** Look at the front of your green South African ID book or smart ID card.`);
+    } else {
+      await ctx.reply(`❌ **Passport Number Required**
+
+🔍 **What's wrong:** You need to enter your passport number.
+
+✅ **What to do:**
+Enter your passport number exactly as it appears in your passport.
+
+💡 **Example formats:**
+• A1234567 (letter + numbers)
+• AB1234567 (letters + numbers)
+• 123456789 (numbers only)
+
+📝 **Where to find it:** Look at the personal information page of your passport.`);
+    }
     return;
   }
 
@@ -10503,13 +10803,60 @@ async function handleKYCIdNumberInput(ctx, idNumber) {
   if (idType === 'national_id') {
     // South African ID validation
     if (!/^\d{13}$/.test(cleanIdNumber)) {
-      await ctx.reply('❌ South African ID number must be exactly 13 digits. Please try again.');
+      let errorMsg = `❌ **Invalid South African ID Number Format**
+
+🔍 **What you entered:** ${idNumber}
+🔍 **What's wrong:** `;
+
+      if (cleanIdNumber.length < 13) {
+        errorMsg += `Too short (${cleanIdNumber.length} digits). SA ID numbers must be exactly 13 digits.`;
+      } else if (cleanIdNumber.length > 13) {
+        errorMsg += `Too long (${cleanIdNumber.length} digits). SA ID numbers must be exactly 13 digits.`;
+      } else if (!/^\d+$/.test(cleanIdNumber)) {
+        errorMsg += `Contains non-numeric characters. SA ID numbers can only contain digits 0-9.`;
+      }
+
+      errorMsg += `
+
+✅ **What to do:**
+Enter your 13-digit ID number exactly as shown on your ID document.
+
+💡 **Correct format:** 9403105191081 (13 digits, no spaces or letters)
+
+📝 **Double-check:** Look at your green ID book or smart ID card for the correct number.`;
+
+      await ctx.reply(errorMsg);
       return;
     }
   } else if (idType === 'passport') {
     // Passport validation
     if (!/^[A-Z0-9]{6,15}$/i.test(cleanIdNumber)) {
-      await ctx.reply('❌ Passport number must be 6-15 characters (letters and numbers only). Please try again.');
+      let errorMsg = `❌ **Invalid Passport Number Format**
+
+🔍 **What you entered:** ${idNumber}
+🔍 **What's wrong:** `;
+
+      if (cleanIdNumber.length < 6) {
+        errorMsg += `Too short (${cleanIdNumber.length} characters). Passport numbers must be 6-15 characters.`;
+      } else if (cleanIdNumber.length > 15) {
+        errorMsg += `Too long (${cleanIdNumber.length} characters). Passport numbers must be 6-15 characters.`;
+      } else if (!/^[A-Z0-9]+$/i.test(cleanIdNumber)) {
+        errorMsg += `Contains invalid characters. Passport numbers can only contain letters (A-Z) and numbers (0-9).`;
+      }
+
+      errorMsg += `
+
+✅ **What to do:**
+Enter your passport number exactly as shown in your passport.
+
+💡 **Accepted formats:**
+• Letters and numbers: A1234567, AB123456
+• Numbers only: 123456789
+• Length: 6-15 characters
+
+📝 **Where to find it:** Look at the personal information page of your passport document.`;
+
+      await ctx.reply(errorMsg);
       return;
     }
   }
@@ -10691,17 +11038,65 @@ Please enter your phone number for verification and communication purposes.
 
 // Handle phone number input
 async function handleKYCPhoneInput(ctx, phoneNumber) {
-  // Validate phone number
+  // Check if input is empty or too short
   if (!phoneNumber || phoneNumber.trim().length < 8) {
-    await ctx.reply('❌ Please enter a valid phone number (at least 8 digits).');
+    await ctx.reply(`❌ **Phone Number Required**
+
+🔍 **What's wrong:** You need to enter a valid phone number.
+
+✅ **What to do:**
+Enter your phone number with the country code.
+
+💡 **Correct formats:**
+• **South Africa:** +27821234567 or 27821234567
+• **International:** +1234567890 (your country code + number)
+• **Alternative:** 0821234567 (if South African)
+
+📱 **Examples:**
+• +27 82 123 4567
+• +1 555 123 4567
+• +44 20 7123 4567`);
     return;
   }
 
-  const cleanPhone = phoneNumber.trim().replace(/\s+/g, '');
+  const cleanPhone = phoneNumber.trim().replace(/[\s\-\(\)]/g, '');
 
   // Basic phone validation (international format)
   if (!/^\+?[1-9]\d{7,14}$/.test(cleanPhone)) {
-    await ctx.reply('❌ Please enter a valid phone number with country code (e.g., +27821234567).');
+    let errorMsg = `❌ **Invalid Phone Number Format**
+
+🔍 **What you entered:** ${phoneNumber}
+🔍 **What's wrong:** `;
+
+    if (!/^\+?[0-9\s\-\(\)]+$/.test(phoneNumber)) {
+      errorMsg += `Contains invalid characters. Only numbers, +, spaces, hyphens, and parentheses are allowed.`;
+    } else if (cleanPhone.length < 8) {
+      errorMsg += `Too short (${cleanPhone.length} digits). Phone numbers need at least 8 digits.`;
+    } else if (cleanPhone.length > 15) {
+      errorMsg += `Too long (${cleanPhone.length} digits). Phone numbers cannot exceed 15 digits.`;
+    } else if (cleanPhone.startsWith('0') && !cleanPhone.startsWith('+')) {
+      errorMsg += `Starts with 0 without country code. Please add your country code.`;
+    } else {
+      errorMsg += `Invalid format detected.`;
+    }
+
+    errorMsg += `
+
+✅ **What to do:**
+Enter your phone number with country code.
+
+💡 **Correct formats:**
+• **South Africa:** +27821234567 (replace 0 with +27)
+• **International:** +[country code][number]
+• **With spaces:** +27 82 123 4567
+
+📱 **Common country codes:**
+• South Africa: +27
+• USA/Canada: +1
+• UK: +44
+• Australia: +61`;
+
+    await ctx.reply(errorMsg);
     return;
   }
 
@@ -10756,9 +11151,23 @@ Please enter your email address for certificate delivery and important communica
 
 // Handle email input
 async function handleKYCEmailInput(ctx, email) {
-  // Validate email
+  // Check if input is empty or too short
   if (!email || email.trim().length < 5) {
-    await ctx.reply('❌ Please enter a valid email address.');
+    await ctx.reply(`❌ **Email Address Required**
+
+🔍 **What's wrong:** You need to enter a valid email address.
+
+✅ **What to do:**
+Enter the email address you use regularly and can access.
+
+💡 **Correct format:** username@domain.com
+
+📧 **Examples:**
+• john.doe@gmail.com
+• mary@company.co.za
+• user123@outlook.com
+
+⚠️ **Important:** You'll receive important updates about your investment at this email address.`);
     return;
   }
 
@@ -10767,7 +11176,47 @@ async function handleKYCEmailInput(ctx, email) {
   // Email validation regex
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(cleanEmail)) {
-    await ctx.reply('❌ Please enter a valid email address (e.g., example@domain.com).');
+    let errorMsg = `❌ **Invalid Email Address Format**
+
+🔍 **What you entered:** ${email}
+🔍 **What's wrong:** `;
+
+    if (!email.includes('@')) {
+      errorMsg += `Missing @ symbol. Email addresses must contain an @ symbol.`;
+    } else if (email.split('@').length > 2) {
+      errorMsg += `Multiple @ symbols found. Email addresses can only have one @ symbol.`;
+    } else if (!email.includes('.')) {
+      errorMsg += `Missing domain extension (like .com, .co.za, .org).`;
+    } else if (email.startsWith('@') || email.endsWith('@')) {
+      errorMsg += `@ symbol cannot be at the beginning or end.`;
+    } else if (email.includes('..')) {
+      errorMsg += `Contains consecutive dots (..) which are not allowed.`;
+    } else if (/\s/.test(email)) {
+      errorMsg += `Contains spaces. Email addresses cannot contain spaces.`;
+    } else {
+      errorMsg += `Invalid email format detected.`;
+    }
+
+    errorMsg += `
+
+✅ **What to do:**
+Enter a valid email address in the correct format.
+
+💡 **Correct format:** username@domain.extension
+
+📧 **Valid examples:**
+• john.doe@gmail.com
+• mary_smith@company.co.za
+• user123@outlook.com
+• info@business.org
+
+🔍 **Check for:**
+• One @ symbol
+• Domain name after @
+• Extension like .com, .co.za, .org
+• No spaces`;
+
+    await ctx.reply(errorMsg);
     return;
   }
 

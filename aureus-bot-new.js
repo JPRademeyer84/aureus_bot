@@ -1544,9 +1544,6 @@ ${phaseInfo}
 💎 **SHARE PURCHASE OPPORTUNITIES:**
 Choose your preferred method to buy shares in Aureus Alliance Holdings below.`;
 
-  // Check KYC status for menu display
-  const hasKYC = await checkKYCCompletion(authenticatedUser.id);
-
   await ctx.replyWithMarkdown(menuMessage, {
     reply_markup: createMainMenuKeyboard(isAdmin, hasKYC)
   });

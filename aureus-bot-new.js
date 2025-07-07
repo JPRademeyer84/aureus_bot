@@ -911,20 +911,29 @@ function createTermsKeyboard() {
   };
 }
 
-function createPaymentMethodKeyboard() {
-  return {
-    inline_keyboard: [
-      [
-        { text: "₿ Bitcoin (BTC)", callback_data: "payment_btc" },
-        { text: "🔷 Ethereum (ETH)", callback_data: "payment_eth" }
-      ],
-      [
-        { text: "💎 Tether (USDT)", callback_data: "payment_usdt" }
-      ],
-      [
-        { text: "🔙 Back to Dashboard", callback_data: "main_menu" }
-      ]
+async function createPaymentMethodKeyboard(userId = null) {
+  const keyboard = [
+    [
+      { text: "💎 Tether (USDT)", callback_data: "payment_usdt" }
     ]
+  ];
+
+  // Check if user is eligible for bank transfer (ZAF, SWZ, NAM)
+  if (userId) {
+    const isBankTransferEligible = await checkBankTransferEligibility(userId);
+    if (isBankTransferEligible) {
+      keyboard.splice(2, 0, [
+        { text: "🏦 Bank Transfer (ZAR)", callback_data: "payment_bank_transfer" }
+      ]);
+    }
+  }
+
+  keyboard.push([
+    { text: "🔙 Back to Dashboard", callback_data: "main_menu" }
+  ]);
+
+  return {
+    inline_keyboard: keyboard
   };
 }
 
@@ -1834,7 +1843,7 @@ bot.on('callback_query', async (ctx) => {
 
       // RESTORED PAYMENT SYSTEM HANDLERS
       case 'menu_purchase_shares':
-        await handleCustomAmountPurchase(ctx);
+        await handlePurchaseSharesStart(ctx);
         break;
 
       case 'admin_validate_shares_sold':
@@ -1936,6 +1945,10 @@ bot.on('callback_query', async (ctx) => {
           await handleRejectPaymentPrompt(ctx, callbackData);
         } else if (callbackData.startsWith('view_screenshot_')) {
           await handleViewScreenshot(ctx, callbackData);
+        } else if (callbackData.startsWith('view_bank_proof_')) {
+          await handleViewBankProof(ctx, callbackData);
+        } else if (callbackData === 'cancel_proof_upload') {
+          await handleCancelProofUpload(ctx);
         } else if (callbackData === 'view_portfolio') {
           await handlePortfolio(ctx);
         } else if (callbackData === 'share_referral') {
@@ -2012,10 +2025,8 @@ bot.on('callback_query', async (ctx) => {
           await showPrivacyPolicy(ctx);
         } else if (callbackData === 'payment_usdt') {
           await handleUSDTPaymentNetworkSelection(ctx);
-        } else if (callbackData === 'payment_btc') {
-          await ctx.answerCbQuery("🚧 Bitcoin payments coming soon!");
-        } else if (callbackData === 'payment_eth') {
-          await ctx.answerCbQuery("🚧 ETH payments coming soon!");
+        } else if (callbackData === 'payment_bank_transfer') {
+          await handleBankTransferPayment(ctx);
         } else if (callbackData.startsWith('usdt_network_')) {
           await handleUSDTNetworkSelection(ctx, callbackData);
         } else if (callbackData === 'accept_nda') {
@@ -2046,6 +2057,8 @@ bot.on('callback_query', async (ctx) => {
           await showAmericasCountries(ctx);
         } else if (callbackData === 'show_oceania_countries') {
           await showOceaniaCountries(ctx);
+        } else if (callbackData.startsWith('upload_proof_')) {
+          await handleUploadProofRequest(ctx, callbackData);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");
         }
@@ -2752,15 +2765,70 @@ async function handleCustomAmountPurchaseWithNetwork(ctx, selectedNetwork = null
     return await handleCustomAmountPurchase(ctx);
   }
 
-  // Store selected network in session for later use
+  // Store selected network and payment method in session for later use
   ctx.session.selectedNetwork = selectedNetwork;
+  ctx.session.selectedPaymentMethod = 'usdt';
 
-  // Continue with amount input
-  await handleCustomAmountPurchase(ctx);
+  // Show amount input for USDT payment
+  await showUSDTAmountInput(ctx, selectedNetwork);
 }
 
-// Custom Amount Purchase System
+// Show amount input for USDT payment
+async function showUSDTAmountInput(ctx, selectedNetwork) {
+  const networkInfo = {
+    'ETH': { name: 'Ethereum', icon: '🔷', technical: 'ERC-20' },
+    'BSC': { name: 'Binance Smart Chain', icon: '🟡', technical: 'BEP-20' },
+    'POL': { name: 'Polygon', icon: '🟣', technical: 'Polygon' },
+    'TRON': { name: 'TRON', icon: '🔴', technical: 'TRC-20' }
+  };
+
+  const network = networkInfo[selectedNetwork];
+
+  const customAmountMessage = `💎 **USDT PAYMENT**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 ENTER INVESTMENT AMOUNT**
+
+Enter your desired investment amount between $5 and $50,000:
+
+**📋 PAYMENT DETAILS:**
+• Minimum: $5 USD
+• Maximum: $50,000 USD
+• Currency: USDT (Tether)
+• Network: ${network.icon} ${network.name} (${network.technical})
+• No additional fees
+
+**💡 CALCULATION:**
+$100 USD = 100 USDT (1:1 ratio)
+
+**⚠️ IMPORTANT:**
+Make sure to send USDT on the ${network.name} network only. Wrong network = lost funds.
+
+**Type your investment amount in USD (numbers only):**`;
+
+  await ctx.replyWithMarkdown(customAmountMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔙 Back to Networks", callback_data: "payment_usdt" }],
+        [{ text: "🔙 Back to Payment Methods", callback_data: "menu_purchase_shares" }],
+        [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+
+  // Set user state to expect amount input
+  await setUserState(ctx.from.id, 'awaiting_custom_amount');
+}
+
+// This function has been replaced by handlePurchaseSharesStart
+// Keeping this stub for any remaining references
 async function handleCustomAmountPurchase(ctx) {
+  await handlePurchaseSharesStart(ctx);
+}
+
+// Handle purchase shares start - main entry point
+async function handlePurchaseSharesStart(ctx) {
   const user = ctx.from;
 
   // Check maintenance mode first (admin bypass)
@@ -2797,7 +2865,7 @@ async function handleCustomAmountPurchase(ctx) {
     return;
   }
 
-  // Check for existing pending payments before showing purchase options
+  // Get user from database
   const { data: telegramUser, error: telegramError } = await db.client
     .from('telegram_users')
     .select('user_id')
@@ -2872,36 +2940,39 @@ You must handle this pending payment before making a new purchase.`;
     return;
   }
 
-  // No pending payments - proceed with normal purchase flow
-  const customAmountMessage = `🛒 **PURCHASE SHARES**
+  // No pending payments - proceed with payment method selection
+  await showPaymentMethodSelection(ctx, userId);
+}
+
+// Show payment method selection
+async function showPaymentMethodSelection(ctx, userId) {
+  const paymentMethodMessage = `🛒 **SELECT PAYMENT METHOD**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**💰 CUSTOM AMOUNT PURCHASE**
+**💳 CHOOSE YOUR PREFERRED PAYMENT METHOD:**
 
-Enter your desired investment amount between $5 and $50,000:
+Select how you would like to pay for your shares:
 
-**📋 INVESTMENT DETAILS:**
-• Minimum: $5 USD
-• Maximum: $50,000 USD
-• Share allocation based on current phase pricing
-• Instant share certificate upon payment approval
+**💎 CRYPTOCURRENCY:**
+• Tether (USDT) - Available on multiple networks
+• Supports ETH, BSC, Polygon, and TRON networks
+• Fast processing and low fees
 
-**💡 EXAMPLE:**
-$1,000 investment = Shares based on current price
+**🏦 BANK TRANSFER:**
+• Available for South Africa, Eswatini & Namibia
+• Pay in South African Rand (ZAR)
+• 10% transaction fee applies
+• Secure FNB bank account
 
-**Type your investment amount (numbers only):**`;
+**💡 RECOMMENDATION:**
+USDT offers the fastest processing and lowest fees for most users.`;
 
-  await ctx.replyWithMarkdown(customAmountMessage, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
-      ]
-    }
+  const keyboard = await createPaymentMethodKeyboard(userId);
+
+  await ctx.replyWithMarkdown(paymentMethodMessage, {
+    reply_markup: keyboard
   });
-
-  // Set user state to expect amount input
-  await setUserState(user.id, 'awaiting_custom_amount');
 }
 
 // Text input handler for custom amounts
@@ -4278,6 +4349,8 @@ bot.on('photo', async (ctx) => {
 
     if (userState && userState.state === 'upload_proof_screenshot') {
       await handleProofScreenshot(ctx, userState.data);
+    } else if (userState && userState.state === 'uploading_payment_proof') {
+      await handleBankTransferProofUpload(ctx);
     }
   } catch (error) {
     console.error('Error in photo handler:', error);
@@ -4298,6 +4371,13 @@ bot.on('document', async (ctx) => {
       } else {
         await ctx.reply('📷 Please upload an image file for payment verification.');
       }
+    } else if (userState && userState.state === 'uploading_payment_proof') {
+      const document = ctx.message.document;
+      if (document.mime_type && (document.mime_type.startsWith('image/') || document.mime_type === 'application/pdf')) {
+        await handleBankTransferProofUpload(ctx, true);
+      } else {
+        await ctx.reply('📷 Please upload an image file (JPG, PNG) or PDF for payment proof.');
+      }
     }
   } catch (error) {
     console.error('Error in document handler:', error);
@@ -4312,8 +4392,14 @@ async function handleCustomAmountInput(ctx, amountText) {
   // Parse the amount
   const amount = parseFloat(amountText.replace(/[^0-9.]/g, ''));
 
-  if (isNaN(amount) || amount < 5 || amount > 50000) {
-    await ctx.reply('❌ Invalid amount. Please enter a number between $5 and $50,000.');
+  // Check minimum amount based on payment method
+  const selectedPaymentMethod = ctx.session.selectedPaymentMethod || 'usdt';
+  const minAmount = selectedPaymentMethod === 'bank_transfer' ? 15 : 5;
+  const maxAmount = 50000;
+
+  if (isNaN(amount) || amount < minAmount || amount > maxAmount) {
+    const paymentMethodName = selectedPaymentMethod === 'bank_transfer' ? 'bank transfer' : 'USDT';
+    await ctx.reply(`❌ Invalid amount. Please enter a number between $${minAmount} and $${maxAmount.toLocaleString()} for ${paymentMethodName} payments.`);
     return;
   }
 
@@ -5921,9 +6007,21 @@ All payments have been processed!
       const paymentDate = new Date(payment.created_at);
       const timeAgo = Math.floor((Date.now() - paymentDate.getTime()) / (1000 * 60 * 60));
 
+      // Check if this is a bank transfer payment
+      const isBankTransfer = payment.network === 'BANK_TRANSFER' || payment.currency === 'ZAR';
+      let paymentMethodDisplay = '';
+
+      if (isBankTransfer) {
+        const bankDetails = payment.transaction_notes ? JSON.parse(payment.transaction_notes) : {};
+        const zarAmount = bankDetails.zar_amount || 'N/A';
+        paymentMethodDisplay = `🏦 Bank Transfer: R${typeof zarAmount === 'number' ? zarAmount.toFixed(2) : zarAmount}`;
+      } else {
+        paymentMethodDisplay = `🌐 ${payment.network.toUpperCase()}`;
+      }
+
       return `${index + 1}. **${userInfo.full_name}**
 💰 Amount: $${payment.amount}
-🌐 Network: ${payment.network.toUpperCase()}
+${paymentMethodDisplay}
 📅 ${timeAgo}h ago
 🆔 ID: ${payment.id}`;
     }).join('\n\n');
@@ -5939,9 +6037,13 @@ ${paymentsText}
 **Click a payment to review:**`, {
       reply_markup: {
         inline_keyboard: [
-          ...pendingPayments.map((payment, index) => [
-            { text: `Review Payment ${index + 1} ($${payment.amount})`, callback_data: `review_payment_${payment.id}` }
-          ]),
+          ...pendingPayments.map((payment, index) => {
+            const isBankTransfer = payment.network === 'BANK_TRANSFER' || payment.currency === 'ZAR';
+            const paymentType = isBankTransfer ? '🏦' : '💎';
+            return [
+              { text: `${paymentType} Review Payment ${index + 1} ($${payment.amount})`, callback_data: `review_payment_${payment.id}` }
+            ];
+          }),
           [{ text: "🔄 Refresh", callback_data: "admin_payments" }],
           [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
         ]
@@ -6520,7 +6622,16 @@ async function handleConfirmPurchase(ctx, callbackData) {
       telegramUser = newUser;
     }
 
-    // Get selected network from session or default to TRON
+    // Check if bank transfer payment method is selected
+    const selectedPaymentMethod = ctx.session.selectedPaymentMethod || 'usdt';
+
+    if (selectedPaymentMethod === 'bank_transfer') {
+      // Handle bank transfer payment
+      await handleBankTransferConfirmation(ctx, telegramUser, amount, totalCost, sharesAmount, currentPhase);
+      return;
+    }
+
+    // Get selected network from session or default to TRON (for crypto payments)
     const selectedNetwork = ctx.session.selectedNetwork || 'TRON';
 
     // Get company wallet address from database for selected network
@@ -6887,16 +6998,55 @@ async function handleReviewPayment(ctx, callbackData) {
       return;
     }
 
-    // Safely format wallet address and transaction hash to avoid Markdown parsing errors
-    const safeWalletAddress = payment.sender_wallet_address
-      ? `\`${payment.sender_wallet_address}\``
-      : 'Not provided';
+    // Check if this is a bank transfer payment
+    const isBankTransfer = payment.network === 'BANK_TRANSFER' || payment.currency === 'ZAR';
 
-    const safeTransactionHash = payment.transaction_hash
-      ? `\`${payment.transaction_hash}\``
-      : 'Not provided';
+    let reviewMessage;
 
-    const reviewMessage = `🔍 **PAYMENT REVIEW**
+    if (isBankTransfer) {
+      // Parse bank transfer details
+      const bankDetails = payment.transaction_notes ? JSON.parse(payment.transaction_notes) : {};
+      const zarAmount = bankDetails.zar_amount || 'N/A';
+      const exchangeRate = bankDetails.exchange_rate || 18;
+
+      reviewMessage = `🏦 **BANK TRANSFER REVIEW**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 PAYMENT DETAILS:**
+• **ID:** #${paymentId.substring(0, 8)}
+• **USD Amount:** $${payment.amount}
+• **ZAR Amount:** R${typeof zarAmount === 'number' ? zarAmount.toFixed(2) : zarAmount}
+• **Exchange Rate:** R${exchangeRate} = $1 USD
+• **Payment Method:** Bank Transfer (FNB)
+• **Status:** ${payment.status}
+
+**👤 USER DETAILS:**
+• **Name:** ${payment.users.full_name || 'N/A'}
+• **Username:** @${payment.users.username || 'N/A'}
+
+**🏦 BANK TRANSFER INFO:**
+• **Bank:** First National Bank (FNB)
+• **Account:** 63154323041
+• **Proof:** ${payment.sender_wallet ? '✅ Uploaded' : '❌ Not uploaded'}
+• **Reference:** Payment #${paymentId.substring(0, 8)}
+
+**📅 TIMESTAMPS:**
+• **Created:** ${new Date(payment.created_at).toLocaleString()}
+• **Updated:** ${new Date(payment.updated_at).toLocaleString()}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    } else {
+      // Safely format wallet address and transaction hash to avoid Markdown parsing errors
+      const safeWalletAddress = payment.sender_wallet_address
+        ? `\`${payment.sender_wallet_address}\``
+        : 'Not provided';
+
+      const safeTransactionHash = payment.transaction_hash
+        ? `\`${payment.transaction_hash}\``
+        : 'Not provided';
+
+      reviewMessage = `🔍 **CRYPTO PAYMENT REVIEW**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -6920,6 +7070,7 @@ async function handleReviewPayment(ctx, callbackData) {
 • **Updated:** ${new Date(payment.updated_at).toLocaleString()}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    }
 
     const keyboard = [
       [
@@ -6928,7 +7079,12 @@ async function handleReviewPayment(ctx, callbackData) {
       ]
     ];
 
-    if (payment.screenshot_url) {
+    // Add proof viewing button based on payment type
+    if (isBankTransfer && payment.sender_wallet) {
+      keyboard.unshift([
+        { text: "🏦 View Bank Transfer Proof", callback_data: `view_bank_proof_${paymentId}` }
+      ]);
+    } else if (!isBankTransfer && payment.screenshot_url) {
       keyboard.unshift([
         { text: "📷 View Screenshot", callback_data: `view_screenshot_${paymentId}` }
       ]);
@@ -7020,7 +7176,7 @@ async function handleApprovePayment(ctx, callbackData) {
         total_amount: amount,
         commission_used: 0, // No commission used for direct payments
         remaining_payment: amount, // Full amount paid directly
-        payment_method: `${updatedPayment.network} ${updatedPayment.currency || 'USDT'}`,
+        payment_method: updatedPayment.network === 'BANK_TRANSFER' ? 'Bank Transfer (ZAR)' : `${updatedPayment.network} ${updatedPayment.currency || 'USDT'}`,
         status: 'active',
         created_at: updatedPayment.created_at,
         updated_at: new Date().toISOString()
@@ -7210,10 +7366,15 @@ async function handleApprovePayment(ctx, callbackData) {
     console.log(`📋 Checking KYC status for user ${updatedPayment.users.username}...`);
     await triggerKYCCollectionIfNeeded(updatedPayment.user_id);
 
+    // Check if this is a bank transfer payment
+    const isBankTransfer = updatedPayment.network === 'BANK_TRANSFER' || updatedPayment.currency === 'ZAR';
+    const paymentMethodDisplay = isBankTransfer ? 'Bank Transfer (ZAR)' : `${updatedPayment.amount} USDT`;
+
     await ctx.replyWithMarkdown(`✅ **PAYMENT APPROVED**
 
 **Payment ID:** #${paymentId.substring(0, 8)}
-**Amount:** $${updatedPayment.amount} USDT
+**Amount:** $${updatedPayment.amount} USD
+**Payment Method:** ${paymentMethodDisplay}
 **User:** ${updatedPayment.users.full_name || updatedPayment.users.username}
 **Shares Allocated:** ${sharesAmount}
 
@@ -7248,6 +7409,18 @@ async function notifyUserPaymentApproved(payment, sharesAllocated, currentPhase)
       return;
     }
 
+    // Check if this is a bank transfer payment
+    const isBankTransfer = payment.network === 'BANK_TRANSFER' || payment.currency === 'ZAR';
+    let paymentMethodText = '';
+
+    if (isBankTransfer) {
+      const bankDetails = payment.transaction_notes ? JSON.parse(payment.transaction_notes) : {};
+      const zarAmount = bankDetails.zar_amount || 'N/A';
+      paymentMethodText = `• **Payment Method:** Bank Transfer (FNB)\n• **ZAR Amount:** R${typeof zarAmount === 'number' ? zarAmount.toFixed(2) : zarAmount}`;
+    } else {
+      paymentMethodText = `• **Payment Method:** ${payment.network} USDT`;
+    }
+
     const approvalMessage = `🎉 **PAYMENT APPROVED!**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -7257,7 +7430,8 @@ Your share purchase has been approved and processed successfully.
 
 **📋 TRANSACTION DETAILS:**
 • **Payment ID:** #${payment.id.substring(0, 8)}
-• **Amount Paid:** $${payment.amount} USDT
+• **USD Amount:** $${payment.amount}
+${paymentMethodText}
 • **Shares Allocated:** ${sharesAllocated} shares
 • **Share Price:** $${currentPhase.price_per_share} per share
 • **Current Phase:** ${currentPhase.name}
@@ -10110,6 +10284,572 @@ Choose the document type that matches what you'll provide for verification.`;
   };
 
   await ctx.replyWithMarkdown(idTypeMessage, { reply_markup: keyboard });
+}
+
+// BANK TRANSFER SYSTEM FOR SOUTHERN AFRICAN REGION
+// Check if user is eligible for bank transfer payments (ZAF, SWZ, NAM)
+async function checkBankTransferEligibility(userId) {
+  try {
+    const { data: userData, error } = await db.client
+      .from('users')
+      .select('country_of_residence')
+      .eq('id', userId)
+      .single();
+
+    if (error || !userData) {
+      console.log(`❌ [BANK TRANSFER] Error checking user country: ${error?.message}`);
+      return false;
+    }
+
+    const eligibleCountries = ['ZAF', 'SWZ', 'NAM']; // South Africa, Eswatini, Namibia
+    const isEligible = eligibleCountries.includes(userData.country_of_residence);
+
+    console.log(`🏦 [BANK TRANSFER] User ${userId} country: ${userData.country_of_residence}, eligible: ${isEligible}`);
+    return isEligible;
+
+  } catch (error) {
+    console.error('❌ [BANK TRANSFER] Error in checkBankTransferEligibility:', error);
+    return false;
+  }
+}
+
+// Handle bank transfer payment selection
+async function handleBankTransferPayment(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user from database
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (userError || !telegramUser) {
+      await ctx.answerCbQuery('❌ User not found');
+      return;
+    }
+
+    // Double-check eligibility
+    const isEligible = await checkBankTransferEligibility(telegramUser.user_id);
+    if (!isEligible) {
+      await ctx.answerCbQuery('❌ Bank transfer not available in your region');
+      return;
+    }
+
+    await ctx.answerCbQuery('🏦 Bank Transfer selected');
+
+    // Store bank transfer as selected payment method
+    ctx.session.selectedPaymentMethod = 'bank_transfer';
+
+    // Show amount input for bank transfer
+    await showBankTransferAmountInput(ctx);
+
+  } catch (error) {
+    console.error('❌ [BANK TRANSFER] Error in handleBankTransferPayment:', error);
+    await ctx.answerCbQuery('❌ Error processing bank transfer selection');
+  }
+}
+
+// Show amount input for bank transfer
+async function showBankTransferAmountInput(ctx) {
+  const customAmountMessage = `🏦 **BANK TRANSFER PURCHASE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**💰 ENTER INVESTMENT AMOUNT**
+
+Enter your desired investment amount between $15 and $50,000:
+
+**📋 BANK TRANSFER DETAILS:**
+• Minimum: $15 USD (R270 ZAR)
+• Maximum: $50,000 USD
+• Currency: South African Rand (ZAR)
+• Exchange Rate: R18 ZAR = $1 USD
+• Transaction Fee: 10% additional
+• Payment Method: FNB Bank Transfer
+
+**💡 CALCULATION EXAMPLE:**
+$100 USD + 10% fee = $110 USD = R1,980 ZAR
+
+**⚠️ IMPORTANT:**
+Bank transfer is only available for users in South Africa, Eswatini, and Namibia.
+
+**Type your investment amount in USD (numbers only):**`;
+
+  await ctx.replyWithMarkdown(customAmountMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔙 Back to Payment Methods", callback_data: "menu_purchase_shares" }],
+        [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+
+  // Set user state to expect amount input
+  await setUserState(ctx.from.id, 'awaiting_custom_amount');
+}
+
+// Calculate ZAR amount with 10% transaction fee
+function calculateZARAmount(usdAmount) {
+  const exchangeRate = 18; // R18 ZAR = $1 USD (fixed rate)
+  const transactionFee = 0.10; // 10% fee
+
+  const totalUSD = usdAmount * (1 + transactionFee); // Add 10% fee
+  const zarAmount = totalUSD * exchangeRate;
+
+  return {
+    originalUSD: usdAmount,
+    feeUSD: usdAmount * transactionFee,
+    totalUSD: totalUSD,
+    zarAmount: zarAmount,
+    exchangeRate: exchangeRate
+  };
+}
+
+// Handle bank transfer payment confirmation
+async function handleBankTransferConfirmation(ctx, telegramUser, originalAmount, totalCost, sharesAmount, currentPhase) {
+  try {
+    // Calculate ZAR amounts with 10% fee
+    const zarCalculation = calculateZARAmount(totalCost);
+
+    // Create bank transfer payment transaction
+    const { data: payment, error: paymentError } = await db.client
+      .from('crypto_payment_transactions')
+      .insert({
+        user_id: telegramUser.user_id || null,
+        amount: totalCost,
+        currency: 'ZAR',
+        network: 'BANK_TRANSFER',
+        sender_wallet: '', // Will be filled when user uploads proof
+        receiver_wallet: 'FNB-63154323041', // Bank account reference
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        // Store additional bank transfer info in notes or custom fields
+        transaction_notes: JSON.stringify({
+          payment_method: 'bank_transfer',
+          zar_amount: zarCalculation.zarAmount,
+          usd_amount: zarCalculation.totalUSD,
+          exchange_rate: zarCalculation.exchangeRate,
+          transaction_fee_percent: 10
+        })
+      })
+      .select()
+      .single();
+
+    if (paymentError) {
+      console.error('Error creating bank transfer payment:', paymentError);
+      await ctx.reply('❌ Error creating bank transfer payment. Please try again.');
+      return;
+    }
+
+    // Show bank transfer payment instructions
+    await showBankTransferInstructions(ctx, payment, currentPhase, zarCalculation);
+
+    // Notify admin about new bank transfer payment
+    await sendAdminNotification('payment_received', {
+      username: ctx.from.username || ctx.from.first_name || 'Unknown',
+      amount: totalCost,
+      shares: sharesAmount,
+      user_id: telegramUser.user_id,
+      payment_id: payment.id,
+      payment_method: 'Bank Transfer (ZAR)',
+      zar_amount: zarCalculation.zarAmount
+    }, 'medium');
+
+  } catch (error) {
+    console.error('Error in handleBankTransferConfirmation:', error);
+    await ctx.reply('❌ Error processing bank transfer. Please try again.');
+  }
+}
+
+// Show bank transfer payment instructions
+async function showBankTransferInstructions(ctx, payment, phase, zarCalculation) {
+  const sharePrice = parseFloat(phase.price_per_share);
+  const sharesAmount = Math.floor(payment.amount / sharePrice);
+
+  const bankTransferMessage = `🏦 **BANK TRANSFER PAYMENT INSTRUCTIONS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📋 PURCHASE DETAILS:**
+• USD Amount: ${formatCurrency(zarCalculation.originalUSD)}
+• Transaction Fee (10%): ${formatCurrency(zarCalculation.feeUSD)}
+• **Total USD: ${formatCurrency(zarCalculation.totalUSD)}**
+• **Total ZAR: R${zarCalculation.zarAmount.toFixed(2)}**
+• Shares: ${sharesAmount.toLocaleString()}
+• Phase: ${phase.phase_name}
+• Share Price: ${formatCurrency(sharePrice)}
+• Payment ID: #${payment.id.substring(0, 8)}
+
+**🏦 BANK ACCOUNT DETAILS:**
+• **Bank:** First National Bank (FNB)
+• **Account Type:** GOLD BUSINESS CHEQUE ACCOUNT
+• **Account Number:** 63154323041
+• **Account Status:** Active Account
+• **Branch Code:** 220229
+• **Branch Name:** VERULAM, NTL 091
+• **Swift Code:** FIRNZAJJ
+• **Date Opened:** 2025-05-09
+
+**💰 PAYMENT INFORMATION:**
+• **Amount to Transfer:** R${zarCalculation.zarAmount.toFixed(2)} ZAR
+• **Exchange Rate:** R${zarCalculation.exchangeRate} ZAR = $1 USD
+• **Reference:** Payment #${payment.id.substring(0, 8)}
+
+**⚠️ IMPORTANT INSTRUCTIONS:**
+1. Transfer EXACTLY R${zarCalculation.zarAmount.toFixed(2)} ZAR
+2. Use reference: Payment #${payment.id.substring(0, 8)}
+3. Take screenshot of successful transfer
+4. Upload proof within 24 hours
+5. Wait for admin approval
+
+**🔗 BANK VERIFICATION:**
+Verify bank details: [FNB Confirmation Document](https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets//fnb.pdf)
+
+**🚨 WARNING:**
+• Wrong amount = Payment rejected
+• No proof = No shares allocated
+• Bank transfers are only available for South Africa, Eswatini, and Namibia
+
+**⏰ Payment expires in 24 hours**`;
+
+  await ctx.replyWithMarkdown(bankTransferMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "💳 Submit Payment Proof", callback_data: `upload_proof_${payment.id}` }],
+        [{ text: "🔗 View Bank Confirmation", url: "https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets//fnb.pdf" }],
+        [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
+        [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+// Handle upload proof request for bank transfer
+async function handleUploadProofRequest(ctx, callbackData) {
+  const paymentId = callbackData.replace('upload_proof_', '');
+
+  try {
+    // Verify payment exists and belongs to user
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', ctx.from.id)
+      .single();
+
+    if (userError || !telegramUser) {
+      await ctx.answerCbQuery('❌ User not found');
+      return;
+    }
+
+    const { data: payment, error: paymentError } = await db.client
+      .from('crypto_payment_transactions')
+      .select('*')
+      .eq('id', paymentId)
+      .eq('user_id', telegramUser.user_id)
+      .single();
+
+    if (paymentError || !payment) {
+      await ctx.answerCbQuery('❌ Payment not found');
+      return;
+    }
+
+    if (payment.status !== 'pending') {
+      await ctx.answerCbQuery('❌ Payment already processed');
+      return;
+    }
+
+    await ctx.answerCbQuery('📤 Upload payment proof');
+
+    // Store payment ID in session for proof upload
+    ctx.session.uploadingProofForPayment = paymentId;
+
+    const uploadMessage = `📤 **UPLOAD PAYMENT PROOF**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🏦 BANK TRANSFER PROOF REQUIRED**
+
+Payment ID: #${paymentId.substring(0, 8)}
+
+**📋 UPLOAD REQUIREMENTS:**
+• Screenshot of successful bank transfer
+• Must show transfer amount and reference
+• Clear and readable image
+• Supported formats: JPG, PNG, PDF
+
+**⚠️ IMPORTANT:**
+• Transfer must be from YOUR bank account
+• Amount must match exactly: ${JSON.parse(payment.transaction_notes || '{}').zar_amount ? `R${JSON.parse(payment.transaction_notes).zar_amount.toFixed(2)}` : 'the required amount'}
+• Reference must include: Payment #${paymentId.substring(0, 8)}
+
+**📱 HOW TO UPLOAD:**
+1. Take screenshot of successful transfer
+2. Send the image to this chat
+3. Wait for admin verification
+4. Receive confirmation once approved
+
+**⏰ DEADLINE:**
+Upload proof within 24 hours or payment will be cancelled.
+
+**Please send your payment proof image now:**`;
+
+    await ctx.replyWithMarkdown(uploadMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "❌ Cancel Upload", callback_data: "cancel_proof_upload" }],
+          [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+    // Set user state to expect proof upload
+    await setUserState(ctx.from.id, 'uploading_payment_proof');
+
+  } catch (error) {
+    console.error('Error in handleUploadProofRequest:', error);
+    await ctx.answerCbQuery('❌ Error processing upload request');
+  }
+}
+
+// Handle bank transfer proof upload
+async function handleBankTransferProofUpload(ctx, isDocument = false) {
+  const user = ctx.from;
+
+  try {
+    // Get payment ID from session
+    const paymentId = ctx.session.uploadingProofForPayment;
+    if (!paymentId) {
+      await ctx.reply('❌ No payment found for proof upload. Please start the process again.');
+      return;
+    }
+
+    // Get file info
+    let fileId, fileName, fileSize;
+
+    if (isDocument) {
+      const document = ctx.message.document;
+      fileId = document.file_id;
+      fileName = document.file_name || 'payment_proof';
+      fileSize = document.file_size;
+    } else {
+      const photo = ctx.message.photo;
+      const largestPhoto = photo[photo.length - 1]; // Get highest resolution
+      fileId = largestPhoto.file_id;
+      fileName = 'payment_proof.jpg';
+      fileSize = largestPhoto.file_size;
+    }
+
+    // Check file size (max 20MB)
+    if (fileSize > 20 * 1024 * 1024) {
+      await ctx.reply('❌ File too large. Please upload a file smaller than 20MB.');
+      return;
+    }
+
+    // Get user from database
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id, username')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (userError || !telegramUser) {
+      await ctx.reply('❌ User not found. Please try again.');
+      return;
+    }
+
+    // Update payment with proof file ID
+    const { error: updateError } = await db.client
+      .from('crypto_payment_transactions')
+      .update({
+        sender_wallet: fileId, // Store file ID in sender_wallet field for bank transfers
+        status: 'proof_uploaded',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', paymentId)
+      .eq('user_id', telegramUser.user_id);
+
+    if (updateError) {
+      console.error('Error updating payment with proof:', updateError);
+      await ctx.reply('❌ Error saving payment proof. Please try again.');
+      return;
+    }
+
+    // Clear session data
+    delete ctx.session.uploadingProofForPayment;
+    await setUserState(user.id, null);
+
+    // Send confirmation to user
+    const confirmationMessage = `✅ **PAYMENT PROOF UPLOADED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📤 PROOF SUCCESSFULLY SUBMITTED**
+
+Payment ID: #${paymentId.substring(0, 8)}
+File: ${fileName}
+Status: Pending Admin Review
+
+**⏳ WHAT HAPPENS NEXT:**
+1. Admin will review your payment proof
+2. Bank transfer will be verified
+3. You'll receive confirmation once approved
+4. Shares will be allocated to your portfolio
+
+**⏰ REVIEW TIME:**
+Typically 2-24 hours during business days
+
+**📱 NOTIFICATIONS:**
+You'll receive a message when your payment is approved or if additional information is needed.
+
+Thank you for your patience!`;
+
+    await ctx.replyWithMarkdown(confirmationMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
+          [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+    // Notify admin about proof upload
+    await sendAdminNotification('bank_transfer_proof_uploaded', {
+      username: telegramUser.username || user.first_name || 'Unknown',
+      payment_id: paymentId,
+      file_id: fileId,
+      file_name: fileName,
+      user_id: telegramUser.user_id
+    }, 'high');
+
+  } catch (error) {
+    console.error('Error in handleBankTransferProofUpload:', error);
+    await ctx.reply('❌ Error processing payment proof. Please try again.');
+  }
+}
+
+// Handle viewing bank transfer proof for admin
+async function handleViewBankProof(ctx, callbackData) {
+  const user = ctx.from;
+
+  // Check admin authorization
+  if (user.username !== 'TTTFOUNDER') {
+    await ctx.answerCbQuery('❌ Access denied');
+    return;
+  }
+
+  const paymentId = callbackData.replace('view_bank_proof_', '');
+
+  try {
+    // Get payment details
+    const { data: payment, error: fetchError } = await db.client
+      .from('crypto_payment_transactions')
+      .select('*')
+      .eq('id', paymentId)
+      .single();
+
+    if (fetchError || !payment) {
+      await ctx.answerCbQuery('❌ Payment not found');
+      return;
+    }
+
+    if (!payment.sender_wallet) {
+      await ctx.answerCbQuery('❌ No proof uploaded');
+      return;
+    }
+
+    await ctx.answerCbQuery('📄 Displaying bank transfer proof');
+
+    // Send the proof file (stored in sender_wallet field for bank transfers)
+    const fileId = payment.sender_wallet;
+
+    const proofMessage = `🏦 **BANK TRANSFER PROOF**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Payment ID:** #${paymentId.substring(0, 8)}
+**Amount:** $${payment.amount} USD
+
+**📋 VERIFICATION CHECKLIST:**
+✅ Transfer amount matches required amount
+✅ Reference includes payment ID
+✅ Transfer from user's account
+✅ FNB account details correct
+✅ Transfer successful/completed
+
+**⚠️ ADMIN NOTES:**
+• Verify ZAR amount matches USD conversion
+• Check transfer date/time
+• Confirm account holder details if needed`;
+
+    await ctx.replyWithMarkdown(proofMessage);
+
+    // Forward the proof file
+    try {
+      await ctx.telegram.forwardMessage(ctx.chat.id, ctx.chat.id, fileId);
+    } catch (forwardError) {
+      // If forwarding fails, try sending as photo/document
+      try {
+        await ctx.replyWithPhoto(fileId, {
+          caption: `Bank Transfer Proof - Payment #${paymentId.substring(0, 8)}`
+        });
+      } catch (photoError) {
+        try {
+          await ctx.replyWithDocument(fileId, {
+            caption: `Bank Transfer Proof - Payment #${paymentId.substring(0, 8)}`
+          });
+        } catch (docError) {
+          console.error('Error displaying bank proof:', docError);
+          await ctx.reply('❌ Error displaying proof file. File may be corrupted.');
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error('Error in handleViewBankProof:', error);
+    await ctx.answerCbQuery('❌ Error loading proof');
+  }
+}
+
+// Handle canceling proof upload
+async function handleCancelProofUpload(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Clear session data
+    delete ctx.session.uploadingProofForPayment;
+    await setUserState(user.id, null);
+
+    await ctx.answerCbQuery('❌ Proof upload cancelled');
+
+    const cancelMessage = `❌ **PROOF UPLOAD CANCELLED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Upload process has been cancelled.**
+
+You can restart the proof upload process anytime by:
+1. Going to your portfolio
+2. Finding the pending payment
+3. Clicking "Submit Payment Proof"
+
+**⚠️ REMINDER:**
+Payment proof must be uploaded within 24 hours or the payment will be automatically cancelled.`;
+
+    await ctx.replyWithMarkdown(cancelMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
+          [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in handleCancelProofUpload:', error);
+    await ctx.answerCbQuery('❌ Error cancelling upload');
+  }
 }
 
 // COUNTRY SELECTION SYSTEM

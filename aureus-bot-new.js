@@ -2899,10 +2899,10 @@ async function handlePurchaseSharesStart(ctx) {
   console.log(`🔍 [DEBUG] handlePurchaseSharesStart - userId: ${userId}, type: ${typeof userId}`);
   console.log(`🔍 [DEBUG] handlePurchaseSharesStart - telegramUser:`, telegramUser);
 
-  // Check for existing pending payments
-  const { data: pendingPayments, error: pendingError } = await db.client
+  // Check for incomplete payments (missing proof uploads, not admin-pending payments)
+  const { data: incompletePayments, error: pendingError } = await db.client
     .from('crypto_payment_transactions')
-    .select('id, amount, network, created_at, status, user_id')
+    .select('id, amount, network, created_at, status, user_id, sender_wallet')
     .eq('user_id', userId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
@@ -2911,66 +2911,79 @@ async function handlePurchaseSharesStart(ctx) {
     console.error('🔍 [DEBUG] Error checking pending payments:', pendingError);
     console.error('🔍 [DEBUG] Query details - userId:', userId, 'type:', typeof userId);
     // Continue anyway, don't block the user
-  } else if (pendingPayments && pendingPayments.length > 0) {
-    console.log(`🔍 [DEBUG] Found ${pendingPayments.length} pending payments for user ${userId}`);
-    // User has pending payments - show management options
-    const pendingPayment = pendingPayments[0];
-    const paymentDate = new Date(pendingPayment.created_at);
-    const now = new Date();
-    const daysDiff = Math.floor((now - paymentDate) / (1000 * 60 * 60 * 24));
-    const hoursAgo = Math.floor((now - paymentDate) / (1000 * 60 * 60));
+  } else if (incompletePayments && incompletePayments.length > 0) {
+    console.log(`🔍 [DEBUG] Found ${incompletePayments.length} pending payments for user ${userId}`);
 
-    const timeAgo = daysDiff > 0 ? `${daysDiff} day${daysDiff > 1 ? 's' : ''} ago` :
-                    hoursAgo > 0 ? `${hoursAgo} hour${hoursAgo > 1 ? 's' : ''} ago` :
-                    'Less than 1 hour ago';
+    // Only block if payment is incomplete (no proof uploaded yet)
+    const incompletePayment = incompletePayments.find(payment =>
+      payment.sender_wallet === 'PENDING_PROOF_UPLOAD' ||
+      payment.sender_wallet === '' ||
+      !payment.sender_wallet
+    );
 
-    const isOld = daysDiff >= 1;
-    const statusIcon = isOld ? '🔴' : '🟡';
+    if (incompletePayment) {
+      console.log(`🔍 [DEBUG] Found incomplete payment (no proof uploaded):`, incompletePayment.id);
 
-    // Format date safely for Telegram Markdown
-    const safeDate = paymentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      // User has incomplete payment - show management options
+      const paymentDate = new Date(incompletePayment.created_at);
+      const now = new Date();
+      const daysDiff = Math.floor((now - paymentDate) / (1000 * 60 * 60 * 24));
+      const hoursAgo = Math.floor((now - paymentDate) / (1000 * 60 * 60));
 
-    // Create safe message without nested markdown
-    let pendingMessage = `⚠️ PENDING PAYMENT DETECTED
+      const timeAgo = daysDiff > 0 ? `${daysDiff} day${daysDiff > 1 ? 's' : ''} ago` :
+                      hoursAgo > 0 ? `${hoursAgo} hour${hoursAgo > 1 ? 's' : ''} ago` :
+                      'Less than 1 hour ago';
+
+      const isOld = daysDiff >= 1;
+      const statusIcon = isOld ? '🔴' : '🟡';
+
+      // Format date safely for Telegram Markdown
+      const safeDate = paymentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+
+      // Create safe message without nested markdown
+      let pendingMessage = `⚠️ INCOMPLETE PAYMENT DETECTED
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${statusIcon} You have an existing pending payment:
+${statusIcon} You have an incomplete payment that needs attention:
 
-💰 Amount: $${pendingPayment.amount}
-🌐 Network: ${pendingPayment.network.toUpperCase()}
+💰 Amount: $${incompletePayment.amount}
+🌐 Network: ${incompletePayment.network.toUpperCase()}
 📅 Submitted: ${safeDate} (${timeAgo})
-⏳ Status: Pending Admin Approval`;
+⏳ Status: Awaiting Proof Upload`;
 
-    // Add age warning if payment is old
-    if (isOld) {
-      pendingMessage += `\n\n🔴 OLD PAYMENT: This payment is over 24 hours old.`;
-    }
+      // Add age warning if payment is old
+      if (isOld) {
+        pendingMessage += `\n\n🔴 OLD PAYMENT: This payment is over 24 hours old.`;
+      }
 
-    pendingMessage += `
+      pendingMessage += `
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🔧 WHAT WOULD YOU LIKE TO DO?
 
-You must handle this pending payment before making a new purchase.`;
+You must complete this payment before making a new purchase.`;
 
-    const keyboard = [
-      [{ text: "💳 Continue with Pending Payment", callback_data: `continue_payment_${pendingPayment.id}` }],
-      [{ text: "🗑️ Delete Pending Payment", callback_data: `cancel_payment_${pendingPayment.id}` }]
-    ];
+      const keyboard = [
+        [{ text: "💳 Continue with Payment", callback_data: `continue_payment_${incompletePayment.id}` }],
+        [{ text: "🗑️ Delete Payment", callback_data: `cancel_payment_${incompletePayment.id}` }]
+      ];
 
-    if (isOld) {
-      keyboard.push([{ text: "📞 Contact Support (Old Payment)", callback_data: "menu_help" }]);
+      if (isOld) {
+        keyboard.push([{ text: "📞 Contact Support (Old Payment)", callback_data: "menu_help" }]);
+      }
+
+      keyboard.push([{ text: "📊 View Payment Details", callback_data: "view_portfolio" }]);
+      keyboard.push([{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]);
+
+      await ctx.reply(pendingMessage, {
+        reply_markup: { inline_keyboard: keyboard }
+      });
+      return;
+    } else {
+      console.log(`🔍 [DEBUG] All pending payments have proof uploaded - allowing new purchase`);
     }
-
-    keyboard.push([{ text: "📊 View Payment Details", callback_data: "view_portfolio" }]);
-    keyboard.push([{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]);
-
-    await ctx.reply(pendingMessage, {
-      reply_markup: { inline_keyboard: keyboard }
-    });
-    return;
   }
 
   // No pending payments - proceed with payment method selection

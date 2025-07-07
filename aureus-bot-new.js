@@ -2038,6 +2038,12 @@ bot.on('callback_query', async (ctx) => {
           await showMoreCountries(ctx);
         } else if (callbackData === 'country_selection_other') {
           await handleOtherCountrySelection(ctx);
+        } else if (callbackData === 'show_asia_countries') {
+          await showAsiaCountries(ctx);
+        } else if (callbackData === 'show_africa_countries') {
+          await showAfricaCountries(ctx);
+        } else if (callbackData === 'show_americas_countries') {
+          await showAmericasCountries(ctx);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");
         }
@@ -2946,6 +2952,9 @@ bot.on('text', async (ctx) => {
   } else if (ctx.session && ctx.session.kyc && ctx.session.kyc.step) {
     console.log(`📋 [TEXT HANDLER] Processing KYC input for step: ${ctx.session.kyc.step}`);
     await handleKYCTextInput(ctx, text);
+  } else if (ctx.session && ctx.session.awaitingCustomCountry) {
+    console.log(`🌍 [TEXT HANDLER] Processing custom country input`);
+    await handleCustomCountryInput(ctx, text);
   } else {
     console.log(`❓ [TEXT HANDLER] No matching state handler for: ${userState?.state || 'null'}`);
   }
@@ -10197,13 +10206,17 @@ Your country information is securely stored and used only for compliance and ser
         ],
         [
           { text: "🇦🇺 Australia", callback_data: "select_country_AUS" },
-          { text: "🇩🇪 Germany", callback_data: "select_country_DEU" }
+          { text: "🇦🇪 UAE", callback_data: "select_country_ARE" }
+        ],
+        [
+          { text: "🇮🇳 India", callback_data: "select_country_IND" },
+          { text: "🇵🇰 Pakistan", callback_data: "select_country_PAK" }
         ],
         [
           { text: "🌍 Show More Countries", callback_data: "show_more_countries" }
         ],
         [
-          { text: "🌎 Other Country", callback_data: "country_selection_other" }
+          { text: "🌎 Type Your Country", callback_data: "country_selection_other" }
         ]
       ]
     };
@@ -10261,13 +10274,17 @@ Your country information is securely stored and used only for compliance and ser
       ],
       [
         { text: "🇦🇺 Australia", callback_data: "select_country_AUS" },
-        { text: "🇩🇪 Germany", callback_data: "select_country_DEU" }
+        { text: "🇦🇪 UAE", callback_data: "select_country_ARE" }
+      ],
+      [
+        { text: "🇮🇳 India", callback_data: "select_country_IND" },
+        { text: "🇵🇰 Pakistan", callback_data: "select_country_PAK" }
       ],
       [
         { text: "🌍 Show More Countries", callback_data: "show_more_countries" }
       ],
       [
-        { text: "🌎 Other Country", callback_data: "country_selection_other" }
+        { text: "🌎 Type Your Country", callback_data: "country_selection_other" }
       ]
     ]
   };
@@ -10373,43 +10390,62 @@ async function showMoreCountries(ctx) {
 
 **📍 ADDITIONAL COUNTRY OPTIONS**
 
-Select your country from the expanded list below:`;
+Select your country from the expanded list below:
+
+**🇪🇺 EUROPE:**`;
 
   const keyboard = {
     inline_keyboard: [
+      // Europe Row 1
       [
-        { text: "🇫🇷 France", callback_data: "select_country_FRA" },
-        { text: "🇮🇹 Italy", callback_data: "select_country_ITA" }
+        { text: "🇩🇪 Germany", callback_data: "select_country_DEU" },
+        { text: "🇫🇷 France", callback_data: "select_country_FRA" }
       ],
       [
-        { text: "🇪🇸 Spain", callback_data: "select_country_ESP" },
-        { text: "🇳🇱 Netherlands", callback_data: "select_country_NLD" }
+        { text: "🇮🇹 Italy", callback_data: "select_country_ITA" },
+        { text: "🇪🇸 Spain", callback_data: "select_country_ESP" }
       ],
       [
-        { text: "🇧🇪 Belgium", callback_data: "select_country_BEL" },
-        { text: "🇨🇭 Switzerland", callback_data: "select_country_CHE" }
+        { text: "🇳🇱 Netherlands", callback_data: "select_country_NLD" },
+        { text: "🇧🇪 Belgium", callback_data: "select_country_BEL" }
       ],
       [
-        { text: "🇸🇪 Sweden", callback_data: "select_country_SWE" },
-        { text: "🇳🇴 Norway", callback_data: "select_country_NOR" }
+        { text: "🇨🇭 Switzerland", callback_data: "select_country_CHE" },
+        { text: "🇸🇪 Sweden", callback_data: "select_country_SWE" }
       ],
       [
-        { text: "🇯🇵 Japan", callback_data: "select_country_JPN" },
-        { text: "🇰🇷 South Korea", callback_data: "select_country_KOR" }
+        { text: "🇳🇴 Norway", callback_data: "select_country_NOR" },
+        { text: "🇩🇰 Denmark", callback_data: "select_country_DNK" }
       ],
       [
-        { text: "🇸🇬 Singapore", callback_data: "select_country_SGP" },
-        { text: "🇳🇿 New Zealand", callback_data: "select_country_NZL" }
+        { text: "🇫🇮 Finland", callback_data: "select_country_FIN" },
+        { text: "🇮🇪 Ireland", callback_data: "select_country_IRL" }
       ],
       [
-        { text: "🇧🇷 Brazil", callback_data: "select_country_BRA" },
-        { text: "🇲🇽 Mexico", callback_data: "select_country_MEX" }
+        { text: "🇵🇹 Portugal", callback_data: "select_country_PRT" },
+        { text: "🇬🇷 Greece", callback_data: "select_country_GRC" }
+      ],
+      [
+        { text: "🇵🇱 Poland", callback_data: "select_country_POL" },
+        { text: "🇨🇿 Czech Republic", callback_data: "select_country_CZE" }
+      ],
+      [
+        { text: "🇭🇺 Hungary", callback_data: "select_country_HUN" },
+        { text: "🇷🇴 Romania", callback_data: "select_country_ROU" }
+      ],
+      [
+        { text: "🇧🇬 Bulgaria", callback_data: "select_country_BGR" },
+        { text: "🇹🇷 Turkey", callback_data: "select_country_TUR" }
+      ],
+      // Navigation
+      [
+        { text: "🌏 Show Asia & Middle East", callback_data: "show_asia_countries" }
       ],
       [
         { text: "🔙 Back to Main Countries", callback_data: "main_menu" }
       ],
       [
-        { text: "🌎 Other Country", callback_data: "country_selection_other" }
+        { text: "🌎 Type Your Country", callback_data: "country_selection_other" }
       ]
     ]
   };
@@ -10417,11 +10453,72 @@ Select your country from the expanded list below:`;
   await ctx.replyWithMarkdown(moreCountriesMessage, { reply_markup: keyboard });
 }
 
-// Handle other country selection
+// Handle other country selection - prompt for custom input
 async function handleOtherCountrySelection(ctx) {
+  await ctx.answerCbQuery('Type your country name');
+
+  // Set session to await custom country input
+  ctx.session.awaitingCustomCountry = true;
+
+  const customCountryMessage = `🌎 **TYPE YOUR COUNTRY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📍 CUSTOM COUNTRY ENTRY**
+
+Your country is not listed in our predefined options? No problem!
+
+**✍️ PLEASE TYPE YOUR COUNTRY NAME:**
+
+Simply type the name of your country below and we'll save it for you.
+
+**📋 EXAMPLES:**
+• "Switzerland"
+• "New Zealand"
+• "Costa Rica"
+• "Luxembourg"
+
+**💡 TIPS:**
+• Use the full country name
+• Check spelling for accuracy
+• This will be used for compliance purposes
+
+**✍️ Type your country name now:**`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🔙 Back to Country Selection", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(customCountryMessage, { reply_markup: keyboard });
+}
+
+// Handle custom country input
+async function handleCustomCountryInput(ctx, countryName) {
   const user = ctx.from;
 
   try {
+    // Clear the awaiting state
+    ctx.session.awaitingCustomCountry = false;
+
+    // Validate country name
+    if (!countryName || countryName.trim().length < 2) {
+      await ctx.reply('❌ Please enter a valid country name (at least 2 characters).');
+      ctx.session.awaitingCustomCountry = true; // Keep waiting
+      return;
+    }
+
+    if (!/^[a-zA-Z\s\-'\.]+$/.test(countryName.trim())) {
+      await ctx.reply('❌ Country name can only contain letters, spaces, hyphens, apostrophes, and periods.');
+      ctx.session.awaitingCustomCountry = true; // Keep waiting
+      return;
+    }
+
+    const cleanCountryName = countryName.trim();
+
     // Get user from database
     const { data: telegramUser, error: userError } = await db.client
       .from('telegram_users')
@@ -10430,16 +10527,16 @@ async function handleOtherCountrySelection(ctx) {
       .single();
 
     if (userError || !telegramUser) {
-      await ctx.answerCbQuery('❌ User not found');
+      await ctx.reply('❌ User not found. Please try again.');
       return;
     }
 
-    // Set "Other" as country
+    // Save custom country
     const { error: updateError } = await db.client
       .from('users')
       .update({
         country_of_residence: 'OTH',
-        country_name: 'Other Country',
+        country_name: cleanCountryName,
         country_selection_completed: true,
         country_selected_at: new Date().toISOString(),
         country_updated_at: new Date().toISOString(),
@@ -10448,37 +10545,35 @@ async function handleOtherCountrySelection(ctx) {
       .eq('id', telegramUser.user_id);
 
     if (updateError) {
-      console.error('Error updating user country to Other:', updateError);
-      await ctx.answerCbQuery('❌ Error saving country selection');
+      console.error('Error updating user custom country:', updateError);
+      await ctx.reply('❌ Error saving country selection. Please try again.');
       return;
     }
 
     // Log country change
-    await logCountryChange(telegramUser.user_id, null, null, 'OTH', 'Other Country', user.id, user.username, 'initial_selection');
-
-    await ctx.answerCbQuery('🌍 Other Country selected');
+    await logCountryChange(telegramUser.user_id, null, null, 'OTH', cleanCountryName, user.id, user.username, 'custom_entry');
 
     // Show confirmation message
-    const confirmationMessage = `✅ **COUNTRY SELECTED: OTHER**
+    const confirmationMessage = `✅ **COUNTRY SAVED SUCCESSFULLY**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **🌍 COUNTRY OF RESIDENCE CONFIRMED**
 
-🌎 **Other Country**
+🌎 **${cleanCountryName}**
 
 **📋 REGISTRATION COMPLETE:**
 • Country selection: ✅ Completed
 • Compliance status: ✅ Updated
 • Account setup: ✅ Finalized
 
-**💡 SPECIFIC COUNTRY NEEDED?**
-If you need to specify your exact country for compliance purposes, please contact our support team.
-
 **🎯 WHAT'S NEXT:**
 • Explore our gold mining investment opportunities
 • Review company presentation and mining operations
 • Start your investment journey with confidence
+
+**💡 NEED TO CHANGE?**
+You can update your country selection later through the settings menu.
 
 **🏆 Welcome to Aureus Alliance Holdings!**`;
 
@@ -10487,26 +10582,186 @@ If you need to specify your exact country for compliance purposes, please contac
         inline_keyboard: [
           [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
           [{ text: "📋 Company Presentation", callback_data: "menu_presentation" }],
-          [{ text: "📞 Contact Support", callback_data: "menu_help" }],
           [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
         ]
       }
     });
 
   } catch (error) {
-    console.error('Error handling other country selection:', error);
-    await ctx.answerCbQuery('❌ Error processing country selection');
+    console.error('Error handling custom country input:', error);
+    await ctx.reply('❌ Error processing country input. Please try again.');
+    ctx.session.awaitingCustomCountry = true; // Keep waiting for retry
   }
+}
+
+// Show Asia & Middle East countries
+async function showAsiaCountries(ctx) {
+  const asiaMessage = `🌏 **ASIA & MIDDLE EAST COUNTRIES**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📍 SELECT YOUR COUNTRY:**`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🇯🇵 Japan", callback_data: "select_country_JPN" },
+        { text: "🇰🇷 South Korea", callback_data: "select_country_KOR" }
+      ],
+      [
+        { text: "🇨🇳 China", callback_data: "select_country_CHN" },
+        { text: "🇸🇬 Singapore", callback_data: "select_country_SGP" }
+      ],
+      [
+        { text: "🇭🇰 Hong Kong", callback_data: "select_country_HKG" },
+        { text: "🇹🇭 Thailand", callback_data: "select_country_THA" }
+      ],
+      [
+        { text: "🇲🇾 Malaysia", callback_data: "select_country_MYS" },
+        { text: "🇮🇩 Indonesia", callback_data: "select_country_IDN" }
+      ],
+      [
+        { text: "🇵🇭 Philippines", callback_data: "select_country_PHL" },
+        { text: "🇻🇳 Vietnam", callback_data: "select_country_VNM" }
+      ],
+      [
+        { text: "🇧🇩 Bangladesh", callback_data: "select_country_BGD" },
+        { text: "🇱🇰 Sri Lanka", callback_data: "select_country_LKA" }
+      ],
+      [
+        { text: "🇳🇵 Nepal", callback_data: "select_country_NPL" },
+        { text: "🇦🇫 Afghanistan", callback_data: "select_country_AFG" }
+      ],
+      [
+        { text: "🇸🇦 Saudi Arabia", callback_data: "select_country_SAU" },
+        { text: "🇶🇦 Qatar", callback_data: "select_country_QAT" }
+      ],
+      [
+        { text: "🇰🇼 Kuwait", callback_data: "select_country_KWT" },
+        { text: "🇧🇭 Bahrain", callback_data: "select_country_BHR" }
+      ],
+      [
+        { text: "🇴🇲 Oman", callback_data: "select_country_OMN" },
+        { text: "🇯🇴 Jordan", callback_data: "select_country_JOR" }
+      ],
+      [
+        { text: "🇱🇧 Lebanon", callback_data: "select_country_LBN" },
+        { text: "🇮🇱 Israel", callback_data: "select_country_ISR" }
+      ],
+      [
+        { text: "🇮🇷 Iran", callback_data: "select_country_IRN" },
+        { text: "🇮🇶 Iraq", callback_data: "select_country_IRQ" }
+      ],
+      [
+        { text: "🌍 Show Africa", callback_data: "show_africa_countries" }
+      ],
+      [
+        { text: "🔙 Back to Europe", callback_data: "show_more_countries" }
+      ],
+      [
+        { text: "🌎 Type Your Country", callback_data: "country_selection_other" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(asiaMessage, { reply_markup: keyboard });
+}
+
+// Show Africa countries
+async function showAfricaCountries(ctx) {
+  const africaMessage = `🌍 **AFRICAN COUNTRIES**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📍 SELECT YOUR COUNTRY:**`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🇪🇬 Egypt", callback_data: "select_country_EGY" },
+        { text: "🇲🇦 Morocco", callback_data: "select_country_MAR" }
+      ],
+      [
+        { text: "🇩🇿 Algeria", callback_data: "select_country_DZA" },
+        { text: "🇹🇳 Tunisia", callback_data: "select_country_TUN" }
+      ],
+      [
+        { text: "🇱🇾 Libya", callback_data: "select_country_LBY" },
+        { text: "🇸🇩 Sudan", callback_data: "select_country_SDN" }
+      ],
+      [
+        { text: "🇪🇹 Ethiopia", callback_data: "select_country_ETH" },
+        { text: "🇰🇪 Kenya", callback_data: "select_country_KEN" }
+      ],
+      [
+        { text: "🇺🇬 Uganda", callback_data: "select_country_UGA" },
+        { text: "🇹🇿 Tanzania", callback_data: "select_country_TZA" }
+      ],
+      [
+        { text: "🇷🇼 Rwanda", callback_data: "select_country_RWA" },
+        { text: "🇬🇭 Ghana", callback_data: "select_country_GHA" }
+      ],
+      [
+        { text: "🇳🇬 Nigeria", callback_data: "select_country_NGA" },
+        { text: "🇸🇳 Senegal", callback_data: "select_country_SEN" }
+      ],
+      [
+        { text: "🇨🇮 Ivory Coast", callback_data: "select_country_CIV" },
+        { text: "🇲🇱 Mali", callback_data: "select_country_MLI" }
+      ],
+      [
+        { text: "🇧🇫 Burkina Faso", callback_data: "select_country_BFA" },
+        { text: "🇳🇪 Niger", callback_data: "select_country_NER" }
+      ],
+      [
+        { text: "🇹🇩 Chad", callback_data: "select_country_TCD" },
+        { text: "🇨🇲 Cameroon", callback_data: "select_country_CMR" }
+      ],
+      [
+        { text: "🇦🇴 Angola", callback_data: "select_country_AGO" },
+        { text: "🇿🇲 Zambia", callback_data: "select_country_ZMB" }
+      ],
+      [
+        { text: "🇿🇼 Zimbabwe", callback_data: "select_country_ZWE" },
+        { text: "🇧🇼 Botswana", callback_data: "select_country_BWA" }
+      ],
+      [
+        { text: "🇳🇦 Namibia", callback_data: "select_country_NAM" },
+        { text: "🇲🇿 Mozambique", callback_data: "select_country_MOZ" }
+      ],
+      [
+        { text: "🇲🇬 Madagascar", callback_data: "select_country_MDG" },
+        { text: "🇲🇺 Mauritius", callback_data: "select_country_MUS" }
+      ],
+      [
+        { text: "🌎 Show Americas", callback_data: "show_americas_countries" }
+      ],
+      [
+        { text: "🔙 Back to Asia", callback_data: "show_asia_countries" }
+      ],
+      [
+        { text: "🌎 Type Your Country", callback_data: "country_selection_other" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(africaMessage, { reply_markup: keyboard });
 }
 
 // Get country information by code
 function getCountryInfo(countryCode) {
   const countries = {
+    // Primary countries
     'ZAF': { name: 'South Africa', flag: '🇿🇦' },
     'USA': { name: 'United States', flag: '🇺🇸' },
     'GBR': { name: 'United Kingdom', flag: '🇬🇧' },
     'CAN': { name: 'Canada', flag: '🇨🇦' },
     'AUS': { name: 'Australia', flag: '🇦🇺' },
+    'ARE': { name: 'United Arab Emirates', flag: '🇦🇪' },
+    'IND': { name: 'India', flag: '🇮🇳' },
+    'PAK': { name: 'Pakistan', flag: '🇵🇰' },
+
+    // Europe
     'DEU': { name: 'Germany', flag: '🇩🇪' },
     'FRA': { name: 'France', flag: '🇫🇷' },
     'ITA': { name: 'Italy', flag: '🇮🇹' },
@@ -10516,12 +10771,93 @@ function getCountryInfo(countryCode) {
     'CHE': { name: 'Switzerland', flag: '🇨🇭' },
     'SWE': { name: 'Sweden', flag: '🇸🇪' },
     'NOR': { name: 'Norway', flag: '🇳🇴' },
+    'DNK': { name: 'Denmark', flag: '🇩🇰' },
+    'FIN': { name: 'Finland', flag: '🇫🇮' },
+    'IRL': { name: 'Ireland', flag: '🇮🇪' },
+    'PRT': { name: 'Portugal', flag: '🇵🇹' },
+    'GRC': { name: 'Greece', flag: '🇬🇷' },
+    'POL': { name: 'Poland', flag: '🇵🇱' },
+    'CZE': { name: 'Czech Republic', flag: '🇨🇿' },
+    'HUN': { name: 'Hungary', flag: '🇭🇺' },
+    'ROU': { name: 'Romania', flag: '🇷🇴' },
+    'BGR': { name: 'Bulgaria', flag: '🇧🇬' },
+    'TUR': { name: 'Turkey', flag: '🇹🇷' },
+
+    // Asia-Pacific
     'JPN': { name: 'Japan', flag: '🇯🇵' },
     'KOR': { name: 'South Korea', flag: '🇰🇷' },
+    'CHN': { name: 'China', flag: '🇨🇳' },
     'SGP': { name: 'Singapore', flag: '🇸🇬' },
+    'HKG': { name: 'Hong Kong', flag: '🇭🇰' },
     'NZL': { name: 'New Zealand', flag: '🇳🇿' },
+    'THA': { name: 'Thailand', flag: '🇹🇭' },
+    'MYS': { name: 'Malaysia', flag: '🇲🇾' },
+    'IDN': { name: 'Indonesia', flag: '🇮🇩' },
+    'PHL': { name: 'Philippines', flag: '🇵🇭' },
+    'VNM': { name: 'Vietnam', flag: '🇻🇳' },
+    'BGD': { name: 'Bangladesh', flag: '🇧🇩' },
+    'LKA': { name: 'Sri Lanka', flag: '🇱🇰' },
+    'NPL': { name: 'Nepal', flag: '🇳🇵' },
+    'AFG': { name: 'Afghanistan', flag: '🇦🇫' },
+
+    // Middle East
+    'SAU': { name: 'Saudi Arabia', flag: '🇸🇦' },
+    'QAT': { name: 'Qatar', flag: '🇶🇦' },
+    'KWT': { name: 'Kuwait', flag: '🇰🇼' },
+    'BHR': { name: 'Bahrain', flag: '🇧🇭' },
+    'OMN': { name: 'Oman', flag: '🇴🇲' },
+    'JOR': { name: 'Jordan', flag: '🇯🇴' },
+    'LBN': { name: 'Lebanon', flag: '🇱🇧' },
+    'ISR': { name: 'Israel', flag: '🇮🇱' },
+    'IRN': { name: 'Iran', flag: '🇮🇷' },
+    'IRQ': { name: 'Iraq', flag: '🇮🇶' },
+
+    // Africa
+    'EGY': { name: 'Egypt', flag: '🇪🇬' },
+    'MAR': { name: 'Morocco', flag: '🇲🇦' },
+    'DZA': { name: 'Algeria', flag: '🇩🇿' },
+    'TUN': { name: 'Tunisia', flag: '🇹🇳' },
+    'LBY': { name: 'Libya', flag: '🇱🇾' },
+    'SDN': { name: 'Sudan', flag: '🇸🇩' },
+    'ETH': { name: 'Ethiopia', flag: '🇪🇹' },
+    'KEN': { name: 'Kenya', flag: '🇰🇪' },
+    'UGA': { name: 'Uganda', flag: '🇺🇬' },
+    'TZA': { name: 'Tanzania', flag: '🇹🇿' },
+    'RWA': { name: 'Rwanda', flag: '🇷🇼' },
+    'GHA': { name: 'Ghana', flag: '🇬🇭' },
+    'NGA': { name: 'Nigeria', flag: '🇳🇬' },
+    'SEN': { name: 'Senegal', flag: '🇸🇳' },
+    'CIV': { name: 'Ivory Coast', flag: '🇨🇮' },
+    'MLI': { name: 'Mali', flag: '🇲🇱' },
+    'BFA': { name: 'Burkina Faso', flag: '🇧🇫' },
+    'NER': { name: 'Niger', flag: '🇳🇪' },
+    'TCD': { name: 'Chad', flag: '🇹🇩' },
+    'CMR': { name: 'Cameroon', flag: '🇨🇲' },
+    'AGO': { name: 'Angola', flag: '🇦🇴' },
+    'ZMB': { name: 'Zambia', flag: '🇿🇲' },
+    'ZWE': { name: 'Zimbabwe', flag: '🇿🇼' },
+    'BWA': { name: 'Botswana', flag: '🇧🇼' },
+    'NAM': { name: 'Namibia', flag: '🇳🇦' },
+    'MOZ': { name: 'Mozambique', flag: '🇲🇿' },
+    'MDG': { name: 'Madagascar', flag: '🇲🇬' },
+    'MUS': { name: 'Mauritius', flag: '🇲🇺' },
+
+    // Americas
     'BRA': { name: 'Brazil', flag: '🇧🇷' },
     'MEX': { name: 'Mexico', flag: '🇲🇽' },
+    'ARG': { name: 'Argentina', flag: '🇦🇷' },
+    'CHL': { name: 'Chile', flag: '🇨🇱' },
+    'COL': { name: 'Colombia', flag: '🇨🇴' },
+    'PER': { name: 'Peru', flag: '🇵🇪' },
+    'VEN': { name: 'Venezuela', flag: '🇻🇪' },
+    'ECU': { name: 'Ecuador', flag: '🇪🇨' },
+    'BOL': { name: 'Bolivia', flag: '🇧🇴' },
+    'PRY': { name: 'Paraguay', flag: '🇵🇾' },
+    'URY': { name: 'Uruguay', flag: '🇺🇾' },
+    'GUY': { name: 'Guyana', flag: '🇬🇾' },
+    'SUR': { name: 'Suriname', flag: '🇸🇷' },
+
+    // Other
     'OTH': { name: 'Other Country', flag: '🌎' }
   };
 

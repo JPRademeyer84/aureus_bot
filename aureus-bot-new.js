@@ -1300,7 +1300,7 @@ To proceed with Aureus Alliance Holdings, you need a sponsor. This ensures prope
 If someone referred you, enter their username below.
 
 **2️⃣ NO SPONSOR AVAILABLE**
-We'll assign TTTFOUNDER as your default sponsor.
+You can continue without a sponsor and join directly.
 
 **💡 WHY SPONSORS MATTER:**
 • Personalized investment guidance
@@ -1316,7 +1316,7 @@ We'll assign TTTFOUNDER as your default sponsor.
     reply_markup: {
       inline_keyboard: [
         [{ text: "✍️ Enter Sponsor Username", callback_data: "enter_sponsor_manual" }],
-        [{ text: "🤝 Use Default Sponsor (TTTFOUNDER)", callback_data: "assign_default_sponsor" }],
+        [{ text: "🚫 I Don't Have A Sponsor", callback_data: "assign_default_sponsor" }],
         [{ text: "ℹ️ Learn About Referral System", callback_data: "menu_referrals" }]
       ]
     }
@@ -4143,13 +4143,13 @@ The username "${sponsorUsername}" was not found in our system.
 **🎯 OPTIONS:**
 • Check the spelling and try again
 • Ask your sponsor to register first
-• Use default sponsor (TTTFOUNDER)`;
+• Continue without a sponsor`;
 
       await ctx.replyWithMarkdown(notFoundMessage, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "✍️ Try Again", callback_data: "enter_sponsor_manual" }],
-            [{ text: "🤝 Use Default Sponsor", callback_data: "assign_default_sponsor" }]
+            [{ text: "🚫 I Don't Have A Sponsor", callback_data: "assign_default_sponsor" }]
           ]
         }
       });

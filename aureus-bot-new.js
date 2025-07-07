@@ -6671,7 +6671,11 @@ async function handleConfirmPurchase(ctx, callbackData) {
     // Check if bank transfer payment method is selected
     const selectedPaymentMethod = ctx.session.selectedPaymentMethod || 'usdt';
 
+    console.log(`🔍 [DEBUG] handleConfirmPurchase - selectedPaymentMethod: ${selectedPaymentMethod}`);
+    console.log(`🔍 [DEBUG] handleConfirmPurchase - session:`, ctx.session);
+
     if (selectedPaymentMethod === 'bank_transfer') {
+      console.log(`🔍 [DEBUG] handleConfirmPurchase - Processing bank transfer for amount: ${totalCost}`);
       // Handle bank transfer payment
       await handleBankTransferConfirmation(ctx, telegramUser, amount, totalCost, sharesAmount, currentPhase);
       return;
@@ -11081,8 +11085,12 @@ function calculateZARAmount(usdAmount) {
 // Handle bank transfer payment confirmation
 async function handleBankTransferConfirmation(ctx, telegramUser, originalAmount, totalCost, sharesAmount, currentPhase) {
   try {
+    console.log(`🔍 [DEBUG] handleBankTransferConfirmation - Starting bank transfer for user: ${telegramUser.username}`);
+    console.log(`🔍 [DEBUG] handleBankTransferConfirmation - Amount: ${totalCost}, Shares: ${sharesAmount}`);
+
     // Calculate ZAR amounts with 10% fee
     const zarCalculation = calculateZARAmount(totalCost);
+    console.log(`🔍 [DEBUG] handleBankTransferConfirmation - ZAR calculation:`, zarCalculation);
 
     // Create bank transfer payment transaction
     const { data: payment, error: paymentError } = await db.client

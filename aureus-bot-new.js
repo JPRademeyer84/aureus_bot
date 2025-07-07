@@ -870,6 +870,9 @@ function createMainMenuKeyboard(isAdmin = false) {
       { text: "📋 Company Presentation", callback_data: "menu_presentation" }
     ],
     [
+      { text: "📋 Legal Documents", callback_data: "menu_legal_documents" }
+    ],
+    [
       { text: "⛏️ Mining Operations", callback_data: "menu_mining_operations" },
       { text: "🏘️ Community Relations", callback_data: "menu_community" }
     ],
@@ -1768,6 +1771,10 @@ bot.on('callback_query', async (ctx) => {
         await handleCommunityRelations(ctx);
         break;
 
+      case 'menu_legal_documents':
+        await handleLegalDocuments(ctx);
+        break;
+
       case 'menu_help':
         await handleSupportCenter(ctx);
         break;
@@ -1999,6 +2006,12 @@ bot.on('callback_query', async (ctx) => {
           await ctx.answerCbQuery("🚧 ETH payments coming soon!");
         } else if (callbackData.startsWith('usdt_network_')) {
           await handleUSDTNetworkSelection(ctx, callbackData);
+        } else if (callbackData === 'accept_nda') {
+          await handleNDAAcceptance(ctx);
+        } else if (callbackData === 'decline_nda') {
+          await handleNDADecline(ctx);
+        } else if (callbackData.startsWith('view_document_')) {
+          await handleDocumentView(ctx, callbackData);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");
         }
@@ -9013,6 +9026,391 @@ async function handleCopyReferral(ctx, callbackData) {
       ]
     }
   });
+}
+
+// LEGAL DOCUMENTS SYSTEM
+// Handle legal documents menu
+async function handleLegalDocuments(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Check if user has accepted NDA
+    const hasNDA = await checkNDAAcceptance(user.id);
+
+    if (!hasNDA) {
+      await showNDAAcceptance(ctx);
+      return;
+    }
+
+    // Show legal documents menu
+    await showLegalDocumentsMenu(ctx);
+
+  } catch (error) {
+    console.error('Error handling legal documents:', error);
+    await ctx.replyWithMarkdown('❌ **Error accessing legal documents**\n\nPlease try again or contact support.');
+  }
+}
+
+// Check if user has accepted NDA
+async function checkNDAAcceptance(telegramUserId) {
+  try {
+    // Get user from database
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', telegramUserId)
+      .single();
+
+    if (userError || !telegramUser) {
+      return false;
+    }
+
+    // Check NDA acceptance
+    const { data: ndaAcceptance, error: ndaError } = await db.client
+      .from('nda_acceptances')
+      .select('id')
+      .eq('user_id', telegramUser.user_id)
+      .single();
+
+    return !ndaError && ndaAcceptance;
+
+  } catch (error) {
+    console.error('Error checking NDA acceptance:', error);
+    return false;
+  }
+}
+
+// Show NDA acceptance screen
+async function showNDAAcceptance(ctx) {
+  const ndaMessage = `🔒 **NON-DISCLOSURE AGREEMENT (NDA)**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**⚠️ CONFIDENTIAL LEGAL DOCUMENTS ACCESS**
+
+To access Aureus Alliance Holdings' legal documents, you must first accept our Non-Disclosure Agreement.
+
+**📋 NDA TERMS:**
+
+**1. CONFIDENTIALITY OBLIGATION**
+• All documents contain proprietary and confidential information
+• Information may not be shared, copied, or distributed
+• Documents are for your personal review only
+
+**2. PERMITTED USE**
+• Review for investment decision purposes only
+• Verify company legitimacy and compliance
+• Assess business operations and financial standing
+
+**3. PROHIBITED ACTIONS**
+• Sharing documents with third parties
+• Public disclosure of confidential information
+• Commercial use of proprietary data
+• Reproduction or distribution of materials
+
+**4. LEGAL CONSEQUENCES**
+• Breach may result in legal action
+• Damages and injunctive relief may be sought
+• Agreement governed by South African law
+
+**🔐 SECURITY NOTICE:**
+• Document access is logged and monitored
+• Your acceptance is legally binding
+• Timestamp and user details are recorded
+
+**⚖️ By accepting, you agree to be bound by these terms and acknowledge that violation may result in legal consequences.**`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "✅ I Accept the NDA Terms", callback_data: "accept_nda" }
+      ],
+      [
+        { text: "❌ I Decline", callback_data: "decline_nda" }
+      ],
+      [
+        { text: "🏠 Back to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(ndaMessage, { reply_markup: keyboard });
+}
+
+// Show legal documents menu
+async function showLegalDocumentsMenu(ctx) {
+  const documentsMessage = `📋 **LEGAL DOCUMENTS CENTER**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔒 CONFIDENTIAL BUSINESS DOCUMENTS**
+
+Access to official company registration, tax compliance, banking, and operational documentation.
+
+**📑 AVAILABLE DOCUMENTS:**
+
+**🏢 Company Registration**
+Official CIPC registration certificate proving legal entity status
+
+**💼 Tax Compliance**
+SARS tax registration demonstrating regulatory compliance
+
+**🏦 Banking Verification**
+FNB bank confirmation validating financial infrastructure
+
+**⛏️ Geological Assessment**
+Professional gold placer analysis and operational report
+
+**⚠️ CONFIDENTIALITY REMINDER:**
+These documents contain proprietary information protected under your signed NDA. Unauthorized sharing is prohibited.
+
+**📊 ACCESS LOG:**
+Your document access is monitored and recorded for security purposes.`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🏢 CIPC Registration Certificate", callback_data: "view_document_cipc" }
+      ],
+      [
+        { text: "💼 SARS Tax Registration", callback_data: "view_document_sars" }
+      ],
+      [
+        { text: "🏦 FNB Bank Confirmation", callback_data: "view_document_fnb" }
+      ],
+      [
+        { text: "⛏️ Ubuntu Afrique Placer Report", callback_data: "view_document_placer" }
+      ],
+      [
+        { text: "🏠 Back to Dashboard", callback_data: "main_menu" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(documentsMessage, { reply_markup: keyboard });
+}
+
+// Handle NDA acceptance
+async function handleNDAAcceptance(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user from database
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (userError || !telegramUser) {
+      await ctx.answerCbQuery('❌ User not found');
+      return;
+    }
+
+    // Record NDA acceptance
+    const { error: ndaError } = await db.client
+      .from('nda_acceptances')
+      .insert({
+        user_id: telegramUser.user_id,
+        telegram_user_id: user.id,
+        username: user.username || null,
+        full_name: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
+        accepted_at: new Date().toISOString()
+      });
+
+    if (ndaError) {
+      console.error('Error recording NDA acceptance:', ndaError);
+      await ctx.answerCbQuery('❌ Error recording acceptance');
+      return;
+    }
+
+    await ctx.answerCbQuery('✅ NDA Accepted');
+
+    // Show success message and legal documents menu
+    const successMessage = `✅ **NDA ACCEPTED SUCCESSFULLY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔒 CONFIDENTIALITY AGREEMENT CONFIRMED**
+
+• **Accepted:** ${new Date().toLocaleString()}
+• **User:** ${user.first_name} (@${user.username || 'N/A'})
+• **Status:** Legally Binding
+
+**📋 You now have access to confidential legal documents.**
+
+**⚠️ REMINDER:** All documents are confidential and protected under the NDA you just accepted. Unauthorized sharing is prohibited.`;
+
+    await ctx.replyWithMarkdown(successMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 View Legal Documents", callback_data: "menu_legal_documents" }],
+          [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling NDA acceptance:', error);
+    await ctx.answerCbQuery('❌ Error processing acceptance');
+  }
+}
+
+// Handle NDA decline
+async function handleNDADecline(ctx) {
+  await ctx.answerCbQuery('NDA Declined');
+
+  const declineMessage = `❌ **NDA DECLINED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🔒 ACCESS DENIED**
+
+You have declined to accept the Non-Disclosure Agreement.
+
+**📋 CONSEQUENCES:**
+• Cannot access confidential legal documents
+• Company registration and compliance documents unavailable
+• Banking and operational reports restricted
+
+**💡 ALTERNATIVE OPTIONS:**
+• Review public company information
+• Contact support for general inquiries
+• Accept NDA later to gain document access
+
+**🔄 You can return to accept the NDA at any time through the Legal Documents menu.**`;
+
+  await ctx.replyWithMarkdown(declineMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🔄 Reconsider NDA", callback_data: "menu_legal_documents" }],
+        [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+// Handle document viewing
+async function handleDocumentView(ctx, callbackData) {
+  const user = ctx.from;
+  const documentType = callbackData.split('_')[2]; // Extract document type from callback
+
+  try {
+    // Verify NDA acceptance
+    const hasNDA = await checkNDAAcceptance(user.id);
+
+    if (!hasNDA) {
+      await ctx.answerCbQuery('❌ NDA required for document access');
+      await showNDAAcceptance(ctx);
+      return;
+    }
+
+    // Document configuration
+    const documents = {
+      'cipc': {
+        name: 'CIPC Registration Certificate',
+        url: 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets//cipc.pdf',
+        description: 'Official company registration from Companies and Intellectual Property Commission',
+        icon: '🏢'
+      },
+      'sars': {
+        name: 'SARS Tax Registration',
+        url: 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets//sars.pdf',
+        description: 'South African Revenue Service tax registration documentation',
+        icon: '💼'
+      },
+      'fnb': {
+        name: 'FNB Bank Confirmation',
+        url: 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets//fnb.pdf',
+        description: 'Official bank account confirmation from First National Bank',
+        icon: '🏦'
+      },
+      'placer': {
+        name: 'Ubuntu Afrique Placer Report',
+        url: 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets//Ubuntu_Afrique_Kadoma_Placer_Report.pdf',
+        description: 'Professional geological assessment and gold placer analysis report',
+        icon: '⛏️'
+      }
+    };
+
+    const document = documents[documentType];
+
+    if (!document) {
+      await ctx.answerCbQuery('❌ Document not found');
+      return;
+    }
+
+    // Log document access
+    await logDocumentAccess(user.id, documentType, document.url, user.username);
+
+    await ctx.answerCbQuery(`📄 Opening ${document.name}`);
+
+    // Send document access message
+    const accessMessage = `📄 **DOCUMENT ACCESS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${document.icon} **${document.name}**
+
+**📋 Description:** ${document.description}
+
+**🔒 Confidentiality Notice:** This document is protected under your signed NDA. Unauthorized sharing is prohibited.
+
+**📊 Access Logged:** ${new Date().toLocaleString()}
+
+**📱 Click the button below to open the document in your browser/PDF viewer:**`;
+
+    await ctx.replyWithMarkdown(accessMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: `📄 Open ${document.name}`, url: document.url }],
+          [{ text: "📋 Back to Legal Documents", callback_data: "menu_legal_documents" }],
+          [{ text: "🏠 Back to Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling document view:', error);
+    await ctx.answerCbQuery('❌ Error accessing document');
+  }
+}
+
+// Log document access
+async function logDocumentAccess(telegramUserId, documentType, documentUrl, username) {
+  try {
+    // Get user from database
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', telegramUserId)
+      .single();
+
+    if (userError || !telegramUser) {
+      console.error('Error getting user for document access log:', userError);
+      return;
+    }
+
+    // Log the access
+    const { error: logError } = await db.client
+      .from('document_access_logs')
+      .insert({
+        user_id: telegramUser.user_id,
+        document_type: documentType,
+        document_url: documentUrl,
+        telegram_user_id: telegramUserId,
+        username: username || null,
+        has_nda_acceptance: true,
+        accessed_at: new Date().toISOString()
+      });
+
+    if (logError) {
+      console.error('Error logging document access:', logError);
+    }
+
+  } catch (error) {
+    console.error('Error in logDocumentAccess:', error);
+  }
 }
 
 // Helper function to get network display information

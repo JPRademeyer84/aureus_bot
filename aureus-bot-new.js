@@ -3168,11 +3168,6 @@ Your conversion request has been submitted to the admin for approval. You will b
           available_commission: availableUSDT.toFixed(2),
           phase: phase.phase_number
         }, 'medium'); // Medium priority for commission conversions
-              ],
-              [{ text: "👥 View All Requests", callback_data: "admin_commission_conversions" }]
-            ]
-          }
-        });
       } else {
         console.log('📝 Admin testing conversion - skipping self-notification');
       }

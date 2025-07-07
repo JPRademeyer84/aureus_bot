@@ -1122,6 +1122,10 @@ Let's get started with your gold mining investment!`;
       }
     });
 
+    // TRIGGER COUNTRY SELECTION FOR NEW USERS
+    console.log(`🌍 [COUNTRY] Checking country selection status for new user ${user.id}...`);
+    await triggerCountrySelectionIfNeeded(user.id);
+
   } catch (error) {
     console.error('Referral registration error:', error);
     await ctx.reply("❌ Error processing referral registration. Please try again.");
@@ -1471,6 +1475,14 @@ async function showMainMenu(ctx) {
   const hasSponsor = await checkUserHasSponsor(authenticatedUser.id);
   if (!hasSponsor) {
     await promptSponsorAssignment(ctx);
+    return;
+  }
+
+  // Check if user has selected country (required for new users)
+  const hasSelectedCountry = await checkCountrySelection(authenticatedUser.id);
+  if (!hasSelectedCountry) {
+    console.log(`🌍 [COUNTRY] User ${authenticatedUser.id} has not selected country - showing country selection`);
+    await showCountrySelection(ctx);
     return;
   }
 
@@ -2020,6 +2032,12 @@ bot.on('callback_query', async (ctx) => {
           await handleKYCLater(ctx);
         } else if (callbackData.startsWith('kyc_')) {
           await handleKYCStep(ctx, callbackData);
+        } else if (callbackData.startsWith('select_country_')) {
+          await handleCountrySelection(ctx, callbackData);
+        } else if (callbackData === 'show_more_countries') {
+          await showMoreCountries(ctx);
+        } else if (callbackData === 'country_selection_other') {
+          await handleOtherCountrySelection(ctx);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");
         }
@@ -10081,6 +10099,461 @@ Choose the document type that matches what you'll provide for verification.`;
   };
 
   await ctx.replyWithMarkdown(idTypeMessage, { reply_markup: keyboard });
+}
+
+// COUNTRY SELECTION SYSTEM
+// Trigger country selection if needed
+async function triggerCountrySelectionIfNeeded(userId) {
+  try {
+    console.log(`🌍 [COUNTRY] Checking country selection status for user ID: ${userId}`);
+
+    // Check if user has already selected country
+    const hasSelectedCountry = await checkCountrySelection(userId);
+
+    if (hasSelectedCountry) {
+      console.log(`✅ [COUNTRY] User ${userId} already has selected country - skipping selection`);
+      return;
+    }
+
+    console.log(`🌍 [COUNTRY] User ${userId} needs to select country - triggering selection`);
+
+    // Get user's Telegram ID to send country selection request
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('telegram_id, username')
+      .eq('user_id', userId)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      console.error('❌ [COUNTRY] Error getting user Telegram ID:', telegramError);
+      return;
+    }
+
+    // Send country selection request to user
+    await sendCountrySelectionRequest(telegramUser.telegram_id, telegramUser.username);
+
+  } catch (error) {
+    console.error('❌ [COUNTRY] Error in triggerCountrySelectionIfNeeded:', error);
+  }
+}
+
+// Check if user has selected country
+async function checkCountrySelection(userId) {
+  try {
+    const { data: userData, error: userError } = await db.client
+      .from('users')
+      .select('country_selection_completed, country_of_residence')
+      .eq('id', userId)
+      .single();
+
+    if (userError) {
+      console.error('❌ [COUNTRY] Error checking country selection:', userError);
+      return false;
+    }
+
+    return userData.country_selection_completed && userData.country_of_residence;
+
+  } catch (error) {
+    console.error('❌ [COUNTRY] Error checking country selection:', error);
+    return false;
+  }
+}
+
+// Send country selection request to user
+async function sendCountrySelectionRequest(telegramId, username) {
+  try {
+    console.log(`🌍 [COUNTRY] Sending country selection request to user ${username} (${telegramId})`);
+
+    const countryMessage = `🌍 **SELECT YOUR COUNTRY OF RESIDENCE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📍 COUNTRY SELECTION REQUIRED**
+
+To complete your registration and ensure compliance with international regulations, please select your country of residence.
+
+**🔍 WHY WE NEED THIS:**
+• Regulatory compliance and legal requirements
+• Tax reporting and documentation
+• Country-specific investment regulations
+• Proper customer verification (KYC)
+• Certificate generation and delivery
+
+**🌍 SELECT YOUR COUNTRY:**
+Choose from the most common countries below, or select "Show More Countries" for additional options.
+
+**🔒 PRIVACY:**
+Your country information is securely stored and used only for compliance and service delivery purposes.`;
+
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: "🇿🇦 South Africa", callback_data: "select_country_ZAF" },
+          { text: "🇺🇸 United States", callback_data: "select_country_USA" }
+        ],
+        [
+          { text: "🇬🇧 United Kingdom", callback_data: "select_country_GBR" },
+          { text: "🇨🇦 Canada", callback_data: "select_country_CAN" }
+        ],
+        [
+          { text: "🇦🇺 Australia", callback_data: "select_country_AUS" },
+          { text: "🇩🇪 Germany", callback_data: "select_country_DEU" }
+        ],
+        [
+          { text: "🌍 Show More Countries", callback_data: "show_more_countries" }
+        ],
+        [
+          { text: "🌎 Other Country", callback_data: "country_selection_other" }
+        ]
+      ]
+    };
+
+    // Send country selection message
+    await sendAudioNotificationToUser(
+      telegramId,
+      countryMessage,
+      'COUNTRY',
+      {
+        reply_markup: keyboard
+      },
+      true // Enable audio notification for country selection
+    );
+
+    console.log(`✅ [COUNTRY] Country selection request sent successfully to user ${username}`);
+
+  } catch (error) {
+    console.error('❌ [COUNTRY] Error sending country selection request:', error);
+  }
+}
+
+// Show country selection menu
+async function showCountrySelection(ctx) {
+  const countryMessage = `🌍 **SELECT YOUR COUNTRY OF RESIDENCE**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📍 COUNTRY SELECTION REQUIRED**
+
+To complete your registration and ensure compliance with international regulations, please select your country of residence.
+
+**🔍 WHY WE NEED THIS:**
+• Regulatory compliance and legal requirements
+• Tax reporting and documentation
+• Country-specific investment regulations
+• Proper customer verification (KYC)
+• Certificate generation and delivery
+
+**🌍 SELECT YOUR COUNTRY:**
+Choose from the most common countries below, or select "Show More Countries" for additional options.
+
+**🔒 PRIVACY:**
+Your country information is securely stored and used only for compliance and service delivery purposes.`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🇿🇦 South Africa", callback_data: "select_country_ZAF" },
+        { text: "🇺🇸 United States", callback_data: "select_country_USA" }
+      ],
+      [
+        { text: "🇬🇧 United Kingdom", callback_data: "select_country_GBR" },
+        { text: "🇨🇦 Canada", callback_data: "select_country_CAN" }
+      ],
+      [
+        { text: "🇦🇺 Australia", callback_data: "select_country_AUS" },
+        { text: "🇩🇪 Germany", callback_data: "select_country_DEU" }
+      ],
+      [
+        { text: "🌍 Show More Countries", callback_data: "show_more_countries" }
+      ],
+      [
+        { text: "🌎 Other Country", callback_data: "country_selection_other" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(countryMessage, { reply_markup: keyboard });
+}
+
+// Handle country selection
+async function handleCountrySelection(ctx, callbackData) {
+  const user = ctx.from;
+  const countryCode = callbackData.replace('select_country_', '');
+
+  try {
+    // Get user from database
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (userError || !telegramUser) {
+      await ctx.answerCbQuery('❌ User not found');
+      return;
+    }
+
+    // Get country information
+    const countryInfo = getCountryInfo(countryCode);
+
+    if (!countryInfo) {
+      await ctx.answerCbQuery('❌ Invalid country selection');
+      return;
+    }
+
+    // Update user's country
+    const { error: updateError } = await db.client
+      .from('users')
+      .update({
+        country_of_residence: countryCode,
+        country_name: countryInfo.name,
+        country_selection_completed: true,
+        country_selected_at: new Date().toISOString(),
+        country_updated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', telegramUser.user_id);
+
+    if (updateError) {
+      console.error('Error updating user country:', updateError);
+      await ctx.answerCbQuery('❌ Error saving country selection');
+      return;
+    }
+
+    // Log country change
+    await logCountryChange(telegramUser.user_id, null, null, countryCode, countryInfo.name, user.id, user.username, 'initial_selection');
+
+    await ctx.answerCbQuery(`${countryInfo.flag} ${countryInfo.name} selected`);
+
+    // Show confirmation message
+    const confirmationMessage = `✅ **COUNTRY SELECTED SUCCESSFULLY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🌍 COUNTRY OF RESIDENCE CONFIRMED**
+
+${countryInfo.flag} **${countryInfo.name}**
+
+**📋 REGISTRATION COMPLETE:**
+• Country selection: ✅ Completed
+• Compliance status: ✅ Updated
+• Account setup: ✅ Finalized
+
+**🎯 WHAT'S NEXT:**
+• Explore our gold mining investment opportunities
+• Review company presentation and mining operations
+• Start your investment journey with confidence
+
+**💡 NEED TO CHANGE?**
+You can update your country selection later through the settings menu.
+
+**🏆 Welcome to Aureus Alliance Holdings!**`;
+
+    await ctx.replyWithMarkdown(confirmationMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
+          [{ text: "📋 Company Presentation", callback_data: "menu_presentation" }],
+          [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling country selection:', error);
+    await ctx.answerCbQuery('❌ Error processing country selection');
+  }
+}
+
+// Show more countries
+async function showMoreCountries(ctx) {
+  const moreCountriesMessage = `🌍 **MORE COUNTRIES**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📍 ADDITIONAL COUNTRY OPTIONS**
+
+Select your country from the expanded list below:`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🇫🇷 France", callback_data: "select_country_FRA" },
+        { text: "🇮🇹 Italy", callback_data: "select_country_ITA" }
+      ],
+      [
+        { text: "🇪🇸 Spain", callback_data: "select_country_ESP" },
+        { text: "🇳🇱 Netherlands", callback_data: "select_country_NLD" }
+      ],
+      [
+        { text: "🇧🇪 Belgium", callback_data: "select_country_BEL" },
+        { text: "🇨🇭 Switzerland", callback_data: "select_country_CHE" }
+      ],
+      [
+        { text: "🇸🇪 Sweden", callback_data: "select_country_SWE" },
+        { text: "🇳🇴 Norway", callback_data: "select_country_NOR" }
+      ],
+      [
+        { text: "🇯🇵 Japan", callback_data: "select_country_JPN" },
+        { text: "🇰🇷 South Korea", callback_data: "select_country_KOR" }
+      ],
+      [
+        { text: "🇸🇬 Singapore", callback_data: "select_country_SGP" },
+        { text: "🇳🇿 New Zealand", callback_data: "select_country_NZL" }
+      ],
+      [
+        { text: "🇧🇷 Brazil", callback_data: "select_country_BRA" },
+        { text: "🇲🇽 Mexico", callback_data: "select_country_MEX" }
+      ],
+      [
+        { text: "🔙 Back to Main Countries", callback_data: "main_menu" }
+      ],
+      [
+        { text: "🌎 Other Country", callback_data: "country_selection_other" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(moreCountriesMessage, { reply_markup: keyboard });
+}
+
+// Handle other country selection
+async function handleOtherCountrySelection(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user from database
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (userError || !telegramUser) {
+      await ctx.answerCbQuery('❌ User not found');
+      return;
+    }
+
+    // Set "Other" as country
+    const { error: updateError } = await db.client
+      .from('users')
+      .update({
+        country_of_residence: 'OTH',
+        country_name: 'Other Country',
+        country_selection_completed: true,
+        country_selected_at: new Date().toISOString(),
+        country_updated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', telegramUser.user_id);
+
+    if (updateError) {
+      console.error('Error updating user country to Other:', updateError);
+      await ctx.answerCbQuery('❌ Error saving country selection');
+      return;
+    }
+
+    // Log country change
+    await logCountryChange(telegramUser.user_id, null, null, 'OTH', 'Other Country', user.id, user.username, 'initial_selection');
+
+    await ctx.answerCbQuery('🌍 Other Country selected');
+
+    // Show confirmation message
+    const confirmationMessage = `✅ **COUNTRY SELECTED: OTHER**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🌍 COUNTRY OF RESIDENCE CONFIRMED**
+
+🌎 **Other Country**
+
+**📋 REGISTRATION COMPLETE:**
+• Country selection: ✅ Completed
+• Compliance status: ✅ Updated
+• Account setup: ✅ Finalized
+
+**💡 SPECIFIC COUNTRY NEEDED?**
+If you need to specify your exact country for compliance purposes, please contact our support team.
+
+**🎯 WHAT'S NEXT:**
+• Explore our gold mining investment opportunities
+• Review company presentation and mining operations
+• Start your investment journey with confidence
+
+**🏆 Welcome to Aureus Alliance Holdings!**`;
+
+    await ctx.replyWithMarkdown(confirmationMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }],
+          [{ text: "📋 Company Presentation", callback_data: "menu_presentation" }],
+          [{ text: "📞 Contact Support", callback_data: "menu_help" }],
+          [{ text: "🏠 Main Dashboard", callback_data: "main_menu" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error handling other country selection:', error);
+    await ctx.answerCbQuery('❌ Error processing country selection');
+  }
+}
+
+// Get country information by code
+function getCountryInfo(countryCode) {
+  const countries = {
+    'ZAF': { name: 'South Africa', flag: '🇿🇦' },
+    'USA': { name: 'United States', flag: '🇺🇸' },
+    'GBR': { name: 'United Kingdom', flag: '🇬🇧' },
+    'CAN': { name: 'Canada', flag: '🇨🇦' },
+    'AUS': { name: 'Australia', flag: '🇦🇺' },
+    'DEU': { name: 'Germany', flag: '🇩🇪' },
+    'FRA': { name: 'France', flag: '🇫🇷' },
+    'ITA': { name: 'Italy', flag: '🇮🇹' },
+    'ESP': { name: 'Spain', flag: '🇪🇸' },
+    'NLD': { name: 'Netherlands', flag: '🇳🇱' },
+    'BEL': { name: 'Belgium', flag: '🇧🇪' },
+    'CHE': { name: 'Switzerland', flag: '🇨🇭' },
+    'SWE': { name: 'Sweden', flag: '🇸🇪' },
+    'NOR': { name: 'Norway', flag: '🇳🇴' },
+    'JPN': { name: 'Japan', flag: '🇯🇵' },
+    'KOR': { name: 'South Korea', flag: '🇰🇷' },
+    'SGP': { name: 'Singapore', flag: '🇸🇬' },
+    'NZL': { name: 'New Zealand', flag: '🇳🇿' },
+    'BRA': { name: 'Brazil', flag: '🇧🇷' },
+    'MEX': { name: 'Mexico', flag: '🇲🇽' },
+    'OTH': { name: 'Other Country', flag: '🌎' }
+  };
+
+  return countries[countryCode] || null;
+}
+
+// Log country change
+async function logCountryChange(userId, oldCountryCode, oldCountryName, newCountryCode, newCountryName, telegramId, username, reason) {
+  try {
+    const { error: logError } = await db.client
+      .from('country_change_log')
+      .insert({
+        user_id: userId,
+        old_country_code: oldCountryCode,
+        old_country_name: oldCountryName,
+        new_country_code: newCountryCode,
+        new_country_name: newCountryName,
+        changed_by_telegram_id: telegramId,
+        changed_by_username: username,
+        change_reason: reason,
+        changed_at: new Date().toISOString()
+      });
+
+    if (logError) {
+      console.error('Error logging country change:', logError);
+    } else {
+      console.log(`✅ [COUNTRY] Country change logged for user ${userId}: ${oldCountryCode || 'null'} -> ${newCountryCode}`);
+    }
+
+  } catch (error) {
+    console.error('Error in logCountryChange:', error);
+  }
 }
 
 // Helper function to get network display information

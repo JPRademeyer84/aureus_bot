@@ -90,7 +90,12 @@ const AUDIO_NOTIFICATIONS = {
   INFO: 'ℹ️',    // Info sound emoji
   PAYMENT: '💰', // Payment sound emoji
   APPROVAL: '✅', // Approval sound emoji
-  REJECTION: '❌' // Rejection sound emoji
+  REJECTION: '❌', // Rejection sound emoji
+  COMMISSION: '💎', // Commission update sound
+  WITHDRAWAL: '💸', // Withdrawal notification sound
+  SYSTEM: '🔧', // System notification sound
+  URGENT: '🚨', // Urgent alert sound
+  CELEBRATION: '🎉' // Celebration sound for achievements
 };
 
 /**
@@ -133,16 +138,51 @@ async function sendNotificationWithAudio(ctx, message, audioType = 'INFO', optio
 /**
  * Check if user has audio notifications enabled
  * @param {number} telegramId - User's telegram ID
+ * @param {string} notificationType - Type of notification (optional)
  * @returns {Promise<boolean>} - Whether audio notifications are enabled
  */
-async function isAudioNotificationEnabled(telegramId) {
+async function isAudioNotificationEnabled(telegramId, notificationType = null) {
   try {
-    // For now, default to enabled. In the future, this could check user preferences
-    // from a database table like user_preferences
-    return true;
+    // Get user preferences from database
+    const { data: preferences, error } = await db.client
+      .rpc('get_user_audio_preferences', { p_telegram_id: telegramId });
+
+    if (error) {
+      console.error('Error getting user audio preferences:', error);
+      return true; // Default to enabled on error
+    }
+
+    if (!preferences) {
+      return true; // Default to enabled if no preferences found
+    }
+
+    // Check general audio setting first
+    if (!preferences.audio_enabled) {
+      return false;
+    }
+
+    // Check specific notification type if provided
+    if (notificationType) {
+      const typeMapping = {
+        'PAYMENT': 'payment_approval_audio',
+        'APPROVAL': 'payment_approval_audio',
+        'REJECTION': 'payment_rejection_audio',
+        'WITHDRAWAL': 'withdrawal_approval_audio',
+        'COMMISSION': 'commission_update_audio',
+        'REFERRAL': 'referral_bonus_audio',
+        'SYSTEM': 'system_announcement_audio'
+      };
+
+      const preferenceKey = typeMapping[notificationType];
+      if (preferenceKey && preferences[preferenceKey] !== undefined) {
+        return preferences[preferenceKey];
+      }
+    }
+
+    return preferences.audio_enabled;
   } catch (error) {
     console.error('Error checking audio notification preference:', error);
-    return true; // Default to enabled
+    return true; // Default to enabled on error
   }
 }
 
@@ -156,8 +196,8 @@ async function isAudioNotificationEnabled(telegramId) {
  */
 async function sendAudioNotificationToUser(telegramId, message, audioType = 'INFO', options = {}, forceAudio = false) {
   try {
-    // Check user preference for audio notifications
-    const audioEnabled = forceAudio || await isAudioNotificationEnabled(telegramId);
+    // Check user preference for audio notifications with specific type
+    const audioEnabled = forceAudio || await isAudioNotificationEnabled(telegramId, audioType);
 
     // Add audio emoji to message if enabled
     let finalMessage = message;
@@ -174,15 +214,318 @@ async function sendAudioNotificationToUser(telegramId, message, audioType = 'INF
 
     await bot.telegram.sendMessage(telegramId, finalMessage, messageOptions);
 
+    // Log notification to database for analytics
+    await logNotificationToDatabase(telegramId, audioType, message, audioEnabled, 'sent');
+
     // Log audio notification for debugging
     if (audioEnabled) {
       console.log(`🔊 [AUDIO] Sent ${audioType} notification to user ${telegramId}`);
+    } else {
+      console.log(`🔇 [SILENT] Sent silent ${audioType} notification to user ${telegramId}`);
     }
 
   } catch (error) {
     console.error('Error sending audio notification to user:', error);
+
+    // Log failed notification
+    await logNotificationToDatabase(telegramId, audioType, message, false, 'failed', error.message);
+
     // Fallback to regular message
-    await bot.telegram.sendMessage(telegramId, message, options);
+    try {
+      await bot.telegram.sendMessage(telegramId, message, options);
+    } catch (fallbackError) {
+      console.error('Error sending fallback message:', fallbackError);
+    }
+  }
+}
+
+/**
+ * Log notification to database for analytics and tracking
+ * @param {number} telegramId - User's telegram ID
+ * @param {string} audioType - Type of audio notification
+ * @param {string} message - Message content
+ * @param {boolean} audioEnabled - Whether audio was enabled
+ * @param {string} status - Delivery status
+ * @param {string} errorMessage - Error message if failed
+ */
+async function logNotificationToDatabase(telegramId, audioType, message, audioEnabled, status, errorMessage = null) {
+  try {
+    // Get user_id from telegram_id
+    const { data: telegramUser } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', telegramId)
+      .single();
+
+    const messagePreview = message.length > 100 ? message.substring(0, 100) + '...' : message;
+
+    await db.client
+      .from('notification_log')
+      .insert({
+        telegram_id: telegramId,
+        user_id: telegramUser?.user_id || null,
+        notification_type: audioType.toLowerCase(),
+        audio_type: audioType,
+        message_preview: messagePreview,
+        audio_enabled: audioEnabled,
+        delivery_status: status,
+        error_message: errorMessage,
+        sent_at: new Date().toISOString()
+      });
+
+  } catch (error) {
+    console.error('Error logging notification to database:', error);
+    // Don't throw error as this is just logging
+  }
+}
+
+/**
+ * Send admin notification for critical events
+ * @param {string} eventType - Type of event (withdrawal_request, payment_received, etc.)
+ * @param {Object} eventData - Event data
+ * @param {string} priority - Priority level (low, medium, high, critical)
+ */
+async function sendAdminNotification(eventType, eventData, priority = 'medium') {
+  try {
+    // Get all admin users
+    const { data: adminUsers, error } = await db.client
+      .from('telegram_users')
+      .select(`
+        telegram_id,
+        user_id,
+        users!telegram_users_user_id_fkey!inner(
+          username,
+          is_admin
+        )
+      `)
+      .eq('users.is_admin', true);
+
+    if (error || !adminUsers || adminUsers.length === 0) {
+      console.log('No admin users found for notification');
+      return;
+    }
+
+    // Create notification message based on event type
+    const notificationMessage = createAdminNotificationMessage(eventType, eventData, priority);
+    const audioType = getAdminAudioType(eventType, priority);
+
+    // Send to each admin
+    for (const admin of adminUsers) {
+      try {
+        // Check admin notification preferences
+        const adminAudioEnabled = await isAdminAudioNotificationEnabled(admin.telegram_id, eventType, priority);
+
+        await sendAudioNotificationToUser(
+          admin.telegram_id,
+          notificationMessage.message,
+          audioType,
+          notificationMessage.options,
+          adminAudioEnabled
+        );
+
+        console.log(`📢 [ADMIN] Sent ${eventType} notification to admin ${admin.users.username}`);
+
+      } catch (adminError) {
+        console.error(`Error sending notification to admin ${admin.users.username}:`, adminError);
+      }
+    }
+
+  } catch (error) {
+    console.error('Error sending admin notifications:', error);
+  }
+}
+
+/**
+ * Check if admin has audio notifications enabled for specific event type
+ * @param {number} telegramId - Admin's telegram ID
+ * @param {string} eventType - Type of event
+ * @param {string} priority - Priority level
+ * @returns {Promise<boolean>} - Whether audio notifications are enabled
+ */
+async function isAdminAudioNotificationEnabled(telegramId, eventType, priority) {
+  try {
+    const { data: preferences, error } = await db.client
+      .from('admin_notification_preferences')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .single();
+
+    if (error || !preferences) {
+      // Default admin preferences if not found
+      return true;
+    }
+
+    // Check general audio setting
+    if (!preferences.audio_enabled) {
+      return false;
+    }
+
+    // Check priority level preferences
+    const priorityMapping = {
+      'critical': preferences.critical_alerts_audio,
+      'high': preferences.high_priority_audio,
+      'medium': preferences.medium_priority_audio,
+      'low': preferences.low_priority_audio
+    };
+
+    if (priorityMapping[priority] !== undefined) {
+      if (!priorityMapping[priority]) {
+        return false;
+      }
+    }
+
+    // Check specific event type preferences
+    const eventMapping = {
+      'payment_received': preferences.new_payment_audio,
+      'withdrawal_request': preferences.new_withdrawal_request_audio,
+      'commission_conversion': preferences.new_commission_conversion_audio,
+      'system_error': preferences.system_error_audio,
+      'user_registration': preferences.user_registration_audio,
+      'high_value_transaction': preferences.high_value_transaction_audio
+    };
+
+    const eventPreference = eventMapping[eventType];
+    if (eventPreference !== undefined) {
+      return eventPreference;
+    }
+
+    return preferences.audio_enabled;
+
+  } catch (error) {
+    console.error('Error checking admin audio notification preference:', error);
+    return true; // Default to enabled for admins
+  }
+}
+
+/**
+ * Create admin notification message based on event type
+ * @param {string} eventType - Type of event
+ * @param {Object} eventData - Event data
+ * @param {string} priority - Priority level
+ * @returns {Object} - Message and options
+ */
+function createAdminNotificationMessage(eventType, eventData, priority) {
+  const priorityEmoji = {
+    'critical': '🚨',
+    'high': '🔴',
+    'medium': '🟡',
+    'low': '🟢'
+  };
+
+  const emoji = priorityEmoji[priority] || '🔔';
+
+  switch (eventType) {
+    case 'withdrawal_request':
+      return {
+        message: `${emoji} **NEW WITHDRAWAL REQUEST**
+
+**User:** ${eventData.username || 'Unknown'}
+**Amount:** $${eventData.amount} USDT
+**Wallet:** ${eventData.wallet_address}
+**Priority:** ${priority.toUpperCase()}
+
+**Action Required:** Review and approve/reject this withdrawal request.`,
+        options: {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "⏳ View Pending Withdrawals", callback_data: "admin_pending_withdrawals" }],
+              [{ text: "🔧 Admin Panel", callback_data: "admin_panel" }]
+            ]
+          }
+        }
+      };
+
+    case 'payment_received':
+      return {
+        message: `${emoji} **NEW PAYMENT RECEIVED**
+
+**User:** ${eventData.username || 'Unknown'}
+**Amount:** $${eventData.amount} USD
+**Shares:** ${eventData.shares || 'TBD'}
+**Priority:** ${priority.toUpperCase()}
+
+**Action Required:** Review and approve/reject this payment.`,
+        options: {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "💳 View Pending Payments", callback_data: "admin_pending_payments" }],
+              [{ text: "🔧 Admin Panel", callback_data: "admin_panel" }]
+            ]
+          }
+        }
+      };
+
+    case 'commission_conversion':
+      return {
+        message: `${emoji} **NEW COMMISSION CONVERSION REQUEST**
+
+**Request ID:** #${eventData.conversion_id || 'Unknown'}
+**User:** ${eventData.username || 'Unknown'}
+**Shares Requested:** ${eventData.shares} shares
+**USDT Amount:** $${eventData.amount}
+**Available Commission:** $${eventData.available_commission || 'N/A'}
+**Phase:** ${eventData.phase || 'N/A'}
+**Priority:** ${priority.toUpperCase()}
+
+**Action Required:** Review and approve/reject this conversion request.`,
+        options: {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: "✅ Approve", callback_data: `approve_conv_${eventData.conversion_id}` },
+                { text: "❌ Reject", callback_data: `reject_conv_${eventData.conversion_id}` }
+              ],
+              [{ text: "💎 View All Requests", callback_data: "admin_commissions" }],
+              [{ text: "🔧 Admin Panel", callback_data: "admin_panel" }]
+            ]
+          }
+        }
+      };
+
+    default:
+      return {
+        message: `${emoji} **ADMIN NOTIFICATION**
+
+**Event:** ${eventType}
+**Priority:** ${priority.toUpperCase()}
+**Data:** ${JSON.stringify(eventData, null, 2)}`,
+        options: {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔧 Admin Panel", callback_data: "admin_panel" }]
+            ]
+          }
+        }
+      };
+  }
+}
+
+/**
+ * Get appropriate audio type for admin notifications
+ * @param {string} eventType - Type of event
+ * @param {string} priority - Priority level
+ * @returns {string} - Audio type
+ */
+function getAdminAudioType(eventType, priority) {
+  if (priority === 'critical') {
+    return 'URGENT';
+  }
+
+  if (priority === 'high') {
+    return 'WARNING';
+  }
+
+  switch (eventType) {
+    case 'payment_received':
+      return 'PAYMENT';
+    case 'withdrawal_request':
+      return 'WARNING';
+    case 'commission_conversion':
+      return 'COMMISSION';
+    case 'system_error':
+      return 'ERROR';
+    default:
+      return 'INFO';
   }
 }
 
@@ -346,9 +689,9 @@ async function incrementSharesSold(phaseId, sharesAllocated, source = 'unknown')
       return { success: false, error: `Phase ${phaseId} not found` };
     }
 
-    const currentSharesSold = parseInt(currentPhase.shares_sold || 0);
+    const currentSharesSold = parseFloat(currentPhase.shares_sold || 0);
     const newSharesSold = currentSharesSold + sharesAllocated;
-    const totalAvailable = parseInt(currentPhase.total_shares_available || 0);
+    const totalAvailable = parseFloat(currentPhase.total_shares_available || 0);
 
     // Validate we don't exceed total available shares
     if (newSharesSold > totalAvailable) {
@@ -356,7 +699,7 @@ async function incrementSharesSold(phaseId, sharesAllocated, source = 'unknown')
       return { success: false, error: `Would exceed total available shares (${totalAvailable})` };
     }
 
-    // Atomic update
+    // Atomic update with decimal precision
     const { error: updateError } = await db.client
       .from('investment_phases')
       .update({
@@ -444,8 +787,8 @@ async function validateSharesSoldIntegrity() {
     let totalSharesAvailable = 0;
 
     for (const phase of phases) {
-      const sharesSold = parseInt(phase.shares_sold || 0);
-      const totalAvailable = parseInt(phase.total_shares_available || 0);
+      const sharesSold = parseFloat(phase.shares_sold || 0);
+      const totalAvailable = parseFloat(phase.total_shares_available || 0);
       const remaining = totalAvailable - sharesSold;
 
       totalSharesSold += sharesSold;
@@ -616,22 +959,7 @@ function createPortfolioKeyboard() {
   };
 }
 
-function createPaymentStatusKeyboard() {
-  return {
-    inline_keyboard: [
-      [
-        { text: "⏳ Pending Payments", callback_data: "view_pending" },
-        { text: "✅ Approved Payments", callback_data: "view_approved" }
-      ],
-      [
-        { text: "❌ Rejected Payments", callback_data: "view_rejected" }
-      ],
-      [
-        { text: "🔙 Back to Dashboard", callback_data: "main_menu" }
-      ]
-    ]
-  };
-}
+
 
 function createAdminKeyboard() {
   return {
@@ -1351,6 +1679,8 @@ bot.command('version', async (ctx) => {
   await ctx.replyWithMarkdown(versionInfo);
 });
 
+
+
 // Callback query handler
 bot.on('callback_query', async (ctx) => {
   const callbackData = ctx.callbackQuery.data;
@@ -1361,8 +1691,16 @@ bot.on('callback_query', async (ctx) => {
     return;
   }
 
-  // Check if user has a sponsor (except for sponsor-related actions)
-  if (user && !['main_menu', 'accept_terms', 'menu_referrals', 'enter_sponsor_manual', 'assign_default_sponsor'].includes(callbackData)) {
+  // Check if user has a sponsor (except for sponsor-related actions and admin functions)
+  const excludedCallbacks = [
+    'main_menu', 'accept_terms', 'menu_referrals', 'enter_sponsor_manual', 'assign_default_sponsor',
+    'view_approved', 'view_rejected', 'view_pending'
+  ];
+
+  // Exclude all admin callbacks from sponsor check
+  const isAdminCallback = callbackData.startsWith('admin_') || callbackData.includes('admin');
+
+  if (user && !excludedCallbacks.includes(callbackData) && !isAdminCallback) {
     const hasSponsor = await checkUserHasSponsor(user.id);
     if (!hasSponsor) {
       await promptSponsorAssignment(ctx);
@@ -1371,8 +1709,42 @@ bot.on('callback_query', async (ctx) => {
   }
 
   console.log(`🔍 Callback: ${callbackData} from ${ctx.from.username}`);
+  console.log(`🔍 [DEBUG] Callback data type: ${typeof callbackData}, length: ${callbackData.length}`);
+  console.log(`🔍 [DEBUG] Callback data exact: "${callbackData}"`);
+
+  // Direct handling for payment callbacks (bypassing switch statement issues)
+  if (callbackData === 'admin_approved_payments') {
+    console.log('🔧 [FIXED] Handling admin_approved_payments directly');
+    await handleAdminApprovedPayments(ctx);
+    return;
+  }
+
+  if (callbackData === 'admin_rejected_payments') {
+    console.log('🔧 [FIXED] Handling admin_rejected_payments directly');
+    await handleAdminRejectedPayments(ctx);
+    return;
+  }
+
+  if (callbackData === 'view_approved') {
+    console.log('🔧 [FIXED] Handling view_approved directly');
+    await handleViewApprovedPayments(ctx);
+    return;
+  }
+
+  if (callbackData === 'view_rejected') {
+    console.log('🔧 [FIXED] Handling view_rejected directly');
+    await handleViewRejectedPayments(ctx);
+    return;
+  }
+
+  if (callbackData === 'view_pending') {
+    console.log('🔧 [FIXED] Handling view_pending directly');
+    await handleViewPendingPayments(ctx);
+    return;
+  }
 
   try {
+    console.log('🔍 [DEBUG] Entering switch statement for:', callbackData);
     switch (callbackData) {
       case 'main_menu':
         await showMainMenu(ctx);
@@ -1522,7 +1894,10 @@ bot.on('callback_query', async (ctx) => {
         await handleAdminUserSponsors(ctx);
         break;
 
+
+
       default:
+        console.log('🔍 [DEBUG] Entered default case for callback:', callbackData);
         // Check for dynamic callback patterns
         if (callbackData.startsWith('continue_payment_')) {
           await handleContinuePayment(ctx, callbackData);
@@ -1558,6 +1933,20 @@ bot.on('callback_query', async (ctx) => {
           await handleTestAudioNotification(ctx);
         } else if (callbackData === 'toggle_audio_notifications') {
           await handleToggleAudioNotifications(ctx);
+        } else if (callbackData === 'customize_audio_types') {
+          await handleCustomizeAudioTypes(ctx);
+        } else if (callbackData === 'toggle_payment_approval_audio') {
+          await handleToggleSpecificAudioType(ctx, 'payment_approval_audio');
+        } else if (callbackData === 'toggle_payment_rejection_audio') {
+          await handleToggleSpecificAudioType(ctx, 'payment_rejection_audio');
+        } else if (callbackData === 'toggle_withdrawal_audio') {
+          await handleToggleSpecificAudioType(ctx, 'withdrawal_approval_audio');
+        } else if (callbackData === 'toggle_commission_audio') {
+          await handleToggleSpecificAudioType(ctx, 'commission_update_audio');
+        } else if (callbackData === 'toggle_referral_audio') {
+          await handleToggleSpecificAudioType(ctx, 'referral_bonus_audio');
+        } else if (callbackData === 'toggle_system_audio') {
+          await handleToggleSpecificAudioType(ctx, 'system_announcement_audio');
         } else if (callbackData === 'view_referrals') {
           await handleViewReferrals(ctx);
         } else if (callbackData === 'withdraw_commissions') {
@@ -1602,6 +1991,14 @@ bot.on('callback_query', async (ctx) => {
           await handleTermsDecline(ctx);
         } else if (callbackData === 'view_privacy_policy') {
           await showPrivacyPolicy(ctx);
+        } else if (callbackData === 'payment_usdt') {
+          await handleUSDTPaymentNetworkSelection(ctx);
+        } else if (callbackData === 'payment_btc') {
+          await ctx.answerCbQuery("🚧 Bitcoin payments coming soon!");
+        } else if (callbackData === 'payment_eth') {
+          await ctx.answerCbQuery("🚧 ETH payments coming soon!");
+        } else if (callbackData.startsWith('usdt_network_')) {
+          await handleUSDTNetworkSelection(ctx, callbackData);
         } else {
           await ctx.answerCbQuery("🚧 Feature coming soon!");
         }
@@ -1752,6 +2149,111 @@ Contact @TTTFOUNDER for clarification about our terms.
       ]
     }
   });
+}
+
+// Handle USDT Payment Network Selection
+async function handleUSDTPaymentNetworkSelection(ctx) {
+  const networkMessage = `💎 **USDT PAYMENT NETWORKS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Choose your preferred USDT network:**
+
+🔷 **Ethereum (ETH)** - ERC-20
+• Network: Ethereum Mainnet
+• Gas fees: Higher but most secure
+• Confirmation time: ~15 minutes
+
+🟡 **Binance Smart Chain (BSC)** - BEP-20
+• Network: BSC Mainnet
+• Gas fees: Low
+• Confirmation time: ~3 minutes
+
+🟣 **Polygon (POL)** - Polygon
+• Network: Polygon Mainnet
+• Gas fees: Very low
+• Confirmation time: ~2 minutes
+
+🔴 **TRON (TRX)** - TRC-20
+• Network: Tron Mainnet
+• Gas fees: Lowest
+• Confirmation time: ~3 minutes
+
+**⚠️ IMPORTANT:**
+• Only send USDT on the selected network
+• Wrong network = lost funds
+• Double-check network before sending`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🔷 Ethereum (ETH-ERC20)", callback_data: "usdt_network_ETH" },
+        { text: "🟡 BSC (BEP-20)", callback_data: "usdt_network_BSC" }
+      ],
+      [
+        { text: "🟣 Polygon (POL)", callback_data: "usdt_network_POL" },
+        { text: "🔴 TRON (TRC-20)", callback_data: "usdt_network_TRON" }
+      ],
+      [
+        { text: "🔙 Back to Payment Methods", callback_data: "menu_purchase_shares" }
+      ]
+    ]
+  };
+
+  await ctx.replyWithMarkdown(networkMessage, { reply_markup: keyboard });
+}
+
+// Handle USDT Network Selection
+async function handleUSDTNetworkSelection(ctx, callbackData) {
+  const network = callbackData.split('_')[2]; // Extract network from usdt_network_ETH
+
+  // Map network names to display names and technical details
+  const networkInfo = {
+    'ETH': {
+      name: 'Ethereum',
+      displayName: 'ETH-ERC20',
+      technical: 'ERC-20',
+      confirmTime: '~15 minutes',
+      gasFees: 'Higher',
+      icon: '🔷'
+    },
+    'BSC': {
+      name: 'Binance Smart Chain',
+      displayName: 'BSC-BEP20',
+      technical: 'BEP-20',
+      confirmTime: '~3 minutes',
+      gasFees: 'Low',
+      icon: '🟡'
+    },
+    'POL': {
+      name: 'Polygon',
+      displayName: 'POL-Polygon',
+      technical: 'Polygon',
+      confirmTime: '~2 minutes',
+      gasFees: 'Very Low',
+      icon: '🟣'
+    },
+    'TRON': {
+      name: 'TRON',
+      displayName: 'TRON-TRC20',
+      technical: 'TRC-20',
+      confirmTime: '~3 minutes',
+      gasFees: 'Lowest',
+      icon: '🔴'
+    }
+  };
+
+  const selectedNetwork = networkInfo[network];
+
+  if (!selectedNetwork) {
+    await ctx.answerCbQuery("❌ Invalid network selection");
+    return;
+  }
+
+  await ctx.answerCbQuery(`${selectedNetwork.icon} ${selectedNetwork.name} selected`);
+
+  // Now proceed with the custom amount purchase using the selected network
+  await handleCustomAmountPurchaseWithNetwork(ctx, network);
 }
 
 // Show Privacy Policy
@@ -2194,6 +2696,20 @@ async function setMaintenanceMode(enabled) {
     console.error('Error updating maintenance mode:', error);
     return false;
   }
+}
+
+// Handle custom amount purchase with network selection
+async function handleCustomAmountPurchaseWithNetwork(ctx, selectedNetwork = null) {
+  // If no network selected, show payment methods first
+  if (!selectedNetwork) {
+    return await handleCustomAmountPurchase(ctx);
+  }
+
+  // Store selected network in session for later use
+  ctx.session.selectedNetwork = selectedNetwork;
+
+  // Continue with amount input
+  await handleCustomAmountPurchase(ctx);
 }
 
 // Custom Amount Purchase System
@@ -2640,34 +3156,18 @@ Your conversion request has been submitted to the admin for approval. You will b
       }
     });
 
-    // Notify admin (skip if admin is testing their own conversion)
+    // Notify admin using new audio notification system (skip if admin is testing their own conversion)
     try {
       if (user.username !== 'TTTFOUNDER') {
-        const adminNotification = `🛒 **NEW COMMISSION CONVERSION REQUEST**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**Request ID:** #${conversion.id.substring(0, 8)}
-**User:** ${user.first_name} (@${user.username || 'N/A'})
-**Shares Requested:** ${sharesRequested} shares
-**USDT Amount:** $${totalCost.toFixed(2)}
-**Share Price:** $${phase.price_per_share.toFixed(2)}
-**Phase:** ${phase.phase_number}
-
-**User's Available Commission:** $${availableUSDT.toFixed(2)} USDT
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**Action Required:** Please review and approve/reject this conversion request.`;
-
-        // Send to admin (use your actual Telegram ID: 1393852532)
-        await bot.telegram.sendMessage(1393852532, adminNotification, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: "✅ Approve", callback_data: `approve_conv_${conversion.id.substring(0, 8)}` },
-                { text: "❌ Reject", callback_data: `reject_conv_${conversion.id.substring(0, 8)}` }
+        await sendAdminNotification('commission_conversion', {
+          username: user.username || user.first_name || 'Unknown',
+          amount: totalCost.toFixed(2),
+          shares: sharesRequested,
+          user_id: telegramUser.user_id,
+          conversion_id: conversion.id.substring(0, 8),
+          available_commission: availableUSDT.toFixed(2),
+          phase: phase.phase_number
+        }, 'medium'); // Medium priority for commission conversions
               ],
               [{ text: "👥 View All Requests", callback_data: "admin_commission_conversions" }]
             ]
@@ -4244,7 +4744,12 @@ Your commission balance is secure and will be available once pending requests ar
     });
 
     // Notify admin about new withdrawal request
-    // TODO: Implement admin notification system
+    await sendAdminNotification('withdrawal_request', {
+      username: user.username || user.first_name || 'Unknown',
+      amount: amount,
+      wallet_address: walletAddress,
+      user_id: telegramUser.user_id
+    }, 'high'); // High priority for withdrawal requests
 
   } catch (error) {
     console.error('Error handling withdrawal wallet:', error);
@@ -4626,6 +5131,245 @@ ${totalShares > 0
   }
 }
 
+// User Payment Status View Handlers
+async function handleViewApprovedPayments(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user from database
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (userError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first using /start');
+      return;
+    }
+
+    // Get approved payments
+    const approvedPayments = await getUserPaymentsByStatus(telegramUser.user_id, 'approved', 10);
+
+    if (approvedPayments.length === 0) {
+      await ctx.replyWithMarkdown(`✅ **APPROVED PAYMENTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**No approved payments found**
+
+You haven't had any payments approved yet. Once your payments are approved by our admin team, they will appear here.
+
+**💡 Next Steps:**
+• Submit a payment for share purchase
+• Wait for admin approval (usually 2-24 hours)
+• Check back here for updates
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+            [{ text: "⏳ View Pending", callback_data: "view_pending" }],
+            [{ text: "🔙 Back to Payments", callback_data: "menu_payments" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Format approved payments
+    const paymentsText = await Promise.all(
+      approvedPayments.map(payment => formatPaymentForDisplay(payment, false))
+    );
+
+    const message = `✅ **APPROVED PAYMENTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📊 Summary:** ${approvedPayments.length} approved payment${approvedPayments.length > 1 ? 's' : ''}
+**💰 Total Value:** $${approvedPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0).toFixed(2)} USDT`;
+
+    await ctx.replyWithMarkdown(message, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⏳ View Pending", callback_data: "view_pending" }],
+          [{ text: "❌ View Rejected", callback_data: "view_rejected" }],
+          [{ text: "🔄 Refresh", callback_data: "view_approved" }],
+          [{ text: "🔙 Back to Payments", callback_data: "menu_payments" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('View approved payments error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading approved payments**\n\nPlease try again later.');
+  }
+}
+
+async function handleViewRejectedPayments(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user from database
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (userError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first using /start');
+      return;
+    }
+
+    // Get rejected payments
+    const rejectedPayments = await getUserPaymentsByStatus(telegramUser.user_id, 'rejected', 10);
+
+    if (rejectedPayments.length === 0) {
+      await ctx.replyWithMarkdown(`❌ **REJECTED PAYMENTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**No rejected payments found**
+
+Great news! You haven't had any payments rejected. All your submissions have been either approved or are still pending review.
+
+**💡 Tips for Successful Payments:**
+• Use correct wallet addresses
+• Include clear transaction screenshots
+• Ensure payment amounts match exactly
+• Submit payments during business hours
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+            [{ text: "✅ View Approved", callback_data: "view_approved" }],
+            [{ text: "🔙 Back to Payments", callback_data: "menu_payments" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Format rejected payments
+    const paymentsText = await Promise.all(
+      rejectedPayments.map(payment => formatPaymentForDisplay(payment, false))
+    );
+
+    const message = `❌ **REJECTED PAYMENTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📊 Summary:** ${rejectedPayments.length} rejected payment${rejectedPayments.length > 1 ? 's' : ''}
+**💡 Next Steps:** Review rejection reasons and resubmit corrected payments`;
+
+    await ctx.replyWithMarkdown(message, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛒 Try Again", callback_data: "menu_purchase_shares" }],
+          [{ text: "✅ View Approved", callback_data: "view_approved" }],
+          [{ text: "⏳ View Pending", callback_data: "view_pending" }],
+          [{ text: "📞 Contact Support", url: "https://t.me/TTTFOUNDER" }],
+          [{ text: "🔙 Back to Payments", callback_data: "menu_payments" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('View rejected payments error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading rejected payments**\n\nPlease try again later.');
+  }
+}
+
+async function handleViewPendingPayments(ctx) {
+  const user = ctx.from;
+
+  try {
+    // Get user from database
+    const { data: telegramUser, error: userError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (userError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first using /start');
+      return;
+    }
+
+    // Get pending payments
+    const pendingPayments = await getUserPaymentsByStatus(telegramUser.user_id, 'pending', 10);
+
+    if (pendingPayments.length === 0) {
+      await ctx.replyWithMarkdown(`⏳ **PENDING PAYMENTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**No pending payments found**
+
+You don't have any payments currently awaiting approval.
+
+**💡 What's Next:**
+• Submit a new payment for share purchase
+• Check your approved payments history
+• Contact support if you're expecting a pending payment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+            [{ text: "✅ View Approved", callback_data: "view_approved" }],
+            [{ text: "🔙 Back to Payments", callback_data: "menu_payments" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Format pending payments
+    const paymentsText = await Promise.all(
+      pendingPayments.map(payment => formatPaymentForDisplay(payment, false))
+    );
+
+    const message = `⏳ **PENDING PAYMENTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📊 Summary:** ${pendingPayments.length} pending payment${pendingPayments.length > 1 ? 's' : ''}
+**⏱️ Processing Time:** Usually 2-24 hours
+**📧 Updates:** You'll be notified when status changes`;
+
+    await ctx.replyWithMarkdown(message, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "✅ View Approved", callback_data: "view_approved" }],
+          [{ text: "❌ View Rejected", callback_data: "view_rejected" }],
+          [{ text: "🔄 Refresh", callback_data: "view_pending" }],
+          [{ text: "📞 Contact Admin", url: "https://t.me/TTTFOUNDER" }],
+          [{ text: "🔙 Back to Payments", callback_data: "menu_payments" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('View pending payments error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading pending payments**\n\nPlease try again later.');
+  }
+}
+
 // Payment Status Handler
 async function handlePaymentStatus(ctx) {
   const paymentMessage = `💳 **PAYMENT & TRANSACTION CENTER**
@@ -4659,6 +5403,11 @@ Secure 3-step payment verification with instant processing.`;
     reply_markup: {
       inline_keyboard: [
         [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
+        [
+          { text: "⏳ Pending Payments", callback_data: "view_pending" },
+          { text: "✅ Approved Payments", callback_data: "view_approved" }
+        ],
+        [{ text: "❌ Rejected Payments", callback_data: "view_rejected" }],
         [{ text: "📧 Get Payment Updates", callback_data: "notify_payments" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
@@ -4893,6 +5642,181 @@ function clearUserState(userId) {
 }
 
 // ADMIN PANEL DETAILED HANDLERS
+
+// Admin Payment Status View Handlers
+async function handleAdminApprovedPayments(ctx) {
+  console.log('🔧 [DEBUG] handleAdminApprovedPayments function called');
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    console.log('🔧 [DEBUG] Access denied for user:', user.username);
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**');
+    return;
+  }
+
+  try {
+    // Get approved payments
+    const approvedPayments = await getAdminPaymentsByStatus('approved', 15);
+
+    if (approvedPayments.length === 0) {
+      await ctx.replyWithMarkdown(`✅ **APPROVED PAYMENTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**No approved payments found**
+
+There are currently no approved payments in the system.
+
+**📊 ADMIN ACTIONS:**
+• Review pending payments for approval
+• Check system activity logs
+• Monitor payment processing metrics
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⏳ View Pending", callback_data: "admin_payments" }],
+            [{ text: "❌ View Rejected", callback_data: "admin_rejected_payments" }],
+            [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Format approved payments for admin view
+    const paymentsText = await Promise.all(
+      approvedPayments.map(payment => formatPaymentForDisplay(payment, true))
+    );
+
+    const totalValue = approvedPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+
+    const message = `✅ **APPROVED PAYMENTS - ADMIN VIEW**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📊 SUMMARY:**
+• **Total Payments:** ${approvedPayments.length}
+• **Total Value:** $${totalValue.toFixed(2)} USDT
+• **Status:** All payments successfully processed
+• **Shares Allocated:** Yes (automatic on approval)
+
+**🔧 ADMIN ACTIONS:**
+• All payments have been processed and shares allocated
+• Users have been notified of approvals
+• Commission payments have been distributed`;
+
+    await ctx.replyWithMarkdown(message, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⏳ View Pending", callback_data: "admin_payments" }],
+          [{ text: "❌ View Rejected", callback_data: "admin_rejected_payments" }],
+          [{ text: "🔄 Refresh", callback_data: "admin_approved_payments" }],
+          [{ text: "📊 System Stats", callback_data: "admin_stats" }],
+          [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Admin approved payments error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading approved payments**\n\nPlease try again.');
+  }
+}
+
+async function handleAdminRejectedPayments(ctx) {
+  console.log('🔧 [DEBUG] handleAdminRejectedPayments function called');
+  const user = ctx.from;
+
+  if (user.username !== 'TTTFOUNDER') {
+    console.log('🔧 [DEBUG] Access denied for user:', user.username);
+    await ctx.replyWithMarkdown('❌ **ACCESS DENIED**');
+    return;
+  }
+
+  try {
+    // Get rejected payments
+    const rejectedPayments = await getAdminPaymentsByStatus('rejected', 15);
+
+    if (rejectedPayments.length === 0) {
+      await ctx.replyWithMarkdown(`❌ **REJECTED PAYMENTS**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**No rejected payments found**
+
+Great! There are currently no rejected payments in the system. This indicates:
+
+**✅ POSITIVE INDICATORS:**
+• Users are submitting valid payments
+• Payment instructions are clear
+• Transaction verification is working well
+• User education is effective
+
+**📊 ADMIN INSIGHTS:**
+• High payment success rate
+• Good user compliance
+• Effective payment process
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "⏳ View Pending", callback_data: "admin_payments" }],
+            [{ text: "✅ View Approved", callback_data: "admin_approved_payments" }],
+            [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+          ]
+        }
+      });
+      return;
+    }
+
+    // Format rejected payments for admin view
+    const paymentsText = await Promise.all(
+      rejectedPayments.map(payment => formatPaymentForDisplay(payment, true))
+    );
+
+    const totalValue = rejectedPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+
+    const message = `❌ **REJECTED PAYMENTS - ADMIN VIEW**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**📊 REJECTION SUMMARY:**
+• **Total Rejected:** ${rejectedPayments.length}
+• **Total Value:** $${totalValue.toFixed(2)} USDT
+• **Status:** Users notified with reasons
+• **Follow-up:** Users can resubmit corrected payments
+
+**🔧 ADMIN NOTES:**
+• Review rejection patterns for process improvements
+• Consider updating payment instructions if needed
+• Monitor for repeat issues from same users`;
+
+    await ctx.replyWithMarkdown(message, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "⏳ View Pending", callback_data: "admin_payments" }],
+          [{ text: "✅ View Approved", callback_data: "admin_approved_payments" }],
+          [{ text: "🔄 Refresh", callback_data: "admin_rejected_payments" }],
+          [{ text: "📊 System Stats", callback_data: "admin_stats" }],
+          [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
+        ]
+      }
+    });
+
+  } catch (error) {
+    console.error('Admin rejected payments error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading rejected payments**\n\nPlease try again.');
+  }
+}
 
 // Admin Payments Handler
 async function handleAdminPayments(ctx) {
@@ -5292,11 +6216,20 @@ async function handleContinuePayment(ctx, callbackData) {
     let walletAddress = payment.receiver_wallet;
 
     if (!walletAddress) {
+      // Extract network from payment.network (e.g., "USDT-TRC20" -> "TRON")
+      let networkForWallet = 'TRON'; // Default fallback
+      if (payment.network) {
+        if (payment.network.includes('ERC20')) networkForWallet = 'ETH';
+        else if (payment.network.includes('BEP20')) networkForWallet = 'BSC';
+        else if (payment.network.includes('Polygon')) networkForWallet = 'POL';
+        else if (payment.network.includes('TRC20')) networkForWallet = 'TRON';
+      }
+
       // Fallback: Get from company_wallets table
       const { data: companyWallet, error: walletError } = await db.client
         .from('company_wallets')
         .select('wallet_address')
-        .eq('network', 'TRON')
+        .eq('network', networkForWallet)
         .eq('currency', 'USDT')
         .eq('is_active', true)
         .single();
@@ -5539,20 +6472,33 @@ async function handleConfirmPurchase(ctx, callbackData) {
       telegramUser = newUser;
     }
 
-    // Get company wallet address from database
+    // Get selected network from session or default to TRON
+    const selectedNetwork = ctx.session.selectedNetwork || 'TRON';
+
+    // Get company wallet address from database for selected network
     const { data: companyWallet, error: walletError } = await db.client
       .from('company_wallets')
       .select('wallet_address')
-      .eq('network', 'TRON')
+      .eq('network', selectedNetwork)
       .eq('currency', 'USDT')
       .eq('is_active', true)
       .single();
 
     if (walletError || !companyWallet) {
-      console.error('Error getting company wallet:', walletError);
-      await ctx.reply('❌ Error: Company wallet not configured. Please contact support.');
+      console.error(`Error getting company wallet for ${selectedNetwork}:`, walletError);
+      await ctx.reply(`❌ Error: ${selectedNetwork} USDT wallet not configured. Please contact support.`);
       return;
     }
+
+    // Map network to display format
+    const networkDisplayMap = {
+      'ETH': 'USDT-ERC20',
+      'BSC': 'USDT-BEP20',
+      'POL': 'USDT-Polygon',
+      'TRON': 'USDT-TRC20'
+    };
+
+    const networkDisplay = networkDisplayMap[selectedNetwork] || `USDT-${selectedNetwork}`;
 
     // Create payment transaction
     const { data: payment, error: paymentError } = await db.client
@@ -5561,7 +6507,7 @@ async function handleConfirmPurchase(ctx, callbackData) {
         user_id: telegramUser.user_id || null, // Link to main users table
         amount: totalCost,
         currency: 'USDT',
-        network: 'USDT-TRC20',
+        network: networkDisplay,
         sender_wallet: '', // Will be filled when user uploads proof
         receiver_wallet: companyWallet.wallet_address, // From database
         status: 'pending',
@@ -5579,6 +6525,15 @@ async function handleConfirmPurchase(ctx, callbackData) {
     // Show payment instructions
     await showPaymentInstructions(ctx, payment, currentPhase);
 
+    // Notify admin about new payment received
+    await sendAdminNotification('payment_received', {
+      username: user.username || user.first_name || 'Unknown',
+      amount: totalCost,
+      shares: Math.floor(totalCost / parseFloat(currentPhase.price_per_share)),
+      user_id: telegramUser.user_id,
+      payment_id: payment.id
+    }, 'medium'); // Medium priority for new payments
+
   } catch (error) {
     console.error('Error confirming purchase:', error);
     await ctx.reply('❌ Error processing purchase. Please try again.');
@@ -5590,6 +6545,9 @@ async function showPaymentInstructions(ctx, payment, phase) {
   // Calculate shares from payment amount and phase price
   const sharePrice = parseFloat(phase.price_per_share);
   const sharesAmount = Math.floor(payment.amount / sharePrice);
+
+  // Get network information for display
+  const networkInfo = getNetworkDisplayInfo(payment.network);
 
   const paymentMessage = `💳 **PAYMENT INSTRUCTIONS**
 
@@ -5603,13 +6561,13 @@ async function showPaymentInstructions(ctx, payment, phase) {
 • Payment ID: #${payment.id.substring(0, 8)}
 
 **💰 PAYMENT INFORMATION:**
-• Network: USDT-TRC20 (Tron)
+• Network: ${payment.network} (${networkInfo.fullName})
 • Wallet Address: \`${payment.receiver_wallet}\`
 • Amount to Send: **$${payment.amount} USDT**
 
 **⚠️ IMPORTANT INSTRUCTIONS:**
 1. Send EXACTLY $${payment.amount} USDT
-2. Use ONLY TRC-20 network (Tron)
+2. Use ONLY ${networkInfo.technical} network (${networkInfo.fullName})
 3. Take screenshot of transaction
 4. Upload proof within 24 hours
 5. Wait for admin approval
@@ -5684,6 +6642,106 @@ Please type the wallet address you sent the payment FROM:
   }
 }
 
+// Payment query helper functions
+async function getUserPaymentsByStatus(userId, status, limit = 10) {
+  try {
+    const { data: payments, error } = await db.client
+      .from('crypto_payment_transactions')
+      .select(`
+        id,
+        amount,
+        status,
+        created_at,
+        approved_at,
+        rejected_at,
+        rejection_reason,
+        transaction_hash,
+        sender_wallet_address,
+        screenshot_url
+      `)
+      .eq('user_id', userId)
+      .eq('status', status)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error(`Error fetching ${status} payments for user ${userId}:`, error);
+      return [];
+    }
+
+    return payments || [];
+  } catch (error) {
+    console.error(`Error in getUserPaymentsByStatus:`, error);
+    return [];
+  }
+}
+
+async function getAdminPaymentsByStatus(status, limit = 20) {
+  try {
+    const { data: payments, error } = await db.client
+      .from('crypto_payment_transactions')
+      .select(`
+        id,
+        amount,
+        status,
+        created_at,
+        approved_at,
+        rejected_at,
+        rejection_reason,
+        transaction_hash,
+        sender_wallet_address,
+        users!inner(username, full_name, email)
+      `)
+      .eq('status', status)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error(`Error fetching ${status} payments for admin:`, error);
+      return [];
+    }
+
+    return payments || [];
+  } catch (error) {
+    console.error(`Error in getAdminPaymentsByStatus:`, error);
+    return [];
+  }
+}
+
+async function formatPaymentForDisplay(payment, isAdmin = false) {
+  const createdDate = new Date(payment.created_at).toLocaleDateString();
+  const createdTime = new Date(payment.created_at).toLocaleTimeString();
+
+  let statusInfo = '';
+  if (payment.status === 'approved' && payment.approved_at) {
+    const approvedDate = new Date(payment.approved_at).toLocaleDateString();
+    statusInfo = `✅ Approved on ${approvedDate}`;
+  } else if (payment.status === 'rejected' && payment.rejected_at) {
+    const rejectedDate = new Date(payment.rejected_at).toLocaleDateString();
+    statusInfo = `❌ Rejected on ${rejectedDate}`;
+    if (payment.rejection_reason) {
+      statusInfo += `\n**Reason:** ${payment.rejection_reason}`;
+    }
+  } else if (payment.status === 'pending') {
+    statusInfo = `⏳ Pending approval`;
+  }
+
+  let paymentInfo = `**Payment #${payment.id.substring(0, 8)}**
+💰 **Amount:** $${payment.amount} USDT
+📅 **Submitted:** ${createdDate} at ${createdTime}
+${statusInfo}`;
+
+  if (isAdmin && payment.users) {
+    paymentInfo += `\n👤 **User:** ${payment.users.full_name || payment.users.username}`;
+  }
+
+  if (payment.transaction_hash) {
+    paymentInfo += `\n🔗 **TX Hash:** \`${payment.transaction_hash.substring(0, 20)}...\``;
+  }
+
+  return paymentInfo;
+}
+
 // Admin audit logging function
 async function logAdminAction(adminTelegramId, adminUsername, action, targetType, targetId, details = {}) {
   try {
@@ -5713,10 +6771,14 @@ async function logAdminAction(adminTelegramId, adminUsername, action, targetType
       safeDetails = { error: 'Failed to serialize details', type: typeof details };
     }
 
+    // Handle system actions (when adminTelegramId is null)
+    const isSystemAction = !adminTelegramId || adminUsername === 'SYSTEM';
+    const finalAdminTelegramId = isSystemAction ? 0 : adminTelegramId; // Use 0 for system actions
+
     const { error } = await db.client
       .from('admin_audit_logs')
       .insert([{
-        admin_telegram_id: adminTelegramId,
+        admin_telegram_id: finalAdminTelegramId,
         admin_username: truncatedUsername,
         action: truncatedAction,
         target_type: truncatedTargetType,
@@ -5732,7 +6794,7 @@ async function logAdminAction(adminTelegramId, adminUsername, action, targetType
         await db.client
           .from('admin_audit_logs')
           .insert([{
-            admin_telegram_id: adminTelegramId,
+            admin_telegram_id: finalAdminTelegramId,
             admin_username: truncatedUsername.substring(0, 50),
             action: truncatedAction.substring(0, 50),
             target_type: 'system',
@@ -5741,7 +6803,8 @@ async function logAdminAction(adminTelegramId, adminUsername, action, targetType
           }]);
       }
     } else {
-      console.log(`📋 Admin action logged: ${truncatedAction} by ${truncatedUsername} on ${truncatedTargetType} ${truncatedTargetId}`);
+      const actionType = isSystemAction ? 'System action' : 'Admin action';
+      console.log(`📋 ${actionType} logged: ${truncatedAction} by ${truncatedUsername} on ${truncatedTargetType} ${truncatedTargetId}`);
     }
   } catch (error) {
     console.error('Audit logging failed:', error);
@@ -5903,11 +6966,14 @@ async function handleApprovePayment(ctx, callbackData) {
 
       const investmentData = {
         user_id: updatedPayment.user_id,
+        package_id: null, // No specific package ID for direct payments
         package_name: `${currentPhase.phase_name} Purchase`,
-        total_amount: amount,
         shares_purchased: sharesAmount,
-        status: 'active',
+        total_amount: amount,
+        commission_used: 0, // No commission used for direct payments
+        remaining_payment: amount, // Full amount paid directly
         payment_method: `${updatedPayment.network} ${updatedPayment.currency || 'USDT'}`,
+        status: 'active',
         created_at: updatedPayment.created_at,
         updated_at: new Date().toISOString()
       };
@@ -5919,7 +6985,22 @@ async function handleApprovePayment(ctx, callbackData) {
         .single();
 
       if (investmentError) {
-        console.error('Share Purchase creation error:', investmentError);
+        console.error('❌ CRITICAL ERROR: Share Purchase creation failed:', investmentError);
+        console.error('❌ ROLLING BACK: Payment approval cancelled due to share purchase failure');
+
+        // Rollback payment status to pending
+        await db.client
+          .from('crypto_payment_transactions')
+          .update({
+            status: 'pending',
+            approved_at: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', paymentId);
+
+        await ctx.answerCbQuery('❌ Payment approval failed - share purchase creation error');
+        await ctx.reply('❌ **PAYMENT APPROVAL FAILED**\n\nShare purchase record could not be created. Payment has been reverted to pending status. Please try again or contact support.');
+        return; // ✅ CRITICAL FIX: Stop execution if share purchase fails
       } else {
         console.log('✅ Share Purchase record created:', investmentRecord.id);
 
@@ -5935,7 +7016,7 @@ async function handleApprovePayment(ctx, callbackData) {
         // Link the payment to the share purchase
         await db.client
           .from('crypto_payment_transactions')
-          .update({ share_purchase_id: investmentRecord.id })
+          .update({ investment_id: investmentRecord.id })
           .eq('id', paymentId);
 
         console.log('🔗 Payment linked to share purchase');
@@ -6961,22 +8042,37 @@ async function handleUserSettings(ctx) {
       return;
     }
 
-    // For now, show basic settings. In the future, this could be expanded
-    const audioEnabled = await isAudioNotificationEnabled(user.id);
+    // Get user preferences from database
+    const { data: preferences, error: prefError } = await db.client
+      .rpc('get_user_audio_preferences', { p_telegram_id: user.id });
+
+    const prefs = preferences || {
+      audio_enabled: true,
+      payment_approval_audio: true,
+      payment_rejection_audio: true,
+      withdrawal_approval_audio: true,
+      withdrawal_rejection_audio: true,
+      commission_update_audio: true,
+      referral_bonus_audio: true,
+      system_announcement_audio: true,
+      notification_volume: 'medium'
+    };
 
     const settingsMessage = `⚙️ **USER SETTINGS & PREFERENCES**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**🔊 NOTIFICATION SETTINGS:**
-• **Audio Notifications:** ${audioEnabled ? '🔔 Enabled' : '🔇 Disabled'}
-• **Sound Effects:** ${audioEnabled ? '✅ Active' : '❌ Inactive'}
+**🔊 AUDIO NOTIFICATION SETTINGS:**
+• **Master Audio:** ${prefs.audio_enabled ? '🔔 Enabled' : '🔇 Disabled'}
+• **Volume Level:** ${prefs.notification_volume ? prefs.notification_volume.toUpperCase() : 'MEDIUM'}
 
 **📱 NOTIFICATION TYPES:**
-• **Payment Approvals:** ${audioEnabled ? '💰 With Sound' : '💰 Silent'}
-• **Payment Rejections:** ${audioEnabled ? '❌ With Sound' : '❌ Silent'}
-• **Withdrawal Updates:** ${audioEnabled ? '💸 With Sound' : '💸 Silent'}
-• **Commission Updates:** ${audioEnabled ? '💰 With Sound' : '💰 Silent'}
+• **Payment Approvals:** ${prefs.payment_approval_audio ? '💰 🔔' : '💰 🔇'}
+• **Payment Rejections:** ${prefs.payment_rejection_audio ? '❌ 🔔' : '❌ 🔇'}
+• **Withdrawal Updates:** ${prefs.withdrawal_approval_audio ? '💸 🔔' : '💸 🔇'}
+• **Commission Updates:** ${prefs.commission_update_audio ? '💎 🔔' : '💎 🔇'}
+• **Referral Bonuses:** ${prefs.referral_bonus_audio ? '🤝 🔔' : '🤝 🔇'}
+• **System Announcements:** ${prefs.system_announcement_audio ? 'ℹ️ 🔔' : 'ℹ️ 🔇'}
 
 **💡 ABOUT AUDIO NOTIFICATIONS:**
 Audio notifications use different sound tones and emojis to help you quickly identify the type of update you've received. This enhances your experience by providing immediate context for important notifications.
@@ -6991,7 +8087,8 @@ Audio notifications use different sound tones and emojis to help you quickly ide
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
     const keyboard = [
-      [{ text: audioEnabled ? "🔇 Disable Audio Notifications" : "🔔 Enable Audio Notifications", callback_data: "toggle_audio_notifications" }],
+      [{ text: prefs.audio_enabled ? "🔇 Disable All Audio" : "🔔 Enable All Audio", callback_data: "toggle_audio_notifications" }],
+      [{ text: "🎛️ Customize Notification Types", callback_data: "customize_audio_types" }],
       [{ text: "🔊 Test Audio Notification", callback_data: "test_audio_notification" }],
       [{ text: "🔙 Back to Main Menu", callback_data: "main_menu" }]
     ];
@@ -7052,10 +8149,37 @@ async function handleToggleAudioNotifications(ctx) {
   try {
     const user = ctx.from;
 
-    // For now, we'll just show a message about the toggle
-    // In a full implementation, this would update a user_preferences table
+    // Get user from database
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // Get current preferences
     const currentlyEnabled = await isAudioNotificationEnabled(user.id);
     const newStatus = !currentlyEnabled;
+
+    // Update preferences in database
+    const updateResult = await db.client
+      .rpc('update_user_audio_preferences', {
+        p_telegram_id: user.id,
+        p_user_id: telegramUser.user_id,
+        p_preferences: JSON.stringify({
+          audio_enabled: newStatus
+        })
+      });
+
+    if (updateResult.error) {
+      console.error('Error updating audio preferences:', updateResult.error);
+      await ctx.replyWithMarkdown('❌ **Error updating preferences**\n\nPlease try again.');
+      return;
+    }
 
     const statusMessage = `🔊 **AUDIO NOTIFICATIONS ${newStatus ? 'ENABLED' : 'DISABLED'}**
 
@@ -7074,7 +8198,7 @@ ${newStatus ?
 • 📱 Visual notifications only
 • 🔕 Notification sounds will be disabled`}
 
-**Note:** This is a demonstration of the audio notification system. In a full implementation, your preference would be saved to the database and applied to all future notifications.
+**✅ Your preference has been saved to the database and will be applied to all future notifications.**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
@@ -7097,6 +8221,151 @@ ${newStatus ?
   } catch (error) {
     console.error('Toggle audio notifications error:', error);
     await ctx.replyWithMarkdown('❌ **Error toggling audio notifications**\n\nPlease try again.');
+  }
+}
+
+// Handle customizing individual audio notification types
+async function handleCustomizeAudioTypes(ctx) {
+  try {
+    const user = ctx.from;
+
+    // Get user from database
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // Get current preferences
+    const { data: preferences, error: prefError } = await db.client
+      .rpc('get_user_audio_preferences', { p_telegram_id: user.id });
+
+    const prefs = preferences || {
+      payment_approval_audio: true,
+      payment_rejection_audio: true,
+      withdrawal_approval_audio: true,
+      withdrawal_rejection_audio: true,
+      commission_update_audio: true,
+      referral_bonus_audio: true,
+      system_announcement_audio: true
+    };
+
+    const customizeMessage = `🎛️ **CUSTOMIZE NOTIFICATION TYPES**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Select which types of notifications should play audio:**
+
+**💰 FINANCIAL NOTIFICATIONS:**
+• Payment Approvals: ${prefs.payment_approval_audio ? '🔔 ON' : '🔇 OFF'}
+• Payment Rejections: ${prefs.payment_rejection_audio ? '🔔 ON' : '🔇 OFF'}
+• Withdrawal Updates: ${prefs.withdrawal_approval_audio ? '🔔 ON' : '🔇 OFF'}
+• Commission Updates: ${prefs.commission_update_audio ? '🔔 ON' : '🔇 OFF'}
+
+**🤝 SOCIAL NOTIFICATIONS:**
+• Referral Bonuses: ${prefs.referral_bonus_audio ? '🔔 ON' : '🔇 OFF'}
+
+**ℹ️ SYSTEM NOTIFICATIONS:**
+• System Announcements: ${prefs.system_announcement_audio ? '🔔 ON' : '🔇 OFF'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Tap any notification type below to toggle its audio setting:**`;
+
+    const keyboard = [
+      [
+        { text: `💰 Payment Approvals ${prefs.payment_approval_audio ? '🔔' : '🔇'}`, callback_data: "toggle_payment_approval_audio" },
+        { text: `❌ Payment Rejections ${prefs.payment_rejection_audio ? '🔔' : '🔇'}`, callback_data: "toggle_payment_rejection_audio" }
+      ],
+      [
+        { text: `💸 Withdrawal Updates ${prefs.withdrawal_approval_audio ? '🔔' : '🔇'}`, callback_data: "toggle_withdrawal_audio" },
+        { text: `💎 Commission Updates ${prefs.commission_update_audio ? '🔔' : '🔇'}`, callback_data: "toggle_commission_audio" }
+      ],
+      [
+        { text: `🤝 Referral Bonuses ${prefs.referral_bonus_audio ? '🔔' : '🔇'}`, callback_data: "toggle_referral_audio" },
+        { text: `ℹ️ System Announcements ${prefs.system_announcement_audio ? '🔔' : '🔇'}`, callback_data: "toggle_system_audio" }
+      ],
+      [{ text: "🔊 Test Audio Notification", callback_data: "test_audio_notification" }],
+      [{ text: "⚙️ Back to Settings", callback_data: "user_settings" }],
+      [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
+    ];
+
+    await ctx.replyWithMarkdown(customizeMessage, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+
+  } catch (error) {
+    console.error('Customize audio types error:', error);
+    await ctx.replyWithMarkdown('❌ **Error loading customization options**\n\nPlease try again.');
+  }
+}
+
+// Handle individual notification type toggles
+async function handleToggleSpecificAudioType(ctx, audioType) {
+  try {
+    const user = ctx.from;
+
+    // Get user from database
+    const { data: telegramUser, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select('user_id')
+      .eq('telegram_id', user.id)
+      .single();
+
+    if (telegramError || !telegramUser) {
+      await ctx.replyWithMarkdown('❌ **User not found**\n\nPlease register first.');
+      return;
+    }
+
+    // Get current preferences
+    const { data: preferences, error: prefError } = await db.client
+      .rpc('get_user_audio_preferences', { p_telegram_id: user.id });
+
+    const currentValue = preferences?.[audioType] ?? true;
+    const newValue = !currentValue;
+
+    // Update specific preference
+    const updateData = {};
+    updateData[audioType] = newValue;
+
+    const updateResult = await db.client
+      .rpc('update_user_audio_preferences', {
+        p_telegram_id: user.id,
+        p_user_id: telegramUser.user_id,
+        p_preferences: JSON.stringify(updateData)
+      });
+
+    if (updateResult.error) {
+      console.error('Error updating specific audio preference:', updateResult.error);
+      await ctx.answerCbQuery('❌ Error updating preference');
+      return;
+    }
+
+    const typeNames = {
+      'payment_approval_audio': 'Payment Approvals',
+      'payment_rejection_audio': 'Payment Rejections',
+      'withdrawal_approval_audio': 'Withdrawal Updates',
+      'withdrawal_rejection_audio': 'Withdrawal Rejections',
+      'commission_update_audio': 'Commission Updates',
+      'referral_bonus_audio': 'Referral Bonuses',
+      'system_announcement_audio': 'System Announcements'
+    };
+
+    const typeName = typeNames[audioType] || audioType;
+
+    await ctx.answerCbQuery(`${newValue ? '🔔' : '🔇'} ${typeName} audio ${newValue ? 'enabled' : 'disabled'}`);
+
+    // Refresh the customization menu
+    await handleCustomizeAudioTypes(ctx);
+
+  } catch (error) {
+    console.error('Toggle specific audio type error:', error);
+    await ctx.answerCbQuery('❌ Error updating preference');
   }
 }
 
@@ -7394,7 +8663,7 @@ Your funds are safely tracked and will be processed fairly.
 
 **💡 IMPORTANT NOTES:**
 • Minimum withdrawal: $10.00 USDT
-• Network: TRC-20 (Tron)
+• Networks: ETH, BSC, POL, TRON supported
 • Processing fee: $2.00 USDT (deducted from withdrawal)
 • Maximum daily withdrawal: $1,000.00 USDT
 
@@ -7749,6 +9018,38 @@ async function handleCopyReferral(ctx, callbackData) {
       ]
     }
   });
+}
+
+// Helper function to get network display information
+function getNetworkDisplayInfo(networkCode) {
+  const networkMap = {
+    'USDT-ERC20': {
+      fullName: 'Ethereum',
+      technical: 'ERC-20',
+      icon: '🔷'
+    },
+    'USDT-BEP20': {
+      fullName: 'Binance Smart Chain',
+      technical: 'BEP-20',
+      icon: '🟡'
+    },
+    'USDT-Polygon': {
+      fullName: 'Polygon',
+      technical: 'Polygon',
+      icon: '🟣'
+    },
+    'USDT-TRC20': {
+      fullName: 'TRON',
+      technical: 'TRC-20',
+      icon: '🔴'
+    }
+  };
+
+  return networkMap[networkCode] || {
+    fullName: 'Unknown Network',
+    technical: networkCode,
+    icon: '❓'
+  };
 }
 
 // Start the bot

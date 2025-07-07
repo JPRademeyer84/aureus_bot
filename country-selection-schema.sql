@@ -158,10 +158,10 @@ CREATE OR REPLACE FUNCTION public.update_user_country(
   p_country_name VARCHAR(100)
 ) RETURNS BOOLEAN AS $$
 DECLARE
-  update_successful BOOLEAN := FALSE;
+  rows_affected INTEGER;
 BEGIN
-  UPDATE public.users 
-  SET 
+  UPDATE public.users
+  SET
     country_of_residence = p_country_code,
     country_name = p_country_name,
     country_selection_completed = TRUE,
@@ -169,9 +169,9 @@ BEGIN
     country_updated_at = NOW(),
     updated_at = NOW()
   WHERE id = p_user_id;
-  
-  GET DIAGNOSTICS update_successful = FOUND;
-  RETURN update_successful;
+
+  GET DIAGNOSTICS rows_affected = ROW_COUNT;
+  RETURN rows_affected > 0;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

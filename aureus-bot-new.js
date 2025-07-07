@@ -10831,6 +10831,9 @@ async function completeKYCProcess(ctx) {
   const kycData = ctx.session.kyc.data;
 
   try {
+    // Ensure user exists in database first
+    await ensureUserExists(ctx);
+
     // Get user's country and ID from database
     const { data: userData, error: userError } = await db.client
       .from('users')

@@ -6858,7 +6858,7 @@ async function getUserPaymentsByStatus(userId, status, limit = 10) {
         rejected_at,
         rejection_reason,
         transaction_hash,
-        sender_wallet_address,
+        sender_wallet,
         screenshot_url
       `)
       .eq('user_id', userId)
@@ -6891,7 +6891,7 @@ async function getAdminPaymentsByStatus(status, limit = 20) {
         rejected_at,
         rejection_reason,
         transaction_hash,
-        sender_wallet_address,
+        sender_wallet,
         users!inner(username, full_name, email)
       `)
       .eq('status', status)
@@ -7086,8 +7086,8 @@ async function handleReviewPayment(ctx, callbackData) {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
     } else {
       // Safely format wallet address and transaction hash to avoid Markdown parsing errors
-      const safeWalletAddress = payment.sender_wallet_address
-        ? `\`${payment.sender_wallet_address}\``
+      const safeWalletAddress = payment.sender_wallet
+        ? `\`${payment.sender_wallet}\``
         : 'Not provided';
 
       const safeTransactionHash = payment.transaction_hash
@@ -7128,7 +7128,7 @@ async function handleReviewPayment(ctx, callbackData) {
     ];
 
     // Add proof viewing button based on payment type
-    if (isBankTransfer && payment.sender_wallet_address) {
+    if (isBankTransfer && payment.sender_wallet) {
       keyboard.unshift([
         { text: "🏦 View Bank Transfer Proof", callback_data: `view_bank_proof_${paymentId}` }
       ]);
@@ -11089,11 +11089,12 @@ async function handleBankTransferConfirmation(ctx, telegramUser, originalAmount,
         amount: totalCost,
         currency: 'ZAR',
         network: 'BANK_TRANSFER',
-        sender_wallet_address: '', // Will be filled when user uploads proof
+        sender_wallet: '', // Will store proof file ID when user uploads proof
+        receiver_wallet: 'FNB-63154323041', // Bank account reference
         status: 'pending',
         created_at: new Date().toISOString(),
         // Store ZAR amount and bank details in transaction_hash field
-        transaction_hash: `ZAR:${zarCalculation.zarAmount.toFixed(2)}|RATE:${zarCalculation.exchangeRate}|FEE:10%|BANK:FNB-63154323041`
+        transaction_hash: `ZAR:${zarCalculation.zarAmount.toFixed(2)}|RATE:${zarCalculation.exchangeRate}|FEE:10%`
       })
       .select()
       .single();
@@ -11327,7 +11328,7 @@ async function handleBankTransferProofUpload(ctx, isDocument = false) {
     const { error: updateError } = await db.client
       .from('crypto_payment_transactions')
       .update({
-        sender_wallet_address: fileId, // Store file ID in sender_wallet_address field for bank transfers
+        sender_wallet: fileId, // Store file ID in sender_wallet field for bank transfers
         status: 'pending', // Change status to pending for admin review
         updated_at: new Date().toISOString()
       })
@@ -11418,15 +11419,15 @@ async function handleViewBankProof(ctx, callbackData) {
       return;
     }
 
-    if (!payment.sender_wallet_address) {
+    if (!payment.sender_wallet) {
       await ctx.answerCbQuery('❌ No proof uploaded');
       return;
     }
 
     await ctx.answerCbQuery('📄 Displaying bank transfer proof');
 
-    // Send the proof file (stored in sender_wallet_address field for bank transfers)
-    const fileId = payment.sender_wallet_address;
+    // Send the proof file (stored in sender_wallet field for bank transfers)
+    const fileId = payment.sender_wallet;
 
     const proofMessage = `🏦 **BANK TRANSFER PROOF**
 

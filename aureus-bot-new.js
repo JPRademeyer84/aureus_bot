@@ -2922,6 +2922,9 @@ async function handlePurchaseSharesStart(ctx) {
     const statusIcon = isOld ? '🔴' : '🟡';
     const ageWarning = isOld ? '\n\n🔴 **OLD PAYMENT:** This payment is over 24 hours old.' : '';
 
+    // Format date safely for Telegram Markdown
+    const safeDate = paymentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+
     const pendingMessage = `⚠️ **PENDING PAYMENT DETECTED**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2930,7 +2933,7 @@ ${statusIcon} **You have an existing pending payment:**
 
 💰 **Amount:** $${pendingPayment.amount}
 🌐 **Network:** ${pendingPayment.network.toUpperCase()}
-📅 **Submitted:** ${paymentDate.toLocaleDateString()} (${timeAgo})
+📅 **Submitted:** ${safeDate} (${timeAgo})
 ⏳ **Status:** Pending Admin Approval${ageWarning}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

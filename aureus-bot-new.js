@@ -2926,25 +2926,32 @@ async function handlePurchaseSharesStart(ctx) {
 
     const isOld = daysDiff >= 1;
     const statusIcon = isOld ? '🔴' : '🟡';
-    const ageWarning = isOld ? '\n\n🔴 **OLD PAYMENT:** This payment is over 24 hours old.' : '';
 
     // Format date safely for Telegram Markdown
     const safeDate = paymentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
 
-    const pendingMessage = `⚠️ **PENDING PAYMENT DETECTED**
+    // Create safe message without nested markdown
+    let pendingMessage = `⚠️ PENDING PAYMENT DETECTED
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${statusIcon} **You have an existing pending payment:**
+${statusIcon} You have an existing pending payment:
 
-💰 **Amount:** $${pendingPayment.amount}
-🌐 **Network:** ${pendingPayment.network.toUpperCase()}
-📅 **Submitted:** ${safeDate} (${timeAgo})
-⏳ **Status:** Pending Admin Approval${ageWarning}
+💰 Amount: $${pendingPayment.amount}
+🌐 Network: ${pendingPayment.network.toUpperCase()}
+📅 Submitted: ${safeDate} (${timeAgo})
+⏳ Status: Pending Admin Approval`;
+
+    // Add age warning if payment is old
+    if (isOld) {
+      pendingMessage += `\n\n🔴 OLD PAYMENT: This payment is over 24 hours old.`;
+    }
+
+    pendingMessage += `
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**🔧 WHAT WOULD YOU LIKE TO DO?**
+🔧 WHAT WOULD YOU LIKE TO DO?
 
 You must handle this pending payment before making a new purchase.`;
 
@@ -2960,7 +2967,7 @@ You must handle this pending payment before making a new purchase.`;
     keyboard.push([{ text: "📊 View Payment Details", callback_data: "view_portfolio" }]);
     keyboard.push([{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]);
 
-    await ctx.replyWithMarkdown(pendingMessage, {
+    await ctx.reply(pendingMessage, {
       reply_markup: { inline_keyboard: keyboard }
     });
     return;

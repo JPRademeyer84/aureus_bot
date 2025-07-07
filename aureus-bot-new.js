@@ -856,7 +856,7 @@ function formatCurrency(amount) {
 
 // Package formatting function removed - using custom amounts only
 
-function createMainMenuKeyboard(isAdmin = false) {
+function createMainMenuKeyboard(isAdmin = false, hasKYC = true) {
   const keyboard = [
     [
       { text: "🛒 Purchase Gold Shares", callback_data: "menu_purchase_shares" }
@@ -881,6 +881,13 @@ function createMainMenuKeyboard(isAdmin = false) {
       { text: "⚙️ Settings", callback_data: "user_settings" }
     ]
   ];
+
+  // Add KYC reminder if not completed
+  if (!hasKYC) {
+    keyboard.unshift([
+      { text: "🔒 Complete KYC (Required)", callback_data: "start_kyc_process" }
+    ]);
+  }
 
   // Add admin options if user is admin
   if (isAdmin) {
@@ -1495,6 +1502,14 @@ async function showMainMenu(ctx) {
     return;
   }
 
+  // Check KYC status and show KYC dashboard if needed
+  const hasKYC = await checkKYCCompletion(authenticatedUser.id);
+  if (!hasKYC) {
+    console.log(`📋 [KYC] User ${authenticatedUser.id} has not completed KYC - showing KYC dashboard`);
+    await showKYCDashboard(ctx, authenticatedUser.id);
+    return;
+  }
+
   const currentPhase = await db.getCurrentPhase();
   const isAdmin = user.username === ADMIN_USERNAME;
 
@@ -1529,8 +1544,11 @@ ${phaseInfo}
 💎 **SHARE PURCHASE OPPORTUNITIES:**
 Choose your preferred method to buy shares in Aureus Alliance Holdings below.`;
 
+  // Check KYC status for menu display
+  const hasKYC = await checkKYCCompletion(authenticatedUser.id);
+
   await ctx.replyWithMarkdown(menuMessage, {
-    reply_markup: createMainMenuKeyboard(isAdmin)
+    reply_markup: createMainMenuKeyboard(isAdmin, hasKYC)
   });
 }
 
@@ -6034,8 +6052,14 @@ All payments have been processed!
       let paymentMethodDisplay = '';
 
       if (isBankTransfer) {
-        const bankDetails = payment.transaction_notes ? JSON.parse(payment.transaction_notes) : {};
-        const zarAmount = bankDetails.zar_amount || 'N/A';
+        // Parse ZAR amount from transaction_hash field (format: ZAR:amount|RATE:rate|FEE:10%)
+        let zarAmount = 'N/A';
+        if (payment.transaction_hash && payment.transaction_hash.includes('ZAR:')) {
+          const zarMatch = payment.transaction_hash.match(/ZAR:([0-9.]+)/);
+          if (zarMatch) {
+            zarAmount = parseFloat(zarMatch[1]);
+          }
+        }
         paymentMethodDisplay = `🏦 Bank Transfer: R${typeof zarAmount === 'number' ? zarAmount.toFixed(2) : zarAmount}`;
       } else {
         paymentMethodDisplay = `🌐 ${payment.network.toUpperCase()}`;
@@ -7026,10 +7050,15 @@ async function handleReviewPayment(ctx, callbackData) {
     let reviewMessage;
 
     if (isBankTransfer) {
-      // Parse bank transfer details
-      const bankDetails = payment.transaction_notes ? JSON.parse(payment.transaction_notes) : {};
-      const zarAmount = bankDetails.zar_amount || 'N/A';
-      const exchangeRate = bankDetails.exchange_rate || 18;
+      // Parse bank transfer details from transaction_hash field
+      let zarAmount = 'N/A';
+      let exchangeRate = 18;
+      if (payment.transaction_hash && payment.transaction_hash.includes('ZAR:')) {
+        const zarMatch = payment.transaction_hash.match(/ZAR:([0-9.]+)/);
+        const rateMatch = payment.transaction_hash.match(/RATE:([0-9.]+)/);
+        if (zarMatch) zarAmount = parseFloat(zarMatch[1]);
+        if (rateMatch) exchangeRate = parseFloat(rateMatch[1]);
+      }
 
       reviewMessage = `🏦 **BANK TRANSFER REVIEW**
 
@@ -7102,7 +7131,7 @@ async function handleReviewPayment(ctx, callbackData) {
     ];
 
     // Add proof viewing button based on payment type
-    if (isBankTransfer && payment.sender_wallet) {
+    if (isBankTransfer && payment.sender_wallet_address) {
       keyboard.unshift([
         { text: "🏦 View Bank Transfer Proof", callback_data: `view_bank_proof_${paymentId}` }
       ]);
@@ -7436,8 +7465,14 @@ async function notifyUserPaymentApproved(payment, sharesAllocated, currentPhase)
     let paymentMethodText = '';
 
     if (isBankTransfer) {
-      const bankDetails = payment.transaction_notes ? JSON.parse(payment.transaction_notes) : {};
-      const zarAmount = bankDetails.zar_amount || 'N/A';
+      // Parse ZAR amount from transaction_hash field
+      let zarAmount = 'N/A';
+      if (payment.transaction_hash && payment.transaction_hash.includes('ZAR:')) {
+        const zarMatch = payment.transaction_hash.match(/ZAR:([0-9.]+)/);
+        if (zarMatch) {
+          zarAmount = parseFloat(zarMatch[1]);
+        }
+      }
       paymentMethodText = `• **Payment Method:** Bank Transfer (FNB)\n• **ZAR Amount:** R${typeof zarAmount === 'number' ? zarAmount.toFixed(2) : zarAmount}`;
     } else {
       paymentMethodText = `• **Payment Method:** ${payment.network} USDT`;
@@ -9780,6 +9815,84 @@ Once KYC is completed, your share certificate will be generated and sent within 
   }
 }
 
+// Show mandatory KYC dashboard (blocks access to main features)
+async function showKYCDashboard(ctx, userId) {
+  try {
+    console.log(`📋 [KYC] Showing mandatory KYC dashboard for user ${userId}`);
+
+    // Check if user has any approved payments (which would trigger KYC requirement)
+    const { data: approvedPayments, error: paymentError } = await db.client
+      .from('crypto_payment_transactions')
+      .select('id, amount, created_at')
+      .eq('user_id', userId)
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    let kycReason = '';
+    if (approvedPayments && approvedPayments.length > 0) {
+      const payment = approvedPayments[0];
+      kycReason = `\n**🎉 CONGRATULATIONS!**\nYour payment of $${payment.amount} has been approved!\n\n`;
+    }
+
+    const kycDashboardMessage = `🔒 **KYC VERIFICATION REQUIRED**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${kycReason}**📋 COMPLETE YOUR KYC TO CONTINUE**
+
+To access your dashboard and receive your share certificate, you must complete the KYC (Know Your Customer) verification process.
+
+**🔒 WHAT IS KYC?**
+KYC is a regulatory requirement that helps us:
+• ✅ Verify your identity for legal compliance
+• 📜 Generate personalized share certificates
+• 🔐 Ensure secure delivery of official documents
+• ⚖️ Meet international financial standards
+
+**📋 INFORMATION REQUIRED:**
+• 👤 Full legal name (as on government ID)
+• 🆔 Government ID or Passport number
+• 🏠 Complete physical address
+• 🌍 Country of residence
+• 📞 Phone number and email address
+
+**⏰ CERTIFICATE TIMELINE:**
+Once KYC is completed, your share certificate will be generated and sent within 48 hours (Monday-Friday).
+
+**🔐 PRIVACY & SECURITY:**
+• 🔒 All information is encrypted and securely stored
+• 📋 Data is used only for certificate generation
+• 🛡️ Full compliance with privacy regulations
+• 🚫 Your information is never shared with third parties
+
+**⚠️ IMPORTANT:**
+You cannot access other features until KYC is completed. This is mandatory for all shareholders.`;
+
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: "📋 Complete KYC Now", callback_data: "start_kyc_process" }
+        ],
+        [
+          { text: "ℹ️ Learn More About KYC", callback_data: "kyc_info" }
+        ],
+        [
+          { text: "📞 Contact Support", callback_data: "menu_help" }
+        ]
+      ]
+    };
+
+    await ctx.replyWithMarkdown(kycDashboardMessage, {
+      reply_markup: keyboard
+    });
+
+  } catch (error) {
+    console.error('❌ [KYC] Error showing KYC dashboard:', error);
+    await ctx.reply('❌ Error loading KYC dashboard. Please contact support.');
+  }
+}
+
 // Handle start KYC process
 async function handleStartKYCProcess(ctx) {
   const user = ctx.from;
@@ -10443,18 +10556,12 @@ async function handleBankTransferConfirmation(ctx, telegramUser, originalAmount,
         amount: totalCost,
         currency: 'ZAR',
         network: 'BANK_TRANSFER',
-        sender_wallet: '', // Will be filled when user uploads proof
-        receiver_wallet: 'FNB-63154323041', // Bank account reference
+        sender_wallet_address: '', // Will be filled when user uploads proof
+        receiver_wallet_address: 'FNB-63154323041', // Bank account reference
         status: 'pending',
         created_at: new Date().toISOString(),
-        // Store additional bank transfer info in notes or custom fields
-        transaction_notes: JSON.stringify({
-          payment_method: 'bank_transfer',
-          zar_amount: zarCalculation.zarAmount,
-          usd_amount: zarCalculation.totalUSD,
-          exchange_rate: zarCalculation.exchangeRate,
-          transaction_fee_percent: 10
-        })
+        // Store ZAR amount in a comment field or use existing fields
+        transaction_hash: `ZAR:${zarCalculation.zarAmount.toFixed(2)}|RATE:${zarCalculation.exchangeRate}|FEE:10%`
       })
       .select()
       .single();
@@ -10603,7 +10710,7 @@ Payment ID: #${paymentId.substring(0, 8)}
 
 **⚠️ IMPORTANT:**
 • Transfer must be from YOUR bank account
-• Amount must match exactly: ${JSON.parse(payment.transaction_notes || '{}').zar_amount ? `R${JSON.parse(payment.transaction_notes).zar_amount.toFixed(2)}` : 'the required amount'}
+• Amount must match exactly: ${payment.transaction_hash && payment.transaction_hash.includes('ZAR:') ? `R${payment.transaction_hash.match(/ZAR:([0-9.]+)/)?.[1] || 'N/A'}` : 'the required amount'}
 • Reference must include: Payment #${paymentId.substring(0, 8)}
 
 **📱 HOW TO UPLOAD:**
@@ -10685,8 +10792,8 @@ async function handleBankTransferProofUpload(ctx, isDocument = false) {
     const { error: updateError } = await db.client
       .from('crypto_payment_transactions')
       .update({
-        sender_wallet: fileId, // Store file ID in sender_wallet field for bank transfers
-        status: 'proof_uploaded',
+        sender_wallet_address: fileId, // Store file ID in sender_wallet_address field for bank transfers
+        status: 'pending', // Change status to pending for admin review
         updated_at: new Date().toISOString()
       })
       .eq('id', paymentId)
@@ -10776,15 +10883,15 @@ async function handleViewBankProof(ctx, callbackData) {
       return;
     }
 
-    if (!payment.sender_wallet) {
+    if (!payment.sender_wallet_address) {
       await ctx.answerCbQuery('❌ No proof uploaded');
       return;
     }
 
     await ctx.answerCbQuery('📄 Displaying bank transfer proof');
 
-    // Send the proof file (stored in sender_wallet field for bank transfers)
-    const fileId = payment.sender_wallet;
+    // Send the proof file (stored in sender_wallet_address field for bank transfers)
+    const fileId = payment.sender_wallet_address;
 
     const proofMessage = `🏦 **BANK TRANSFER PROOF**
 

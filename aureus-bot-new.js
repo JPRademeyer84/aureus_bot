@@ -2024,6 +2024,8 @@ bot.on('callback_query', async (ctx) => {
         } else if (callbackData === 'view_privacy_policy') {
           await showPrivacyPolicy(ctx);
         } else if (callbackData === 'payment_usdt') {
+          console.log('🔍 [DEBUG] Handling payment_usdt callback');
+          await ctx.answerCbQuery('💎 Loading USDT networks...');
           await handleUSDTPaymentNetworkSelection(ctx);
         } else if (callbackData === 'payment_bank_transfer') {
           await handleBankTransferPayment(ctx);
@@ -5962,6 +5964,8 @@ async function handleAdminPayments(ctx) {
   }
 
   try {
+    console.log('🔍 [ADMIN] Fetching pending payments...');
+
     // Get pending payments with user info
     const { data: pendingPayments, error } = await db.client
       .from('crypto_payment_transactions')
@@ -5972,6 +5976,24 @@ async function handleAdminPayments(ctx) {
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
       .limit(5);
+
+    console.log('🔍 [ADMIN] Pending payments query result:', {
+      count: pendingPayments?.length || 0,
+      error: error?.message || 'none'
+    });
+
+    // Also check all payment statuses for debugging
+    const { data: allPayments, error: allError } = await db.client
+      .from('crypto_payment_transactions')
+      .select('id, status, created_at')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    console.log('🔍 [ADMIN] Recent payment statuses:', allPayments?.map(p => ({
+      id: p.id.substring(0, 8),
+      status: p.status,
+      created: new Date(p.created_at).toLocaleString()
+    })) || 'none');
 
     if (error) {
       console.error('Error fetching pending payments:', error);

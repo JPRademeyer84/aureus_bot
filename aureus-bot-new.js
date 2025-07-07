@@ -2832,10 +2832,10 @@ You must handle this pending payment before making a new purchase.`;
 
 **💰 CUSTOM AMOUNT PURCHASE**
 
-Enter your desired investment amount between $25 and $50,000:
+Enter your desired investment amount between $5 and $50,000:
 
 **📋 INVESTMENT DETAILS:**
-• Minimum: $25 USD
+• Minimum: $5 USD
 • Maximum: $50,000 USD
 • Share allocation based on current phase pricing
 • Instant share certificate upon payment approval
@@ -4259,8 +4259,8 @@ async function handleCustomAmountInput(ctx, amountText) {
   // Parse the amount
   const amount = parseFloat(amountText.replace(/[^0-9.]/g, ''));
 
-  if (isNaN(amount) || amount < 25 || amount > 50000) {
-    await ctx.reply('❌ Invalid amount. Please enter a number between $25 and $50,000.');
+  if (isNaN(amount) || amount < 5 || amount > 50000) {
+    await ctx.reply('❌ Invalid amount. Please enter a number between $5 and $50,000.');
     return;
   }
 
@@ -7557,7 +7557,7 @@ ${referralLink}
 
 🎁 **AUTOMATIC SPONSOR ASSIGNMENT:** Your referrals will be automatically linked to you!
 
-💡 **INVESTMENT RANGE:** Start with just $25 or go big with $50,000+
+💡 **INVESTMENT RANGE:** Start with just $5 or go big with $50,000+
 
 ⚡ **SECURE PROCESS:** 3-step verification, instant confirmation
 
@@ -8996,7 +8996,7 @@ async function handleCopyReferral(ctx, callbackData) {
 **🚀 QUICK SHARING MESSAGES:**
 
 **💎 For WhatsApp/SMS:**
-*"🔥 GOLD MINING INVESTMENT OPPORTUNITY! Own shares in real South African gold mines. Starting at just $25. Massive profit potential! Use my referral '${referralCode}' here: https://t.me/AureusAllianceBot"*
+*"🔥 GOLD MINING INVESTMENT OPPORTUNITY! Own shares in real South African gold mines. Starting at just $5. Massive profit potential! Use my referral '${referralCode}' here: https://t.me/AureusAllianceBot"*
 
 **📱 For Social Media:**
 *"💰 Just discovered an incredible gold mining investment! Real washplants, real gold, real profits. Early investors getting $1/share before it goes up! Use referral '${referralCode}': https://t.me/AureusAllianceBot #GoldInvestment #WealthBuilding"*

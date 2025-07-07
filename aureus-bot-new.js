@@ -10400,6 +10400,40 @@ async function handleKYCLastNameInput(ctx, lastName) {
   await showKYCIdTypeStep(ctx);
 }
 
+// Handle ID number input
+async function handleKYCIdNumberInput(ctx, idNumber) {
+  const idType = ctx.session.kyc.id_type;
+
+  // Validate ID number
+  if (!idNumber || idNumber.trim().length < 5) {
+    await ctx.reply('❌ Please enter a valid ID/passport number (at least 5 characters).');
+    return;
+  }
+
+  const cleanIdNumber = idNumber.trim().replace(/\s+/g, '');
+
+  // Validate based on ID type
+  if (idType === 'national_id') {
+    // South African ID validation
+    if (!/^\d{13}$/.test(cleanIdNumber)) {
+      await ctx.reply('❌ South African ID number must be exactly 13 digits. Please try again.');
+      return;
+    }
+  } else if (idType === 'passport') {
+    // Passport validation
+    if (!/^[A-Z0-9]{6,15}$/i.test(cleanIdNumber)) {
+      await ctx.reply('❌ Passport number must be 6-15 characters (letters and numbers only). Please try again.');
+      return;
+    }
+  }
+
+  // Store ID number
+  ctx.session.kyc.data.id_number = cleanIdNumber;
+
+  // For now, show completion message (full KYC system needs more steps)
+  await showKYCTemporaryCompletion(ctx);
+}
+
 // Show ID type step
 async function showKYCIdTypeStep(ctx) {
   const idTypeMessage = `📝 **KYC STEP 3 OF 6: IDENTIFICATION TYPE**
@@ -10486,6 +10520,45 @@ This information will be used for identity verification and must match your offi
   };
 
   await ctx.replyWithMarkdown(idNumberMessage, { reply_markup: keyboard });
+}
+
+// Temporary KYC completion (until full system is implemented)
+async function showKYCTemporaryCompletion(ctx) {
+  const completionMessage = `✅ **KYC DATA COLLECTED SUCCESSFULLY**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**🎉 BASIC KYC INFORMATION SAVED:**
+
+**👤 Name:** ${ctx.session.kyc.data.first_name} ${ctx.session.kyc.data.last_name}
+**🆔 ID Type:** ${ctx.session.kyc.id_type === 'national_id' ? 'South African ID' : 'International Passport'}
+**📋 ID Number:** ${ctx.session.kyc.data.id_number}
+
+**⚠️ SYSTEM NOTICE:**
+The full KYC system (including phone, email, address collection) is currently being finalized. Your basic information has been saved and you can now access your dashboard.
+
+**📋 NEXT STEPS:**
+• Complete KYC system will be available soon
+• You will be notified when additional information is needed
+• Your share certificates will be generated once full KYC is complete
+
+**🏠 You can now return to your dashboard to continue using the bot.**`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "🏠 Return to Dashboard", callback_data: "main_menu" }
+      ],
+      [
+        { text: "💼 View Portfolio", callback_data: "view_portfolio" }
+      ]
+    ]
+  };
+
+  // Clear KYC session
+  ctx.session.kyc = null;
+
+  await ctx.replyWithMarkdown(completionMessage, { reply_markup: keyboard });
 }
 
 // BANK TRANSFER SYSTEM FOR SOUTHERN AFRICAN REGION

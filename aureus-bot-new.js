@@ -10831,22 +10831,26 @@ async function completeKYCProcess(ctx) {
   const kycData = ctx.session.kyc.data;
 
   try {
-    // Ensure user exists in database first
-    await ensureUserExists(ctx);
-
-    // Get user's country and ID from database
-    const { data: userData, error: userError } = await db.client
-      .from('users')
-      .select('id, country_of_residence')
+    // Get user data through telegram_users table (correct relationship)
+    const { data: telegramUserData, error: telegramError } = await db.client
+      .from('telegram_users')
+      .select(`
+        user_id,
+        users!inner (
+          id,
+          country_of_residence
+        )
+      `)
       .eq('telegram_id', user.id)
       .single();
 
-    if (userError) {
-      console.error('❌ [KYC] Error getting user data:', userError);
-      await ctx.reply('❌ Error retrieving your user information. Please try again.');
+    if (telegramError) {
+      console.error('❌ [KYC] Error getting user data via telegram_users:', telegramError);
+      await ctx.reply('❌ Error retrieving your user information. Please contact support.');
       return;
     }
 
+    const userData = telegramUserData.users;
     const countryCode = userData?.country_of_residence || 'ZAF';
     const userId = userData?.id;
 

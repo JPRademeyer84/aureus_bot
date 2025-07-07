@@ -6505,10 +6505,15 @@ async function handleContinuePayment(ctx, callbackData) {
 • Send exact amount: $${payment.amount} USDT
 • Keep your transaction screenshot ready`;
 
+    // Use correct callback based on payment type
+    const proofCallback = payment.network === 'BANK_TRANSFER'
+      ? `upload_bank_proof_${paymentId}`
+      : `upload_proof_${paymentId}`;
+
     await ctx.replyWithMarkdown(continueMessage, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "💳 Submit Payment Proof", callback_data: `upload_proof_${paymentId}` }],
+          [{ text: "💳 Submit Payment Proof", callback_data: proofCallback }],
           [{ text: "📊 Check Payment Status", callback_data: "view_portfolio" }],
           [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
         ]
@@ -6825,10 +6830,15 @@ async function showPaymentInstructions(ctx, payment, phase) {
 
 **⏰ Payment expires in 24 hours**`;
 
+  // Use correct callback based on payment type
+  const proofCallback = payment.network === 'BANK_TRANSFER'
+    ? `upload_bank_proof_${payment.id}`
+    : `upload_proof_${payment.id}`;
+
   await ctx.replyWithMarkdown(paymentMessage, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "💳 Submit Payment Proof", callback_data: `upload_proof_${payment.id}` }],
+        [{ text: "💳 Submit Payment Proof", callback_data: proofCallback }],
         [{ text: "💼 View Portfolio", callback_data: "menu_portfolio" }],
         [{ text: "🏠 Main Menu", callback_data: "main_menu" }]
       ]

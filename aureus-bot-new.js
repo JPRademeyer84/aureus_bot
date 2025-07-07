@@ -11090,11 +11090,10 @@ async function handleBankTransferConfirmation(ctx, telegramUser, originalAmount,
         currency: 'ZAR',
         network: 'BANK_TRANSFER',
         sender_wallet_address: '', // Will be filled when user uploads proof
-        receiver_wallet_address: 'FNB-63154323041', // Bank account reference
         status: 'pending',
         created_at: new Date().toISOString(),
-        // Store ZAR amount in a comment field or use existing fields
-        transaction_hash: `ZAR:${zarCalculation.zarAmount.toFixed(2)}|RATE:${zarCalculation.exchangeRate}|FEE:10%`
+        // Store ZAR amount and bank details in transaction_hash field
+        transaction_hash: `ZAR:${zarCalculation.zarAmount.toFixed(2)}|RATE:${zarCalculation.exchangeRate}|FEE:10%|BANK:FNB-63154323041`
       })
       .select()
       .single();
@@ -11134,11 +11133,14 @@ async function showBankTransferInstructions(ctx, payment, phase, zarCalculation)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**📋 PURCHASE DETAILS:**
+**💰 AMOUNT TO PAY:**
+**🇿🇦 R${zarCalculation.zarAmount.toFixed(2)} ZAR**
+
+**📋 PURCHASE BREAKDOWN:**
 • USD Amount: ${formatCurrency(zarCalculation.originalUSD)}
 • Transaction Fee (10%): ${formatCurrency(zarCalculation.feeUSD)}
-• **Total USD: ${formatCurrency(zarCalculation.totalUSD)}**
-• **Total ZAR: R${zarCalculation.zarAmount.toFixed(2)}**
+• Total USD: ${formatCurrency(zarCalculation.totalUSD)}
+• Exchange Rate: R${zarCalculation.exchangeRate} = $1 USD
 • Shares: ${sharesAmount.toLocaleString()}
 • Phase: ${phase.phase_name}
 • Share Price: ${formatCurrency(sharePrice)}

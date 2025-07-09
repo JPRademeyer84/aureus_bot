@@ -7982,42 +7982,42 @@ async function handleShareReferral(ctx) {
     console.log('🔗 DEBUG - Referral username:', referralUsername);
 
     // MOTIVATING & COMPELLING investment opportunity message
-    const shareMessage = `🌟 **LIFE-CHANGING OPPORTUNITY: OWN REAL GOLD MINES!** 🌟
+    const shareMessage = `🌟 LIFE-CHANGING OPPORTUNITY: OWN REAL GOLD MINES! 🌟
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💰 **IMAGINE EARNING FROM ACTUAL GOLD PRODUCTION!**
+💰 IMAGINE EARNING FROM ACTUAL GOLD PRODUCTION!
 
-🏆 **AUREUS ALLIANCE HOLDINGS** - Your Gateway to Gold Wealth!
-*Join thousands already building generational wealth through gold mining*
+🏆 AUREUS ALLIANCE HOLDINGS - Your Gateway to Gold Wealth!
+Join thousands already building generational wealth through gold mining
 
-🔥 **WHY THIS IS THE OPPORTUNITY OF A LIFETIME:**
+🔥 WHY THIS IS THE OPPORTUNITY OF A LIFETIME:
 
-💎 **REAL GOLD, REAL PROFITS:**
+💎 REAL GOLD, REAL PROFITS:
 • Own shares in 10 MASSIVE gold washplants
 • Each plant processes 200 tons of gold-bearing material per hour
 • Target: 3,200 KG of pure gold annually (worth $200+ MILLION!)
 • You get a piece of every ounce extracted!
 
-🚀 **EXPLOSIVE GROWTH POTENTIAL:**
+🚀 EXPLOSIVE GROWTH POTENTIAL:
 • Phase 1: $1 per share (LIMITED TIME!)
 • Full production by June 2026
 • Early investors positioned for maximum returns
 • Only 1,400,000 shares available - Don't miss out!
 
-⛏️ **PROVEN SOUTH AFRICAN GOLD RESERVES:**
+⛏️ PROVEN SOUTH AFRICAN GOLD RESERVES:
 • Located in gold-rich Mpumalanga Province
 • Professional geological surveys completed
 • Modern extraction technology deployed
 • Experienced mining team managing operations
 
-💸 **MULTIPLE WAYS TO PROFIT:**
+💸 MULTIPLE WAYS TO PROFIT:
 • Share value appreciation as production scales
 • Dividend payments from gold sales
 • Portfolio diversification with precious metals
 • Hedge against inflation and economic uncertainty
 
-🎯 **PERFECT FOR:**
+🎯 PERFECT FOR:
 • Investors seeking alternative assets
 • Those wanting exposure to gold without storage
 • People building retirement wealth
@@ -8025,26 +8025,26 @@ async function handleShareReferral(ctx) {
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🚨 **ACT NOW - PHASE 1 PRICING ENDS SOON!**
+🚨 ACT NOW - PHASE 1 PRICING ENDS SOON!
 
-👆 **CLICK YOUR PERSONAL REFERRAL LINK:**
+👆 CLICK YOUR PERSONAL REFERRAL LINK:
 ${referralLink}
 
-🎁 **AUTOMATIC SPONSOR ASSIGNMENT:** Your referrals will be automatically linked to you!
+🎁 AUTOMATIC SPONSOR ASSIGNMENT: Your referrals will be automatically linked to you!
 
-💡 **INVESTMENT RANGE:** Start with just $5 or go big with $50,000+
+💡 INVESTMENT RANGE: Start with just $5 or go big with $50,000+
 
-⚡ **SECURE PROCESS:** 3-step verification, instant confirmation
+⚡ SECURE PROCESS: 3-step verification, instant confirmation
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔥 **DON'T LET THIS GOLDEN OPPORTUNITY SLIP AWAY!**
+🔥 DON'T LET THIS GOLDEN OPPORTUNITY SLIP AWAY!
 
-*Join the smart money already invested in South Africa's gold boom!*
+Join the smart money already invested in South Africa's gold boom!
 
-⚠️ *High-risk, high-reward investment. Invest responsibly.*`;
+⚠️ High-risk, high-reward investment. Invest responsibly.`;
 
-    await ctx.replyWithMarkdown(shareMessage, {
+    await ctx.reply(shareMessage, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "📤 Share Referral Link", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('🔥 GOLD MINING OPPORTUNITY! Join Aureus Alliance Holdings and own real South African gold mines!')}` }],

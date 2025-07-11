@@ -667,8 +667,8 @@ async function getEnhancedCommissionBalance(userId) {
 // These functions ensure shares_sold field is properly updated when shares are allocated
 
 /**
- * Atomically increment shares_sold for a specific investment phase
- * @param {string} phaseId - Investment phase ID
+ * Atomically increment shares_sold for a specific share purchase phase
+ * @param {string} phaseId - shares phase ID
  * @param {number} sharesAllocated - Number of shares to add to shares_sold
  * @param {string} source - Source of allocation (e.g., 'direct_purchase', 'commission_conversion', 'referral_bonus')
  * @returns {Promise<{success: boolean, error?: string}>}
@@ -779,7 +779,7 @@ async function validateSharesSoldIntegrity() {
 
     if (phasesError) {
       console.error(`❌ [VALIDATION] Error fetching phases:`, phasesError);
-      return { valid: false, issues: ['Failed to fetch investment phases'] };
+      return { valid: false, issues: ['Failed to fetch share phases'] };
     }
 
     const issues = [];
@@ -909,7 +909,7 @@ function createTermsKeyboard() {
         { text: "✅ I Accept Terms & Conditions", callback_data: "accept_terms" }
       ],
       [
-        { text: "📋 Read Full Terms", url: "https://aureus.africa/terms" }
+        { text: "📋 Read Full Terms", url: "https://aureus.africa/" }
       ],
       [
         { text: "🔙 Back to Dashboard", callback_data: "main_menu" }
@@ -966,7 +966,7 @@ function createPortfolioKeyboard() {
     inline_keyboard: [
       [
         { text: "📊 Share Holdings", callback_data: "view_holdings" },
-        { text: "💰 Investment History", callback_data: "view_history" }
+        { text: "💰 Share Purchase History", callback_data: "view_history" }
       ],
       [
         { text: "📈 Performance", callback_data: "view_performance" }
@@ -1117,15 +1117,15 @@ async function handleReferralRegistration(ctx, sponsorUsername) {
 🤝 **Referral Bonus:** You're now part of our referral network!
 
 **🎯 NEXT STEPS:**
-• Explore our gold mining investment opportunities
+• Explore our gold mining shares opportunities
 • Review company presentation and mining operations
-• Start your investment journey with confidence
+• Start your share ownership journey with confidence
 
-**💎 Your sponsor will earn commissions when you invest:**
+**💎 Your sponsor will earn commissions when you purchase shares:**
 • 15% USDT commission
 • 15% additional shares commission
 
-Let's get started with your gold mining investment!`;
+Let's get started with your gold mining share purchase!`;
 
     await ctx.replyWithMarkdown(welcomeMessage, {
       reply_markup: {
@@ -1252,19 +1252,19 @@ async function checkTermsAcceptance(userId) {
 async function showTermsAndConditions(ctx, referralPayload = null) {
   console.log(`📋 [showTermsAndConditions] Displaying terms to user ${ctx.from.username}`);
 
-  const termsMessage = `📋 **TERMS AND CONDITIONS**
+  const termsMessage = `
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**🏆 AUREUS ALLIANCE HOLDINGS (Pty)Ltd**
+*Premium Gold Mining Share Ownership Purchase Platform*
 
-**🏆 AUREUS ALLIANCE HOLDINGS**
-*Premium Gold Mining Investment Platform*
+📋 **TERMS AND CONDITIONS**
 
 **📜 TERMS OF SERVICE:**
 
-**1. INVESTMENT NATURE**
+**1. SHARE NATURE**
 • Gold mining shares represent ownership in physical mining operations
-• Returns depend on actual gold production and market conditions
-• No guaranteed returns or investment promises
+• Dividends depend on actual gold production and market conditions
+• Dividends are paid based on audited annual financials (Profit & Loss statements). There are no guaranteed returns or investment promises—each buyer is acquiring actual equity shares in Aureus Alliance Holdings.
 
 **2. RISK DISCLOSURE**
 • Mining operations involve inherent risks
@@ -1289,9 +1289,7 @@ async function showTermsAndConditions(ctx, referralPayload = null) {
 **6. DISPUTE RESOLUTION**
 • Good faith resolution attempts required
 • Binding arbitration for unresolved disputes
-• Governing law: [Jurisdiction to be specified]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Governing law: South African
 
 **⚠️ MANDATORY ACCEPTANCE REQUIRED**
 You must accept these terms to use the platform.`;
@@ -1311,27 +1309,27 @@ You must accept these terms to use the platform.`;
 async function promptSponsorAssignment(ctx) {
   const sponsorMessage = `🤝 **SPONSOR ASSIGNMENT REQUIRED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **⚠️ MANDATORY REFERRAL SYSTEM**
 
-To proceed with Aureus Alliance Holdings, you need a sponsor. This ensures proper commission tracking and support throughout your investment journey.
+To proceed with Aureus Alliance Holdings, you need a sponsor. This ensures proper commission tracking and support throughout your share purchase journey.
 
 **🎯 YOUR OPTIONS:**
 
 **1️⃣ ENTER SPONSOR USERNAME**
-If someone referred you, enter their username below.
+If someone referred you, enter their telegram username they provided below.
 
 **2️⃣ NO SPONSOR AVAILABLE**
 You can continue without a sponsor and join directly.
 
 **💡 WHY SPONSORS MATTER:**
-• Personalized investment guidance
+• Personalized share ownership guidance
 • Commission structure for referrers
 • Community support network
 • Proper tracking and accountability
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Please choose an option below:**`;
 
@@ -1359,7 +1357,7 @@ async function handleEnterSponsorManual(ctx) {
 
   const instructionMessage = `✍️ **ENTER SPONSOR USERNAME**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Please type the Telegram username of your sponsor:**
 
@@ -1392,21 +1390,21 @@ async function handleAssignDefaultSponsor(ctx) {
     if (success) {
       const successMessage = `✅ **SPONSOR ASSIGNED SUCCESSFULLY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🤝 Your Sponsor:** TTTFOUNDER
 **📅 Assigned:** ${new Date().toLocaleDateString()}
 **✅ Status:** Active
 
 **🎯 NEXT STEPS:**
-You can now access all platform features and start your gold mining investment journey!
+You can now access all platform features and start your gold mining share ownership journey!
 
 **💎 Your sponsor will provide:**
-• Investment guidance and support
+• Share ownership guidance and support
 • Commission tracking for referrals
 • Access to exclusive updates
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
       await ctx.replyWithMarkdown(successMessage, {
         reply_markup: {
@@ -1517,7 +1515,7 @@ async function showMainMenu(ctx) {
   try {
     const logoUrl = 'https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/logonew.png';
     await ctx.replyWithPhoto(logoUrl, {
-      caption: `🏆 **AUREUS ALLIANCE HOLDINGS** 🏆\n*Premium Gold Mining Investments*`,
+      caption: `🏆 **AUREUS ALLIANCE HOLDINGS** 🏆\n*Premium Gold Mining Shares*`,
       parse_mode: 'Markdown'
     });
   } catch (logoError) {
@@ -1535,11 +1533,13 @@ Welcome back, **${user.first_name}**! 👋
 
 ${phaseInfo}
 
-⛏️ **MINING OPERATIONS STATUS:**
-• 🏭 **Washplants:** 10 units (200 tons/hour each)
-• 🥇 **Annual Target:** 3,200 KG gold production
-• 📅 **Full Capacity:** June 2026
-• 📊 **Total Shares:** 1,400,000 available
+⛏️ **AUREUS ALLIANCE HOLDINGS OPERATIONAL PLANS:**
+• 🏭 **Washplants:** 4 units (200 tons/hour each) by June 2026
+• 🏭 **Washplants:** 10 units (200 tons/hour each) by June 2027
+• 🥇 **Annual Target:** 3,200 KG gold production by June 2027
+• 📈 **Growth:** 57 washplants mining 15 tons gold/year at stage 20
+• 🥇 **Per Share Dividend Target:** $1500 per year by June 2030
+• 📊 **Total Purchasabl Shares:** 1,400,000 available
 
 💎 **SHARE PURCHASE OPPORTUNITIES:**
 Choose your preferred method to buy shares in Aureus Alliance Holdings below.`;
@@ -1554,17 +1554,17 @@ async function handleCompanyPresentation(ctx) {
   const presentationMessage = `📋 **COMPANY PRESENTATION**
 
 🏆 **AUREUS ALLIANCE HOLDINGS**
-*Premium Gold Mining Investment Opportunity*
+*Premium Gold Mining Share Ownership Opportunity*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 📊 **EXECUTIVE SUMMARY:**
-• 🥇 **Focus:** Alluvial gold mining operations
-• 📍 **Location:** Mpumalanga Province, South Africa
+• 🥇 **Focus:** Placer gold mining operations
+• 📍 **Location:** Kadoma, Mutare, Zimbabwe & Zambia 
 • ⛏️ **Method:** Environmentally responsible placer mining
-• 💰 **Investment:** Share-based ownership structure
+• 💰 **Structure:** Share-based ownership structure
 
-🎯 **INVESTMENT HIGHLIGHTS:**
+🎯 **SHARE OWNERSHIP HIGHLIGHTS:**
 • 🏭 **10 Washplants:** 200 tons/hour processing capacity each
 • 📈 **Production Target:** 3,200 KG gold annually at full capacity
 • 📅 **Timeline:** Full operations by June 2026
@@ -1573,7 +1573,7 @@ async function handleCompanyPresentation(ctx) {
 📋 **COMPREHENSIVE DOCUMENTATION:**
 Access our complete business plan, geological surveys, and financial projections.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(presentationMessage, {
     reply_markup: {
@@ -1592,9 +1592,9 @@ async function handleMiningOperations(ctx) {
   const miningMessage = `⛏️ **MINING OPERATIONS OVERVIEW**
 
 🏭 **AUREUS ALLIANCE HOLDINGS**
-*Advanced Alluvial Gold Mining Operations*
+*Advanced Placer Gold Mining Operations*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🔧 **OPERATIONAL SPECIFICATIONS:**
 • 🏭 **Washplants:** 10 units operational
@@ -1611,7 +1611,7 @@ async function handleMiningOperations(ctx) {
 📹 **MULTIMEDIA DOCUMENTATION:**
 Explore our comprehensive visual documentation of mining operations.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(miningMessage, {
     reply_markup: {
@@ -1633,7 +1633,7 @@ async function handleCommunityRelations(ctx) {
 🤝 **AUREUS ALLIANCE HOLDINGS**
 *Building Sustainable Community Partnerships*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🌟 **COMMUNITY ENGAGEMENT:**
 • 👥 **Local Employment:** Priority hiring from surrounding communities
@@ -1650,7 +1650,7 @@ async function handleCommunityRelations(ctx) {
 🤝 **STAKEHOLDER RELATIONS:**
 Regular community meetings and transparent communication about our operations.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(communityMessage, {
     reply_markup: {
@@ -1704,7 +1704,7 @@ bot.command('version', async (ctx) => {
 📅 **Deployment Time:** ${new Date().toISOString()}
 🔗 **Bot Link:** https://t.me/AureusAllianceBot
 ✅ **Status:** Running aureus-bot-new.js
-🎯 **NEW BOT TOKEN:** AureusAllianceBot (clean slate)
+🎯 **NEW BOT TOKEN:** AureusAllianceBot (clean slate) - SUN
 🔗 **REFERRAL LINK FIX:** Applied ${new Date().toISOString()}
 
 🚨 **CRITICAL FIX STATUS:**
@@ -1819,7 +1819,7 @@ bot.on('callback_query', async (ctx) => {
       case 'view_gold_chart':
         await ctx.answerCbQuery('Opening gold chart...');
         await ctx.replyWithPhoto('https://fgubaqoftdeefcakejwu.supabase.co/storage/v1/object/public/assets/chart.png', {
-          caption: '📊 *AUREUS ALLIANCE HOLDINGS*\n*Gold Price Performance Chart*\n\n📈 Historical gold price trends and market analysis for informed investment decisions.',
+          caption: '📊 *AUREUS ALLIANCE HOLDINGS*\n*Gold Price Performance Chart*\n\n📈 Historical gold price trends and market analysis for informed share purchase decisions.',
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [
@@ -2110,7 +2110,7 @@ bot.on('callback_query', async (ctx) => {
 async function handleSupportCenter(ctx) {
   const supportMessage = `🆘 **AUREUS SUPPORT CENTER**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **24/7 PREMIUM SUPPORT**
 
@@ -2118,20 +2118,20 @@ async function handleSupportCenter(ctx) {
 • 📧 **Email:** support@aureus.africa
 • 🌐 **Website:** https://aureus.africa
 • 💬 **Live Chat:** Available on website
-• 📱 **WhatsApp:** +27 XX XXX XXXX
+• 📱 **WhatsApp:** +27 74 449 3251
 
 🔧 **SUPPORT SERVICES:**
 • ❓ General inquiries and assistance
 • 💰 Payment and transaction support
-• 📊 Portfolio and investment guidance
+• 📊 Portfolio and share guidance
 • 🔐 Account security and access issues
 
 ⏰ **RESPONSE TIMES:**
-• 📧 Email: Within 24 hours
+• 📧 Email: Within 24 hours during business hours
 • 💬 Live Chat: Immediate during business hours
-• 📱 WhatsApp: Within 2 hours
+• 📱 WhatsApp: Within 2 hours during business hours
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(supportMessage, {
     reply_markup: {
@@ -2149,9 +2149,9 @@ async function showSupportFAQ(ctx) {
   const faqMessage = `❓ **FREQUENTLY ASKED QUESTIONS**
 🆘 **AUREUS SUPPORT CENTER**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**💰 PAYMENT & INVESTMENT QUESTIONS:**
+
+**💰 PAYMENT & SHARE QUESTIONS:**
 
 **Q: How do I purchase shares?**
 A: Use the "💰 Purchase Shares" button from the main menu. Choose your payment method (crypto or bank transfer) and follow the guided process.
@@ -2165,7 +2165,7 @@ A: Crypto payments: 1-24 hours | Bank transfers: 1-3 business days
 **Q: Can I buy more shares if I have pending payments?**
 A: Yes! You can make additional purchases while previous payments are being processed.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🔐 ACCOUNT & SECURITY:**
 
@@ -2178,20 +2178,20 @@ A: KYC starts automatically after your first successful payment. Follow the step
 **Q: Is my personal information secure?**
 A: Yes, we follow GDPR/POPIA compliance standards for data protection.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**📊 PORTFOLIO & RETURNS:**
 
-**Q: How do I track my investment?**
+**📊 PORTFOLIO & DIVIDENDS:**
+
+**Q: How do I track my Shares?**
 A: Use "📊 My Portfolio" from the main menu to view your shares, value, and performance.
 
-**Q: When will I receive returns?**
-A: Returns are distributed based on mining operations performance. Check your portfolio for updates.
+**Q: When will I receive dividends?**
+A: Dividends are distributed based on mining operations performance. Check your portfolio for updates.
 
-**Q: Can I withdraw my investment?**
-A: Investment terms and withdrawal conditions are detailed in the legal documents section.
+**Q: Can I withdraw my Shares?**
+A: Share Purchase terms and withdrawal conditions are detailed in the legal documents section.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(faqMessage, {
     reply_markup: {
@@ -2276,7 +2276,7 @@ async function handleTermsDecline(ctx) {
 
   const declineMessage = `❌ **TERMS DECLINED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **⚠️ ACCESS RESTRICTED**
 
@@ -2290,12 +2290,12 @@ You have declined to accept our Terms and Conditions.
 **🔄 TO CONTINUE:**
 • Restart the bot with /start
 • Review and accept the terms
-• Begin your gold mining investment journey
+• Begin your gold mining share purchase journey
 
 **📞 QUESTIONS?**
 Contact @TTTFOUNDER for clarification about our terms.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(declineMessage, {
     reply_markup: {
@@ -2311,7 +2311,7 @@ Contact @TTTFOUNDER for clarification about our terms.
 async function handleUSDTPaymentNetworkSelection(ctx) {
   const networkMessage = `💎 **USDT PAYMENT NETWORKS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Choose your preferred USDT network:**
 
@@ -2416,7 +2416,7 @@ async function handleUSDTNetworkSelection(ctx, callbackData) {
 async function showPrivacyPolicy(ctx) {
   const privacyMessage = `🔒 **PRIVACY POLICY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🏆 AUREUS ALLIANCE HOLDINGS**
 *Data Protection & Privacy*
@@ -2424,12 +2424,12 @@ async function showPrivacyPolicy(ctx) {
 **📊 DATA COLLECTION:**
 • Username and contact information
 • Transaction and payment data
-• Investment portfolio information
+• Share portfolio information
 • Communication records
 
 **🔐 DATA USAGE:**
 • Platform operation and maintenance
-• Investment processing and tracking
+• Share purchase processing and tracking
 • Customer support and communication
 • Legal compliance and reporting
 
@@ -2462,7 +2462,7 @@ async function showPrivacyPolicy(ctx) {
 • Telegram: @TTTFOUNDER
 • Response: 30 days maximum
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Last Updated:** January 2025`;
 
@@ -2482,7 +2482,7 @@ async function showExcavationVideos(ctx) {
 ⛏️ *AUREUS ALLIANCE HOLDINGS*
 *Live Mining Operations Documentation*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🎥 **PRIMARY PIT EXCAVATION:**
 • Video: Active washplant operations
@@ -2499,7 +2499,7 @@ async function showExcavationVideos(ctx) {
 • Scope: Comprehensive operational coverage
 • Quality: Professional documentation standards
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(videosMessage, {
     reply_markup: {
@@ -2518,11 +2518,11 @@ async function showGeologicalEvidence(ctx) {
 ⛏️ *AUREUS ALLIANCE HOLDINGS*
 *Scientific Gold Discovery Documentation*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🏔️ **GOLD PARTICLES IN SAND:**
 • Analysis: Visible gold particles in processed sand
-• Concentration: High-grade alluvial deposits
+• Concentration: High-grade gold placer deposits
 • Verification: Professional geological assessment
 
 💎 **GOLD VEINS IN ROCK SAMPLES:**
@@ -2535,7 +2535,7 @@ async function showGeologicalEvidence(ctx) {
 • Results: Confirmed gold-bearing formations
 • Potential: Extensive mineral resource base
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(evidenceMessage, {
     reply_markup: {
@@ -2553,16 +2553,16 @@ async function showProjectOverview(ctx) {
 ⛏️ *AUREUS ALLIANCE HOLDINGS*
 *Comprehensive Mining Project Scope*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🏞️ **PROJECT SCALE:**
-• Total Area: 300 hectares of mining concessions
+• Total Area: 250 hectares of mining concessions
 • Operations: 10 washplants (200 tons/hour each)
 • Capacity: 48,000 tons daily processing potential
 • Target: 3,200 KG annual gold production
 
 🌍 **LOCATION ADVANTAGES:**
-• Region: Mpumalanga Province, South Africa
+• Region: Kadoma, Zimbabwe
 • Access: Established infrastructure and logistics
 • Resources: Abundant water and power supply
 • Community: Strong local partnerships
@@ -2571,9 +2571,9 @@ async function showProjectOverview(ctx) {
 • Phase 1: Equipment deployment and site preparation
 • Phase 2: Full operational capacity by June 2026
 • Phase 3: Expansion and optimization programs
-• Long-term: Sustainable 20-year operation plan
+• Long-term: Sustainable 150-year operation plan
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(overviewMessage, {
     reply_markup: {
@@ -2590,9 +2590,9 @@ async function showExecutiveAssessment(ctx) {
 ⛏️ *AUREUS ALLIANCE HOLDINGS*
 *Leadership Team & Strategic Vision*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-👨‍💼 **JP RADEMEYER - CEO & FOUNDER:**
+
+👨‍💼 **DONOVAN JAMES - CEO & FOUNDER:**
 • Experience: 15+ years in mining operations
 • Expertise: Gold extraction and processing
 • Vision: Sustainable and profitable mining
@@ -2602,15 +2602,15 @@ async function showExecutiveAssessment(ctx) {
 • Operational Excellence: Maximum efficiency standards
 • Environmental Responsibility: Eco-friendly practices
 • Community Development: Local economic growth
-• Investor Returns: Consistent dividend payments
+• Share Ownership Dividends: Consistent dividend payments
 
 📊 **PERFORMANCE METRICS:**
 • Safety Record: Zero-incident operational standards
 • Environmental Compliance: 100% regulatory adherence
 • Community Relations: Active stakeholder engagement
-• Financial Transparency: Regular investor reporting
+• Financial Transparency: Regular shareholder reporting
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(executiveMessage, {
     reply_markup: {
@@ -2627,7 +2627,7 @@ async function showCommunityMeetings(ctx) {
 ⛏️ *AUREUS ALLIANCE HOLDINGS*
 *Stakeholder Engagement & Communication*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 📅 **REGULAR MEETINGS SCHEDULE:**
 • Monthly: Community liaison meetings
@@ -2647,7 +2647,7 @@ async function showCommunityMeetings(ctx) {
 • Government Officials: Regulatory compliance
 • Environmental Groups: Sustainability partnerships
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(meetingsMessage, {
     reply_markup: {
@@ -2664,7 +2664,7 @@ async function showDevelopmentPlans(ctx) {
 ⛏️ *AUREUS ALLIANCE HOLDINGS*
 *Long-term Community Development Initiatives*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🏫 **EDUCATION INITIATIVES:**
 • School Infrastructure: Classroom construction
@@ -2684,7 +2684,7 @@ async function showDevelopmentPlans(ctx) {
 • Electricity: Power grid connections
 • Communication: Internet and mobile coverage
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(developmentMessage, {
     reply_markup: {
@@ -2701,7 +2701,7 @@ async function showCommunityContact(ctx) {
 ⛏️ **AUREUS ALLIANCE HOLDINGS**
 *Direct Communication Channel*
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 📧 **EMAIL CONTACT:**
 support@aureus.africa
@@ -2727,7 +2727,7 @@ support@aureus.africa
 📋 **WHEN CONTACTING US:**
 Please include your name, community/area, and specific inquiry details for faster assistance.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(contactMessage, {
     reply_markup: {
@@ -2766,7 +2766,7 @@ async function handleValidateSharesSold(ctx) {
 
     let message = `🔍 **SHARES SOLD INTEGRITY CHECK**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📊 SUMMARY:**
 • **Total Phases:** ${validation.summary?.total_phases || 0}
@@ -2795,7 +2795,7 @@ async function handleValidateSharesSold(ctx) {
 
     message += `
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🔧 This validation checks:**
 • shares_sold doesn't exceed total_shares_available
@@ -2926,11 +2926,11 @@ async function showUSDTAmountInput(ctx, selectedNetwork) {
 
   const customAmountMessage = `💎 **USDT PAYMENT**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**💰 ENTER INVESTMENT AMOUNT**
 
-Enter your desired investment amount between $5 and $50,000:
+**💰 ENTER SHARE PURCHASE AMOUNT**
+
+Enter your desired share purchase amount between $5 and $50,000:
 
 **📋 PAYMENT DETAILS:**
 • Minimum: $5 USD
@@ -2945,7 +2945,7 @@ $100 USD = 100 USDT (1:1 ratio)
 **⚠️ IMPORTANT:**
 Make sure to send USDT on the ${network.name} network only. Wrong network = lost funds.
 
-**Type your investment amount in USD (numbers only):**`;
+**Type your purchase amount in USD (numbers only):**`;
 
   await ctx.replyWithMarkdown(customAmountMessage, {
     reply_markup: {
@@ -2976,14 +2976,14 @@ async function handlePurchaseSharesStart(ctx) {
   if (isMaintenanceMode && user.username !== 'TTTFOUNDER') {
     await ctx.replyWithMarkdown(`🔧 **SYSTEM MAINTENANCE**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **System is currently under maintenance and being upgraded.**
 
 🚫 **Share purchasing is temporarily disabled**
 ✅ **All other functions remain available**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **You can still access:**
 • 📊 Portfolio management
@@ -3066,7 +3066,7 @@ async function handlePurchaseSharesStart(ctx) {
       // Create safe message without nested markdown
       let pendingMessage = `⚠️ INCOMPLETE PAYMENT DETECTED
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 ${statusIcon} You have an incomplete payment that needs attention:
 
@@ -3082,7 +3082,7 @@ ${statusIcon} You have an incomplete payment that needs attention:
 
       pendingMessage += `
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🔧 WHAT WOULD YOU LIKE TO DO?
 
@@ -3117,7 +3117,7 @@ You must complete this payment before making a new purchase.`;
 async function showPaymentMethodSelection(ctx, userId) {
   const paymentMethodMessage = `🛒 **SELECT PAYMENT METHOD**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💳 CHOOSE YOUR PREFERRED PAYMENT METHOD:**
 
@@ -3294,7 +3294,7 @@ ${balanceInfo.escrowedAmount > 0 ?
     // Show confirmation
     const confirmationMessage = `✅ **COMMISSION TO SHARES CONVERSION**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **CONVERSION DETAILS:**
 • **Shares to Purchase:** ${sharesRequested} shares
@@ -3306,7 +3306,7 @@ ${balanceInfo.escrowedAmount > 0 ?
 • **Available:** $${conversionData.available_usdt.toFixed(2)} USDT
 • **After Conversion:** $${(conversionData.available_usdt - totalCost).toFixed(2)} USDT
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **⚠️ IMPORTANT:**
 • This request will be sent to admin for approval
@@ -3427,7 +3427,7 @@ Your commission balance is secure and will be available once pending requests ar
     // Notify user
     await ctx.replyWithMarkdown(`✅ **CONVERSION REQUEST SUBMITTED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Request ID:** #${conversion.id.substring(0, 8)}
 **Shares:** ${sharesRequested} shares
@@ -3436,7 +3436,7 @@ Your commission balance is secure and will be available once pending requests ar
 
 **Status:** Pending admin approval
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 Your conversion request has been submitted to the admin for approval. You will be notified once it's processed.
 
@@ -3539,7 +3539,7 @@ Cannot approve this conversion due to insufficient balance.`);
     // Success notification to admin
     await ctx.replyWithMarkdown(`✅ **COMMISSION CONVERSION APPROVED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Request ID:** #${conversionId.substring(0, 8)}
 **User:** ${conversion.users.full_name || conversion.users.username}
@@ -3552,7 +3552,7 @@ Cannot approve this conversion due to insufficient balance.`);
 • Shares added to user's portfolio
 • Commission history recorded
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "👥 View All Requests", callback_data: "admin_commission_conversions" }],
@@ -3572,7 +3572,7 @@ Cannot approve this conversion due to insufficient balance.`);
       if (telegramUser) {
         const userNotification = `✅ **COMMISSION CONVERSION APPROVED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Request ID:** #${conversionId.substring(0, 8)}
 **Shares Purchased:** ${conversion.shares_requested} shares
@@ -3584,7 +3584,7 @@ Cannot approve this conversion due to insufficient balance.`);
 
 Your commission balance has been updated and the shares have been added to your portfolio.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
         await sendAudioNotificationToUser(
           telegramUser.telegram_id,
@@ -3684,7 +3684,7 @@ async function handleRejectCommissionConversion(ctx, callbackData) {
     // Success notification to admin
     await ctx.replyWithMarkdown(`❌ **COMMISSION CONVERSION REJECTED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Request ID:** #${conversionId.substring(0, 8)}
 **User:** ${conversion.users.full_name || conversion.users.username}
@@ -3695,7 +3695,7 @@ async function handleRejectCommissionConversion(ctx, callbackData) {
 
 The user will be notified of the rejection.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "👥 View All Requests", callback_data: "admin_commission_conversions" }],
@@ -3715,7 +3715,7 @@ The user will be notified of the rejection.
       if (telegramUser) {
         const userNotification = `❌ **COMMISSION CONVERSION REJECTED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Request ID:** #${conversionId.substring(0, 8)}
 **Shares Requested:** ${conversion.shares_requested} shares
@@ -3723,7 +3723,7 @@ The user will be notified of the rejection.
 
 **Status:** Rejected by Admin
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 Your commission conversion request has been rejected. Your commission balance remains unchanged.
 
@@ -3732,7 +3732,7 @@ Your commission conversion request has been rejected. Your commission balance re
 • Contact support for more information
 • Use your commission for other purposes
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
         await bot.telegram.sendMessage(telegramUser.telegram_id, userNotification, {
           parse_mode: 'Markdown',
@@ -3785,13 +3785,13 @@ async function handleAdminCommissionConversions(ctx) {
     if (!conversions || conversions.length === 0) {
       await ctx.replyWithMarkdown(`🔄 **COMMISSION CONVERSIONS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **No pending commission conversion requests**
 
 All conversion requests have been processed.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]
@@ -3801,7 +3801,7 @@ All conversion requests have been processed.
       return;
     }
 
-    let message = `🔄 **COMMISSION CONVERSIONS**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**${conversions.length} Pending Request${conversions.length > 1 ? 's' : ''}:**\n\n`;
+    let message = `🔄 **COMMISSION CONVERSIONS**\n\n\n\n**${conversions.length} Pending Request${conversions.length > 1 ? 's' : ''}:**\n\n`;
 
     const keyboard = [];
 
@@ -3824,7 +3824,7 @@ All conversion requests have been processed.
       ]);
     });
 
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**Select an action for each request above.**`;
+    message += `\n\n**Select an action for each request above.**`;
 
     keyboard.push([{ text: "🔙 Back to Admin Panel", callback_data: "admin_panel" }]);
 
@@ -3954,13 +3954,13 @@ async function handleAdminPendingWithdrawals(ctx) {
     if (!withdrawals || withdrawals.length === 0) {
       await ctx.replyWithMarkdown(`⏳ **PENDING WITHDRAWALS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **No pending withdrawal requests**
 
 All withdrawal requests have been processed.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "🔙 Back to Commission Requests", callback_data: "admin_commissions" }]
@@ -3970,7 +3970,7 @@ All withdrawal requests have been processed.
       return;
     }
 
-    let message = `⏳ **PENDING WITHDRAWALS**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**${withdrawals.length} Pending Request${withdrawals.length > 1 ? 's' : ''}:**\n\n`;
+    let message = `⏳ **PENDING WITHDRAWALS**\n\n\n\n**${withdrawals.length} Pending Request${withdrawals.length > 1 ? 's' : ''}:**\n\n`;
 
     const keyboard = [];
 
@@ -3997,7 +3997,7 @@ All withdrawal requests have been processed.
       ]);
     }
 
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**Select an action for each request above.**`;
+    message += `\n\n**Select an action for each request above.**`;
 
     keyboard.push([{ text: "🔙 Back to Commission Requests", callback_data: "admin_commissions" }]);
 
@@ -4170,7 +4170,7 @@ async function handleRejectWithdrawalPrompt(ctx, callbackData) {
 
     const promptMessage = `❌ **REJECT WITHDRAWAL CONFIRMATION**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Withdrawal Details:**
 • **ID:** #${withdrawal.id.substring(0, 8)}
@@ -4179,7 +4179,7 @@ async function handleRejectWithdrawalPrompt(ctx, callbackData) {
 • **Wallet:** ${withdrawal.wallet_address}
 • **Type:** ${withdrawal.withdrawal_type.toUpperCase()}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Please enter the reason for rejecting this withdrawal:**
 
@@ -4300,7 +4300,7 @@ async function handleWithdrawalRejectionReasonInput(ctx, rejectionReason) {
     // Enhanced rejection notification to admin
     await ctx.replyWithMarkdown(`❌ **WITHDRAWAL REJECTED & PROCESSED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📋 REQUEST DETAILS:**
 • **Request ID:** #${withdrawalId.substring(0, 8)}
@@ -4325,7 +4325,7 @@ ${rejectionReason.trim()}
 • ✅ Audit log entry created
 • ✅ Balance integrity maintained
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📧 USER NOTIFICATION:** Sent successfully with rejection reason and next steps.
 **💡 USER OPTIONS:** They can review, correct issues, and submit a new request.`, {
@@ -4348,7 +4348,7 @@ ${rejectionReason.trim()}
       if (telegramUser) {
         const userNotification = `❌ **WITHDRAWAL REJECTED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Request ID:** #${withdrawalId.substring(0, 8)}
 **Amount:** $${withdrawal.amount.toFixed(2)} USDT
@@ -4359,7 +4359,7 @@ ${rejectionReason.trim()}
 **Reason for Rejection:**
 ${rejectionReason.trim()}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 Your withdrawal request has been rejected. Your commission balance remains unchanged.
 
@@ -4369,7 +4369,7 @@ Your withdrawal request has been rejected. Your commission balance remains uncha
 • Submit a new withdrawal request
 • Contact support for assistance
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
         await sendAudioNotificationToUser(
           telegramUser.telegram_id,
@@ -4470,21 +4470,21 @@ The username "${sponsorUsername}" was not found in our system.
 
       const successMessage = `✅ **SPONSOR ASSIGNED SUCCESSFULLY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🤝 Your Sponsor:** ${sponsor.full_name || sponsorUsername} (@${sponsorUsername})
 **📅 Assigned:** ${new Date().toLocaleDateString()}
 **✅ Status:** Active
 
 **🎯 NEXT STEPS:**
-You can now access all platform features and start your gold mining investment journey!
+You can now access all platform features and start your gold mining share journey!
 
 **💎 Your sponsor will provide:**
-• Investment guidance and support
+• Share guidance and support
 • Commission tracking for referrals
 • Access to exclusive updates
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
       console.log(`📤 Sending success message to user ${user.username}`);
       await ctx.replyWithMarkdown(successMessage, {
@@ -4614,7 +4614,7 @@ async function handleWalletAddressInput(ctx, walletAddress, sessionData) {
 
     const hashMessage = `💳 PAYMENT PROOF SUBMISSION - STEP 2 OF 3
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 ✅ Wallet Address Saved: ${walletAddress.substring(0, 10)}...
 
@@ -4681,7 +4681,7 @@ This transaction hash has already been used for another payment.
 
     const screenshotMessage = `💳 PAYMENT PROOF SUBMISSION - STEP 3 OF 3
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 ✅ Transaction Hash Saved: ${transactionHash.substring(0, 10)}...
 
@@ -4789,7 +4789,7 @@ async function handleProofScreenshot(ctx, sessionData, isDocument = false) {
 
     const successMessage = `✅ **PAYMENT PROOF UPLOADED SUCCESSFULLY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📋 SUBMISSION COMPLETE:**
 • Payment ID: #${paymentId.substring(0, 8)}
@@ -4898,7 +4898,7 @@ ${balanceInfo.escrowedAmount > 0 ?
 
     const walletMessage = `💳 **WALLET ADDRESS REQUIRED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💰 Withdrawal Amount:** $${amount.toFixed(2)} USDT
 **💸 Processing Fee:** $2.00 USDT
@@ -5037,7 +5037,7 @@ Your commission balance is secure and will be available once pending requests ar
 
     const successMessage = `✅ **WITHDRAWAL REQUEST SUBMITTED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📋 REQUEST DETAILS:**
 • **Request ID:** #${withdrawal.id.substring(0, 8)}
@@ -5056,7 +5056,7 @@ Your commission balance is secure and will be available once pending requests ar
 
 **📱 You'll receive notifications for all status updates.**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💡 Track your request in Withdrawal History**`;
 
@@ -5192,7 +5192,7 @@ async function handleWithdrawalHashInput(ctx, text, sessionData) {
     // Success notification to admin
     await ctx.replyWithMarkdown(`✅ **WITHDRAWAL APPROVED & PROCESSED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📋 REQUEST DETAILS:**
 • **Request ID:** #${short_id}
@@ -5213,7 +5213,7 @@ async function handleWithdrawalHashInput(ctx, text, sessionData) {
 • ✅ Transaction hash recorded
 • ✅ User notification sent
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
       reply_markup: {
         inline_keyboard: [
           [{ text: "⏳ View Pending Withdrawals", callback_data: "admin_pending_withdrawals" }],
@@ -5233,7 +5233,7 @@ async function handleWithdrawalHashInput(ctx, text, sessionData) {
       if (telegramUser) {
         const userNotification = `✅ **WITHDRAWAL COMPLETED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Request ID:** #${short_id}
 **Amount:** $${withdrawal.amount.toFixed(2)} USDT
@@ -5244,13 +5244,13 @@ async function handleWithdrawalHashInput(ctx, text, sessionData) {
 
 **Status:** ✅ Payment Completed
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 Your withdrawal has been successfully processed! The USDT has been transferred to your wallet address.
 
 **You can verify the transaction using the hash above on the blockchain explorer.**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
         await sendAudioNotificationToUser(
           telegramUser.telegram_id,
@@ -5306,9 +5306,9 @@ async function processCustomAmountPurchase(ctx, amount) {
 
     const confirmMessage = `🛒 **PURCHASE CONFIRMATION**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**💰 INVESTMENT DETAILS:**
+
+**💰 SHARE DETAILS:**
 • Amount: ${formatCurrency(amount)}
 • Share Price: ${formatCurrency(sharePrice)}
 • Shares: ${sharesAmount.toLocaleString()}
@@ -5411,30 +5411,30 @@ async function handlePortfolio(ctx) {
 
     const portfolioMessage = `📊 **MY PORTFOLIO**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💎 SHARE HOLDINGS:**
 • **Total Shares:** ${totalShares.toLocaleString()}
-• **Total Invested:** ${formatCurrency(totalInvested)}
+• **Total Purchased:** ${formatCurrency(totalInvested)}
 • **Approved Purchases:** ${approvedPurchases.length}
 
 **🤝 REFERRAL INFORMATION:**
 • **Your Sponsor:** ${sponsorInfo}
 • **Referral Status:** ${referralInfo ? 'Active' : 'Not assigned'}
 
-**📈 INVESTMENT SUMMARY:**
+**📈 SHARE SUMMARY:**
 ${purchases && purchases.length > 0
   ? purchases.slice(0, 5).map(purchase =>
       `• ${formatCurrency(purchase.total_amount)} - ${purchase.shares_purchased} shares (${purchase.status})`
     ).join('\n')
-  : '• No investments yet'}
+  : '• No shares purchased yet'}
 
 **🎯 NEXT STEPS:**
 ${totalShares > 0
   ? 'Your shares are generating value through our gold mining operations.'
-  : 'Start your investment journey with your first share purchase.'}
+  : 'Start your journey with your first share purchase.'}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
     const keyboard = totalShares > 0
       ? [
@@ -5481,7 +5481,7 @@ async function handleViewApprovedPayments(ctx) {
     if (approvedPayments.length === 0) {
       await ctx.replyWithMarkdown(`✅ **APPROVED PAYMENTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **No approved payments found**
 
@@ -5492,7 +5492,7 @@ You haven't had any payments approved yet. Once your payments are approved by ou
 • Wait for admin approval (usually 2-24 hours)
 • Check back here for updates
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
@@ -5511,11 +5511,11 @@ You haven't had any payments approved yet. Once your payments are approved by ou
 
     const message = `✅ **APPROVED PAYMENTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n')}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${paymentsText.join('\n\n\n\n')}
+
+
 
 **📊 Summary:** ${approvedPayments.length} approved payment${approvedPayments.length > 1 ? 's' : ''}
 **💰 Total Value:** $${approvedPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0).toFixed(2)} USDT`;
@@ -5559,7 +5559,7 @@ async function handleViewRejectedPayments(ctx) {
     if (rejectedPayments.length === 0) {
       await ctx.replyWithMarkdown(`❌ **REJECTED PAYMENTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **No rejected payments found**
 
@@ -5571,7 +5571,7 @@ Great news! You haven't had any payments rejected. All your submissions have bee
 • Ensure payment amounts match exactly
 • Submit payments during business hours
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
@@ -5590,11 +5590,11 @@ Great news! You haven't had any payments rejected. All your submissions have bee
 
     const message = `❌ **REJECTED PAYMENTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n')}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${paymentsText.join('\n\n\n\n')}
+
+
 
 **📊 Summary:** ${rejectedPayments.length} rejected payment${rejectedPayments.length > 1 ? 's' : ''}
 **💡 Next Steps:** Review rejection reasons and resubmit corrected payments`;
@@ -5639,7 +5639,7 @@ async function handleViewPendingPayments(ctx) {
     if (pendingPayments.length === 0) {
       await ctx.replyWithMarkdown(`⏳ **PENDING PAYMENTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **No pending payments found**
 
@@ -5650,7 +5650,7 @@ You don't have any payments currently awaiting approval.
 • Check your approved payments history
 • Contact support if you're expecting a pending payment
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "🛒 Purchase Shares", callback_data: "menu_purchase_shares" }],
@@ -5669,11 +5669,11 @@ You don't have any payments currently awaiting approval.
 
     const message = `⏳ **PENDING PAYMENTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n')}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${paymentsText.join('\n\n\n\n')}
+
+
 
 **📊 Summary:** ${pendingPayments.length} pending payment${pendingPayments.length > 1 ? 's' : ''}
 **⏱️ Processing Time:** Usually 2-24 hours
@@ -5701,7 +5701,7 @@ ${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━�
 async function handlePaymentStatus(ctx) {
   const paymentMessage = `💳 **PAYMENT & TRANSACTION CENTER**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **PAYMENT METHODS SUPPORTED:**
 • 💳 **BSC USDT** - Binance Smart Chain
@@ -5722,7 +5722,7 @@ async function handlePaymentStatus(ctx) {
 **📱 PAYMENT TRACKING:**
 Monitor all your transactions and payment history in real-time.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 Secure 3-step payment verification with instant processing.`;
 
@@ -5746,7 +5746,7 @@ Secure 3-step payment verification with instant processing.`;
 async function handleReferralSystem(ctx) {
   const referralMessage = `👥 **REFERRAL PROGRAM**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💰 EARN 15% COMMISSION:**
 • 15% USDT Commission on every referral purchase
@@ -5756,7 +5756,7 @@ async function handleReferralSystem(ctx) {
 
 **🎯 HOW IT WORKS:**
 1. Share your unique referral link
-2. Friends invest using your link
+2. Friends purchase shares using your link
 3. Earn instant 15% commission
 4. Withdraw anytime to your wallet
 
@@ -5768,11 +5768,11 @@ async function handleReferralSystem(ctx) {
 
 **🚀 REFERRAL BENEFITS:**
 • Build passive income stream
-• Help friends access gold mining investment
+• Help friends access gold mining shares
 • Grow your own share portfolio
 • Professional referral tracking
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(referralMessage, {
     reply_markup: {
@@ -5805,7 +5805,7 @@ async function handleAdminPanel(ctx) {
 
   const adminMessage = `🔑 **ADMIN CONTROL PANEL**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **⚡ SYSTEM STATUS:** ${maintenanceStatus}
 
@@ -5828,7 +5828,7 @@ async function handleAdminPanel(ctx) {
 • Audit trail logging enabled
 • Real-time monitoring active
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(adminMessage, {
     reply_markup: {
@@ -5878,7 +5878,7 @@ async function handleToggleMaintenance(ctx) {
 
       await ctx.replyWithMarkdown(`${statusIcon} **MAINTENANCE MODE ${statusText}**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Status:** ${newMode ? 'Share purchasing is now DISABLED' : 'Share purchasing is now ENABLED'}
 
@@ -5887,7 +5887,7 @@ ${newMode ?
   '✅ **All bot functions are now fully operational**\n🛒 **Users can purchase shares normally**'
 }
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Action logged for audit purposes.**`, {
         reply_markup: {
@@ -5916,7 +5916,7 @@ async function handleAdminStatus(ctx) {
 
   const statusMessage = `📊 **SYSTEM STATUS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🟢 ALL SYSTEMS OPERATIONAL**
 
@@ -5932,7 +5932,7 @@ async function handleAdminStatus(ctx) {
 • Error rate: < 0.1%
 • Active connections: Stable
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(statusMessage, {
     reply_markup: {
@@ -5988,7 +5988,7 @@ async function handleAdminApprovedPayments(ctx) {
     if (approvedPayments.length === 0) {
       await ctx.replyWithMarkdown(`✅ **APPROVED PAYMENTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **No approved payments found**
 
@@ -5999,7 +5999,7 @@ There are currently no approved payments in the system.
 • Check system activity logs
 • Monitor payment processing metrics
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "⏳ View Pending", callback_data: "admin_payments" }],
@@ -6020,11 +6020,11 @@ There are currently no approved payments in the system.
 
     const message = `✅ **APPROVED PAYMENTS - ADMIN VIEW**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n')}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${paymentsText.join('\n\n\n\n')}
+
+
 
 **📊 SUMMARY:**
 • **Total Payments:** ${approvedPayments.length}
@@ -6072,7 +6072,7 @@ async function handleAdminRejectedPayments(ctx) {
     if (rejectedPayments.length === 0) {
       await ctx.replyWithMarkdown(`❌ **REJECTED PAYMENTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **No rejected payments found**
 
@@ -6089,7 +6089,7 @@ Great! There are currently no rejected payments in the system. This indicates:
 • Good user compliance
 • Effective payment process
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "⏳ View Pending", callback_data: "admin_payments" }],
@@ -6110,11 +6110,11 @@ Great! There are currently no rejected payments in the system. This indicates:
 
     const message = `❌ **REJECTED PAYMENTS - ADMIN VIEW**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${paymentsText.join('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n')}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${paymentsText.join('\n\n\n\n')}
+
+
 
 **📊 REJECTION SUMMARY:**
 • **Total Rejected:** ${rejectedPayments.length}
@@ -6195,13 +6195,13 @@ async function handleAdminPayments(ctx) {
     if (!pendingPayments || pendingPayments.length === 0) {
       await ctx.replyWithMarkdown(`💳 **PAYMENT APPROVALS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 ✅ **No pending payments**
 
 All payments have been processed!
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "✅ View Approved", callback_data: "admin_approved_payments" }],
@@ -6247,11 +6247,11 @@ ${paymentMethodDisplay}
 
     await ctx.replyWithMarkdown(`💳 **PENDING PAYMENTS** (${pendingPayments.length})
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 ${paymentsText}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Click a payment to review:**`, {
       reply_markup: {
@@ -6286,11 +6286,11 @@ async function handleAdminUsers(ctx) {
 
   const usersMessage = `👥 **USER MANAGEMENT**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **USER ADMINISTRATION TOOLS:**
 • View all registered users
-• Check user investment history
+• Check user share history
 • Manage user accounts
 • Monitor user activity
 • Handle user support requests
@@ -6298,10 +6298,10 @@ async function handleAdminUsers(ctx) {
 **COMING SOON:**
 • User search functionality
 • Account status management
-• Investment analytics per user
+• Share analytics per user
 • User communication tools
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(usersMessage, {
     reply_markup: {
@@ -6325,17 +6325,17 @@ async function handleAdminAnalytics(ctx) {
 
   const analyticsMessage = `📊 **SYSTEM ANALYTICS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **PERFORMANCE METRICS:**
 • Total users registered
-• Total investments processed
+• Total shares processed
 • Commission payouts
 • System performance data
 
 **FINANCIAL ANALYTICS:**
 • Revenue tracking
-• Investment flow analysis
+• Share flow analysis
 • Commission distribution
 • Phase progression metrics
 
@@ -6345,7 +6345,7 @@ async function handleAdminAnalytics(ctx) {
 • Export capabilities
 • Trend analysis
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(analyticsMessage, {
     reply_markup: {
@@ -6369,7 +6369,7 @@ async function handleAdminCommissions(ctx) {
 
   const commissionsMessage = `💰 **COMMISSION REQUESTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **COMMISSION MANAGEMENT:**
 • Review withdrawal requests
@@ -6389,7 +6389,7 @@ async function handleAdminCommissions(ctx) {
 • Commission analytics
 • Payment scheduling
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(commissionsMessage, {
     reply_markup: {
@@ -6414,7 +6414,7 @@ async function handleAdminLogs(ctx) {
 
   const logsMessage = `📋 **AUDIT LOGS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **SYSTEM ACTIVITY TRACKING:**
 • Admin actions and approvals
@@ -6434,7 +6434,7 @@ async function handleAdminLogs(ctx) {
 • Export functionality
 • Alert notifications
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(logsMessage, {
     reply_markup: {
@@ -6459,7 +6459,7 @@ async function handleAdminBroadcast(ctx) {
 
   const broadcastMessage = `📢 **BROADCAST MESSAGE**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **MASS COMMUNICATION TOOLS:**
 • Send announcements to all users
@@ -6473,7 +6473,7 @@ async function handleAdminBroadcast(ctx) {
 • Delivery scheduling
 • Analytics tracking
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(broadcastMessage, {
     reply_markup: {
@@ -6497,7 +6497,7 @@ async function handleAdminSettings(ctx) {
 
   const settingsMessage = `⚙️ **SYSTEM SETTINGS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **CONFIGURATION OPTIONS:**
 • Phase management and pricing
@@ -6511,7 +6511,7 @@ async function handleAdminSettings(ctx) {
 • Performance tuning
 • Security settings
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(settingsMessage, {
     reply_markup: {
@@ -6536,7 +6536,7 @@ async function handleAdminUserSponsors(ctx) {
 
   const sponsorsMessage = `🤝 **USER SPONSORS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **REFERRAL MANAGEMENT:**
 • View user sponsor relationships
@@ -6550,7 +6550,7 @@ async function handleAdminUserSponsors(ctx) {
 • Commission calculations
 • Performance reports
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
   await ctx.replyWithMarkdown(sponsorsMessage, {
     reply_markup: {
@@ -6618,7 +6618,7 @@ async function handleContinuePayment(ctx, callbackData) {
 
     const continueMessage = `💳 **CONTINUE PENDING PAYMENT**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📋 PAYMENT DETAILS:**
 
@@ -6683,7 +6683,7 @@ async function handleCancelPayment(ctx, callbackData) {
 
   const confirmMessage = `🗑️ **DELETE PENDING PAYMENT**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🚨 **CONFIRM DELETION**
 
@@ -6758,7 +6758,7 @@ Please contact support if you need assistance.`, {
 
     const successMessage = `✅ **PAYMENT DELETED SUCCESSFULLY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🗑️ **Your pending payment has been deleted:**
 
@@ -6766,7 +6766,7 @@ Please contact support if you need assistance.`, {
 🌐 **Network:** ${cancelledPayment.network}
 ⏰ **Cancelled:** ${new Date().toLocaleDateString()}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 ✅ **You can now make new purchases!**
 
@@ -6938,7 +6938,7 @@ async function showPaymentInstructions(ctx, payment, phase) {
 
   const paymentMessage = `💳 **PAYMENT INSTRUCTIONS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📋 PURCHASE DETAILS:**
 • Amount: ${formatCurrency(payment.amount)}
@@ -7005,7 +7005,7 @@ async function handleUploadProof(ctx, callbackData) {
 
     const walletMessage = `💳 PAYMENT PROOF SUBMISSION - STEP 1 OF 3
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 📋 PAYMENT DETAILS:
 • Payment ID: #${paymentId.substring(0, 8)}
@@ -7249,7 +7249,7 @@ async function handleReviewPayment(ctx, callbackData) {
 
       reviewMessage = `🏦 **BANK TRANSFER REVIEW**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💰 PAYMENT DETAILS:**
 • **ID:** #${paymentId.substring(0, 8)}
@@ -7273,7 +7273,7 @@ async function handleReviewPayment(ctx, callbackData) {
 • **Created:** ${new Date(payment.created_at).toLocaleString()}
 • **Updated:** ${new Date(payment.updated_at).toLocaleString()}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
     } else {
       // Safely format wallet address and transaction hash to avoid Markdown parsing errors
       const safeWalletAddress = payment.sender_wallet
@@ -7286,7 +7286,7 @@ async function handleReviewPayment(ctx, callbackData) {
 
       reviewMessage = `🔍 **CRYPTO PAYMENT REVIEW**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💰 PAYMENT DETAILS:**
 • **ID:** #${paymentId.substring(0, 8)}
@@ -7307,7 +7307,7 @@ async function handleReviewPayment(ctx, callbackData) {
 • **Created:** ${new Date(payment.created_at).toLocaleString()}
 • **Updated:** ${new Date(payment.updated_at).toLocaleString()}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
     }
 
     const keyboard = [
@@ -7667,7 +7667,7 @@ async function notifyUserPaymentApproved(payment, sharesAllocated, currentPhase)
 
     const approvalMessage = `🎉 **PAYMENT APPROVED!**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **✅ CONGRATULATIONS!**
 Your share purchase has been approved and processed successfully.
@@ -7690,10 +7690,10 @@ Your ${sharesAllocated} new shares have been added to your portfolio and are now
 • Share your referral link to earn commissions
 • Consider additional share purchases
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🏆 Welcome to Aureus Alliance Holdings!**
-Your investment in African gold mining starts now.`;
+Your share in African gold mining starts now.`;
 
     // Send notification to user
     await sendAudioNotificationToUser(
@@ -7745,7 +7745,7 @@ async function handleRejectPaymentPrompt(ctx, callbackData) {
 
     const promptMessage = `❌ **REJECT PAYMENT CONFIRMATION**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Payment Details:**
 • **ID:** #${paymentId.substring(0, 8)}
@@ -7753,7 +7753,7 @@ async function handleRejectPaymentPrompt(ctx, callbackData) {
 • **User:** ${payment.users.full_name || payment.users.username}
 • **Network:** ${payment.network}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Please enter the reason for rejecting this payment:**
 
@@ -7836,7 +7836,7 @@ async function handleRejectPayment(ctx, paymentId, rejectionReason) {
 
       const userNotification = `❌ **PAYMENT REJECTED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Payment ID:** #${paymentId.substring(0, 8)}
 **Amount:** $${updatedPayment.amount} USDT
@@ -7845,7 +7845,7 @@ async function handleRejectPayment(ctx, paymentId, rejectionReason) {
 **Reason for Rejection:**
 ${rejectionReason}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Next Steps:**
 • Review the rejection reason above
@@ -7981,10 +7981,10 @@ async function handleShareReferral(ctx) {
     console.log('🔗 DEBUG - Bot link:', botLink);
     console.log('🔗 DEBUG - Referral username:', referralUsername);
 
-    // MOTIVATING & COMPELLING investment opportunity message
+    // MOTIVATING & COMPELLING share opportunity message
     const shareMessage = `🌟 LIFE-CHANGING OPPORTUNITY: OWN REAL GOLD MINES! 🌟
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 💰 IMAGINE EARNING FROM ACTUAL GOLD PRODUCTION!
 
@@ -7996,17 +7996,17 @@ Join thousands already building generational wealth through gold mining
 💎 REAL GOLD, REAL PROFITS:
 • Own shares in 10 MASSIVE gold washplants
 • Each plant processes 200 tons of gold-bearing material per hour
-• Target: 3,200 KG of pure gold annually (worth $200+ MILLION!)
+• Target: 3,200 KG of pure gold annually (worth $500+ MILLION!)
 • You get a piece of every ounce extracted!
 
 🚀 EXPLOSIVE GROWTH POTENTIAL:
-• Phase 1: $1 per share (LIMITED TIME!)
+• Phase 1: $5 per share (LIMITED TIME!)
 • Full production by June 2026
-• Early investors positioned for maximum returns
+• Early share holders positioned for maximum dividend returns
 • Only 1,400,000 shares available - Don't miss out!
 
-⛏️ PROVEN SOUTH AFRICAN GOLD RESERVES:
-• Located in gold-rich Mpumalanga Province
+⛏️ PROVEN ZIMBABWE GOLD RESERVES:
+• Located in gold-rich Kadoma & Mutare Provinces
 • Professional geological surveys completed
 • Modern extraction technology deployed
 • Experienced mining team managing operations
@@ -8018,12 +8018,12 @@ Join thousands already building generational wealth through gold mining
 • Hedge against inflation and economic uncertainty
 
 🎯 PERFECT FOR:
-• Investors seeking alternative assets
+• Shareholders seeking alternative assets
 • Those wanting exposure to gold without storage
 • People building retirement wealth
 • Anyone tired of low bank returns
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🚨 ACT NOW - PHASE 1 PRICING ENDS SOON!
 
@@ -8032,22 +8032,22 @@ ${referralLink}
 
 🎁 AUTOMATIC SPONSOR ASSIGNMENT: Your referrals will be automatically linked to you!
 
-💡 INVESTMENT RANGE: Start with just $5 or go big with $50,000+
+💡 SHARE PURCHASE RANGE: Start with just $5 or go big with $50,000+
 
 ⚡ SECURE PROCESS: 3-step verification, instant confirmation
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🔥 DON'T LET THIS GOLDEN OPPORTUNITY SLIP AWAY!
 
-Join the smart money already invested in South Africa's gold boom!
+Join the smart money already purchased shares in Africa's gold boom!
 
-⚠️ High-risk, high-reward investment. Invest responsibly.`;
+⚠️ High-risk, high-reward shares. share responsibly.`;
 
     await ctx.reply(shareMessage, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "📤 Share Referral Link", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('🔥 GOLD MINING OPPORTUNITY! Join Aureus Alliance Holdings and own real South African gold mines!')}` }],
+          [{ text: "📤 Share Referral Link", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('🔥 GOLD MINING OPPORTUNITY! Join Aureus Alliance Holdings and own real shares in African gold mines!')}` }],
           [{ text: "📋 Copy Referral Link", callback_data: `copy_referral_link_${referralUsername}` }],
           [{ text: "👥 Back to Referral Dashboard", callback_data: "menu_referrals" }],
           [{ text: "🔙 Back to Main Menu", callback_data: "main_menu" }]
@@ -8096,7 +8096,7 @@ async function handleViewCommission(ctx) {
     // Build enhanced commission message with detailed status information
     let commissionMessage = `💰 **COMMISSION BALANCE**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💵 USDT COMMISSIONS:**
 • **Total Earned:** $${data.totalEarnedUSDT.toFixed(2)} USDT
@@ -8141,7 +8141,7 @@ async function handleViewCommission(ctx) {
 • **Total Withdrawn:** $${data.totalWithdrawnUSDT.toFixed(2)} USDT
 • **Commission Rate:** 15% USDT + 15% Shares
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
     const keyboard = [];
 
@@ -8213,7 +8213,7 @@ async function handleViewCommission(ctx) {
 
       const fallbackMessage = `💰 **COMMISSION BALANCE** (Fallback Mode)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💵 USDT COMMISSIONS:**
 • Total Earned: $${totalUSDT.toFixed(2)} USDT
@@ -8229,7 +8229,7 @@ async function handleViewCommission(ctx) {
 • Total Commission Value: $${(totalUSDT + shareValue).toFixed(2)}
 • Commission Rate: 15% USDT + 15% Shares
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 ⚠️ **Note:** Enhanced view temporarily unavailable. Contact support if this persists.`;
 
@@ -8280,7 +8280,7 @@ async function handleViewPendingRequests(ctx) {
 
     let message = `⏳ **PENDING REQUESTS STATUS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💰 BALANCE OVERVIEW:**
 • **Total Balance:** $${(data.availableUSDT + data.escrowedAmount).toFixed(2)} USDT
@@ -8341,7 +8341,7 @@ All your commission balance is available for new requests.
 • You cannot cancel requests once submitted
 • Contact admin if you have urgent questions
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
     const keyboard = [
       [{ text: "🔄 Refresh Status", callback_data: "view_pending_requests" }],
@@ -8390,14 +8390,14 @@ async function handleManagePendingRequests(ctx) {
     if (data.pendingWithdrawals.length === 0 && data.pendingConversions.length === 0) {
       await ctx.replyWithMarkdown(`✅ **NO PENDING REQUESTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 You currently have no pending withdrawal or conversion requests.
 All your commission balance is available for new requests.
 
 **💰 Available Balance:** $${data.availableUSDT.toFixed(2)} USDT
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "💸 Withdraw USDT Commission", callback_data: "withdraw_usdt_commission" }],
@@ -8411,7 +8411,7 @@ All your commission balance is available for new requests.
 
     let message = `📋 **MANAGE PENDING REQUESTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💰 BALANCE OVERVIEW:**
 • **Total Balance:** $${(data.availableUSDT + data.escrowedAmount).toFixed(2)} USDT
@@ -8475,7 +8475,7 @@ All your commission balance is available for new requests.
 • **Contact Admin:** @TTTFOUNDER for urgent questions
 • **Plan Ahead:** Consider timing of future requests
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
     // Add standard navigation buttons
     keyboard.push(
@@ -8530,7 +8530,7 @@ async function handleUserSettings(ctx) {
 
     const settingsMessage = `⚙️ **USER SETTINGS & PREFERENCES**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🔊 AUDIO NOTIFICATION SETTINGS:**
 • **Master Audio:** ${prefs.audio_enabled ? '🔔 Enabled' : '🔇 Disabled'}
@@ -8554,7 +8554,7 @@ Audio notifications use different sound tones and emojis to help you quickly ide
 • ⚠️ Warning sounds for important notices
 • ℹ️ Info sounds for general updates
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
     const keyboard = [
       [{ text: prefs.audio_enabled ? "🔇 Disable All Audio" : "🔔 Enable All Audio", callback_data: "toggle_audio_notifications" }],
@@ -8653,7 +8653,7 @@ async function handleToggleAudioNotifications(ctx) {
 
     const statusMessage = `🔊 **AUDIO NOTIFICATIONS ${newStatus ? 'ENABLED' : 'DISABLED'}**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Status Changed:** ${currentlyEnabled ? '🔔 Enabled' : '🔇 Disabled'} → ${newStatus ? '🔔 Enabled' : '🔇 Disabled'}
 
@@ -8670,7 +8670,7 @@ ${newStatus ?
 
 **✅ Your preference has been saved to the database and will be applied to all future notifications.**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
     await sendNotificationWithAudio(
       ctx,
@@ -8727,7 +8727,7 @@ async function handleCustomizeAudioTypes(ctx) {
 
     const customizeMessage = `🎛️ **CUSTOMIZE NOTIFICATION TYPES**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Select which types of notifications should play audio:**
 
@@ -8743,7 +8743,7 @@ async function handleCustomizeAudioTypes(ctx) {
 **ℹ️ SYSTEM NOTIFICATIONS:**
 • System Announcements: ${prefs.system_announcement_audio ? '🔔 ON' : '🔇 OFF'}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Tap any notification type below to toggle its audio setting:**`;
 
@@ -8907,7 +8907,7 @@ async function handleViewReferrals(ctx) {
 
     const referralsMessage = `👥 **MY REFERRALS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📊 REFERRAL STATISTICS:**
 • **Total Referrals:** ${referrals ? referrals.length : 0}
@@ -8918,9 +8918,9 @@ async function handleViewReferrals(ctx) {
 ${referralsList}
 
 **🚀 GROW YOUR NETWORK:**
-Share your referral link to earn 15% USDT + 15% shares commission on every investment your referrals make!
+Share your referral link to earn 15% USDT + 15% shares commission on every share your referrals purchases!
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
     try {
       await ctx.replyWithMarkdown(referralsMessage, {
@@ -8960,7 +8960,7 @@ Share your referral link to earn 15% USDT + 15% shares commission on every inves
 async function handleWithdrawCommissions(ctx) {
   await ctx.replyWithMarkdown(`💸 **COMMISSION WITHDRAWAL**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🚧 WITHDRAWAL SYSTEM COMING SOON**
 
@@ -8987,7 +8987,7 @@ We're currently developing a secure commission withdrawal system with the follow
 **📧 GET NOTIFIED:**
 We'll notify all users when the withdrawal system goes live!
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
     reply_markup: {
       inline_keyboard: [
         [{ text: "💰 View Commission Balance", callback_data: "view_commission" }],
@@ -9040,7 +9040,7 @@ async function handleWithdrawUSDTCommission(ctx) {
 
       await ctx.replyWithMarkdown(`⚠️ **PENDING WITHDRAWAL REQUEST EXISTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🔍 YOUR PENDING REQUEST:**
 • **Request ID:** #${shortId}
@@ -9049,7 +9049,7 @@ async function handleWithdrawUSDTCommission(ctx) {
 • **Submitted:** ${submissionDate} at ${submissionTime}
 • **Status:** ⏳ Awaiting admin approval
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **⏰ WHAT HAPPENS NEXT:**
 • Admin will review your request within 24-48 hours
@@ -9066,7 +9066,7 @@ async function handleWithdrawUSDTCommission(ctx) {
 This prevents duplicate requests and ensures accurate balance management.
 Your funds are safely tracked and will be processed fairly.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "⏳ View Pending Requests", callback_data: "view_pending_requests" }],
@@ -9089,7 +9089,7 @@ Your funds are safely tracked and will be processed fairly.
     if (balanceError || !balance || balance.usdt_balance <= 0) {
       await ctx.replyWithMarkdown(`💸 **INSUFFICIENT BALANCE**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **❌ No USDT commission available for withdrawal**
 
@@ -9097,10 +9097,10 @@ Your funds are safely tracked and will be processed fairly.
 
 **🎯 TO EARN COMMISSIONS:**
 • Share your referral link
-• Invite friends to invest
+• Invite friends to purchase shares
 • Earn 15% USDT + 15% shares on their purchases
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "📤 Share Referral Link", callback_data: "share_referral" }],
@@ -9121,13 +9121,13 @@ Your funds are safely tracked and will be processed fairly.
 
     const withdrawalMessage = `💸 **USDT COMMISSION WITHDRAWAL**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💰 Available Balance:** $${availableBalance.toFixed(2)} USDT
 
 **📝 WITHDRAWAL PROCESS:**
 1. **Enter withdrawal amount** (minimum $10.00)
-2. **Provide USDT wallet address** (TRC-20 network)
+2. **Provide USDT wallet address** 
 3. **Admin review and approval** (24-48 hours)
 4. **Payment processing** (1-3 business days)
 
@@ -9137,7 +9137,7 @@ Your funds are safely tracked and will be processed fairly.
 • Processing fee: $2.00 USDT (deducted from withdrawal)
 • Maximum daily withdrawal: $1,000.00 USDT
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💵 Enter withdrawal amount (USD):**`;
 
@@ -9210,7 +9210,7 @@ async function handleCommissionToShares(ctx) {
 
       await ctx.replyWithMarkdown(`⚠️ **PENDING CONVERSION REQUEST EXISTS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🔍 YOUR PENDING REQUEST:**
 • **Request ID:** #${shortId}
@@ -9224,7 +9224,7 @@ async function handleCommissionToShares(ctx) {
 • **Locked (Escrowed):** $${balanceInfo.escrowedAmount.toFixed(2)} USDT
 • **Available:** $${balanceInfo.availableBalance.toFixed(2)} USDT
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **⏰ WHAT HAPPENS NEXT:**
 • Admin will review your request within 24-48 hours
@@ -9242,7 +9242,7 @@ async function handleCommissionToShares(ctx) {
 This prevents duplicate requests and ensures accurate balance management.
 Your funds are safely escrowed and will be processed fairly.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, {
+`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "⏳ View Pending Requests", callback_data: "view_pending_requests" }],
@@ -9259,7 +9259,7 @@ Your funds are safely escrowed and will be processed fairly.
     if (balanceInfo.availableBalance <= 0) {
       let insufficientMessage = `💰 **INSUFFICIENT AVAILABLE COMMISSION BALANCE**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💰 Balance Details:**
 • **Total Balance:** $${balanceInfo.totalBalance.toFixed(2)} USDT
@@ -9284,11 +9284,11 @@ You need a positive available USDT commission balance to convert to shares.
       }
 
       insufficientMessage += `
-• Refer new investors using your referral link
-• Earn 15% USDT commission on their investments
+• Refer new shareholders using your referral link
+• Earn 15% USDT commission on their share purchases
 • Use earned commissions to purchase more shares
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+`;
 
       await ctx.replyWithMarkdown(insufficientMessage, {
         reply_markup: {
@@ -9318,7 +9318,7 @@ You need a positive available USDT commission balance to convert to shares.
 
     const conversionMessage = `🛒 **CONVERT COMMISSION TO SHARES**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💰 YOUR COMMISSION BALANCE:**
 • Available USDT: $${balanceInfo.availableBalance.toFixed(2)}
@@ -9334,7 +9334,7 @@ You need a positive available USDT commission balance to convert to shares.
 3. Request goes to admin for approval
 4. Once approved: USDT deducted, shares added to portfolio
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Enter the number of shares you want to purchase (1-${maxShares}):**`;
 
@@ -9380,7 +9380,7 @@ async function handleWithdrawalHistory(ctx) {
     // Get withdrawal history (when table exists)
     const historyMessage = `📋 **WITHDRAWAL HISTORY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🚧 FEATURE COMING SOON**
 
@@ -9399,7 +9399,7 @@ Your withdrawal history will be displayed here once the withdrawal system is ful
 • Withdrawal requests: 🚧 In development
 • History tracking: 🚧 In development
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📞 For withdrawal history inquiries, contact @TTTFOUNDER**`;
 
@@ -9435,24 +9435,24 @@ async function handleCopyReferralLink(ctx, callbackData) {
 \`${referralLink}\`
 
 **🎯 HOW IT WORKS:**
-• Share this link with potential investors
+• Share this link with potential shareholders
 • When they click it, you're automatically assigned as their sponsor
-• You earn 15% USDT + 15% shares commission on their investments
+• You earn 15% USDT + 15% shares commission on their share purchases
 • No manual referral code entry needed!
 
 **🚀 QUICK SHARING MESSAGES:**
 
 **💎 For WhatsApp/SMS:**
-"🔥 GOLD MINING OPPORTUNITY! Join me in owning real South African gold mines. Click: ${referralLink}"
+"🔥 GOLD MINING OPPORTUNITY! Join me in owning real shares in African gold mines. Click: ${referralLink}"
 
 **📱 For Social Media:**
-"💰 Building wealth through gold mining! Join Aureus Alliance Holdings: ${referralLink} #GoldInvestment #WealthBuilding"
+"💰 Building wealth through gold mining! Join Aureus Alliance Holdings: ${referralLink} #GoldShares #WealthBuilding"
 
 **📧 For Email:**
-"I wanted to share an exciting gold mining investment opportunity with you. Aureus Alliance Holdings offers shares in real South African gold operations. Check it out: ${referralLink}"`, {
+"I wanted to share an exciting gold mining share owning opportunity with you. Aureus Alliance Holdings offers shares in real African gold operations. Check it out: ${referralLink}"`, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📤 Share on Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('🔥 Join me in owning real South African gold mines!')}` }],
+        [{ text: "📤 Share on Telegram", url: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('🔥 Join me in owning shares in real African gold mines!')}` }],
         [{ text: "👥 Back to Referral Dashboard", callback_data: "menu_referrals" }]
       ]
     }
@@ -9471,19 +9471,19 @@ async function handleCopyReferral(ctx, callbackData) {
 **🚀 QUICK SHARING MESSAGES:**
 
 **💎 For WhatsApp/SMS:**
-*"🔥 GOLD MINING INVESTMENT OPPORTUNITY! Own shares in real South African gold mines. Starting at just $5. Massive profit potential! Use my referral '${referralCode}' here: https://t.me/AureusAllianceBot"*
+*"🔥 GOLD MINING SHARE OWNERSHIP OPPORTUNITY! Own shares in real African gold mines. Starting at just $5. Massive profit potential! Use my referral '${referralCode}' here: https://t.me/AureusAllianceBot"*
 
 **📱 For Social Media:**
-*"💰 Just discovered an incredible gold mining investment! Real washplants, real gold, real profits. Early investors getting $1/share before it goes up! Use referral '${referralCode}': https://t.me/AureusAllianceBot #GoldInvestment #WealthBuilding"*
+*"💰 Just discovered an incredible gold mining share ownership opportunity! Real washplants, real gold, real profits. Early shareholders getting $5/share before it goes up! Use referral '${referralCode}': https://t.me/AureusAllianceBot #GoldShareOwnership #WealthBuilding"*
 
-**💼 For Serious Investors:**
-*"Professional gold mining investment opportunity in South Africa. 10 active washplants, 3,200 KG annual target. Phase 1 pricing available. Use referral '${referralCode}' for priority: https://t.me/AureusAllianceBot"*
+**💼 For Serious Shareholders:**
+*"Professional gold mining share ownership opportunity in Africa. 10 active washplants, 3,200 KG annual target. Phase 1 pricing available. Use referral '${referralCode}' for priority: https://t.me/AureusAllianceBot"*
 
 **📧 For Email:**
-*"I wanted to share an exclusive gold mining investment I discovered. Aureus Alliance Holdings operates real gold mines in South Africa with proven reserves. You can own shares starting at $1 each. Use my referral code '${referralCode}' when you register: https://t.me/AureusAllianceBot"*`, {
+*"I wanted to share an exclusive gold mining share ownership opportunity I discovered. Aureus Alliance Holdings operates real gold mines in Africa with proven reserves. You can own shares starting at $5 each. Use my referral code '${referralCode}' when you register: https://t.me/AureusAllianceBot"*`, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📤 Share Full Investment Pitch", callback_data: "share_referral" }],
+        [{ text: "📤 Share Full Share Purchase Pitch", callback_data: "share_referral" }],
         [{ text: "👥 Back to Referral Dashboard", callback_data: "menu_referrals" }]
       ]
     }
@@ -9546,7 +9546,7 @@ async function checkNDAAcceptance(telegramUserId) {
 async function showNDAAcceptance(ctx) {
   const ndaMessage = `🔒 **NON-DISCLOSURE AGREEMENT (NDA)**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **⚠️ CONFIDENTIAL LEGAL DOCUMENTS ACCESS**
 
@@ -9560,7 +9560,7 @@ To access Aureus Alliance Holdings' legal documents, you must first accept our N
 • Documents are for your personal review only
 
 **2. PERMITTED USE**
-• Review for investment decision purposes only
+• Review for share purchase decision purposes only
 • Verify company legitimacy and compliance
 • Assess business operations and financial standing
 
@@ -9603,7 +9603,7 @@ To access Aureus Alliance Holdings' legal documents, you must first accept our N
 async function showLegalDocumentsMenu(ctx) {
   const documentsMessage = `📋 **LEGAL DOCUMENTS CENTER**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🔒 CONFIDENTIAL BUSINESS DOCUMENTS**
 
@@ -9691,7 +9691,7 @@ async function handleNDAAcceptance(ctx) {
     // Show success message and legal documents menu
     const successMessage = `✅ **NDA ACCEPTED SUCCESSFULLY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🔒 CONFIDENTIALITY AGREEMENT CONFIRMED**
 
@@ -9724,7 +9724,7 @@ async function handleNDADecline(ctx) {
 
   const declineMessage = `❌ **NDA DECLINED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🔒 ACCESS DENIED**
 
@@ -9810,7 +9810,7 @@ async function handleDocumentView(ctx, callbackData) {
     // Send document access message
     const accessMessage = `📄 **DOCUMENT ACCESS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 ${document.icon} **${document.name}**
 
@@ -9936,7 +9936,7 @@ async function sendKYCCollectionRequest(telegramId, username) {
 
     const kycMessage = `🎉 **CONGRATULATIONS ON YOUR SHARE PURCHASE!**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📋 COMPLETE KYC FOR SHARE CERTIFICATE**
 
@@ -10024,7 +10024,7 @@ async function showKYCDashboard(ctx, userId) {
 
     const kycDashboardMessage = `🔒 **KYC VERIFICATION REQUIRED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 ${kycReason}**📋 COMPLETE YOUR KYC TO CONTINUE**
 
@@ -10124,7 +10124,7 @@ async function handleStartKYCProcess(ctx) {
 async function showKYCPrivacyConsent(ctx) {
   const consentMessage = `🔒 **DATA PRIVACY & CONSENT**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📋 KYC DATA COLLECTION NOTICE**
 
@@ -10186,7 +10186,7 @@ For privacy questions: support@aureus.africa
 async function handleKYCInfo(ctx) {
   const infoMessage = `ℹ️ **ABOUT KYC (KNOW YOUR CUSTOMER)**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🔍 WHAT IS KYC?**
 KYC (Know Your Customer) is a regulatory process used by financial institutions to verify the identity of their clients.
@@ -10218,7 +10218,7 @@ KYC (Know Your Customer) is a regulatory process used by financial institutions 
 • Official proof of ownership
 • Legal document for your records
 • Required for dividend claims
-• Transferable investment asset
+• Transferable share assets
 
 **💡 WHEN SHOULD I COMPLETE KYC?**
 Complete KYC as soon as possible after your first share purchase to receive your certificate promptly.`;
@@ -10243,7 +10243,7 @@ async function handleKYCLater(ctx) {
 
   const laterMessage = `⏰ **KYC POSTPONED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📋 KYC COMPLETION REMINDER**
 
@@ -10264,7 +10264,7 @@ You can complete your KYC at any time by:
 If you have questions about the KYC process, please contact our support team.
 
 **💡 RECOMMENDATION:**
-Complete KYC as soon as possible to receive your share certificate and ensure full compliance with your investment.`;
+Complete KYC as soon as possible to receive your share certificate and ensure full compliance with your share purchase.`;
 
   const keyboard = {
     inline_keyboard: [
@@ -10365,9 +10365,9 @@ async function handleKYCStep(ctx, callbackData) {
 
 // Show first name collection step
 async function showKYCFirstNameStep(ctx) {
-  const firstNameMessage = `📝 **KYC STEP 1 OF 6: FIRST NAME**
+  const firstNameMessage = `📝 **KYC STEP 1 OF 8: FIRST NAME**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **👤 ENTER YOUR FIRST NAME**
 
@@ -10409,7 +10409,7 @@ async function handleKYCDeclinePrivacy(ctx) {
 
   const declineMessage = `❌ **PRIVACY CONSENT DECLINED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🔒 KYC PROCESS CANCELLED**
 
@@ -10419,7 +10419,7 @@ You have declined to provide consent for data collection.
 • Cannot complete KYC verification
 • Share certificate cannot be generated
 • Regulatory compliance requirements not met
-• Investment documentation incomplete
+• Shareholder documentation incomplete
 
 **💡 ALTERNATIVES:**
 • Review our privacy policy for more details
@@ -10450,7 +10450,7 @@ You can restart the KYC process at any time by accepting the privacy terms.`;
 async function showKYCAlreadyCompleted(ctx) {
   const completedMessage = `✅ **KYC ALREADY COMPLETED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🎉 CONGRATULATIONS!**
 
@@ -10464,7 +10464,7 @@ The certificate will be sent to your registered email address once ready.
 
 **💼 WHAT'S NEXT:**
 • Monitor your email for certificate delivery
-• View your portfolio to track your investments
+• View your portfolio to track your share progress
 • Consider additional share purchases
 • Share your referral link to earn commissions
 
@@ -10588,9 +10588,9 @@ async function handleKYCFirstNameInput(ctx, firstName) {
 
 // Show last name step
 async function showKYCLastNameStep(ctx) {
-  const lastNameMessage = `📝 **KYC STEP 2 OF 6: LAST NAME**
+  const lastNameMessage = `📝 **KYC STEP 2 OF 8: LAST NAME**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **👤 ENTER YOUR LAST NAME**
 
@@ -10870,9 +10870,9 @@ Enter your passport number exactly as shown in your passport.
 
 // Show ID type step
 async function showKYCIdTypeStep(ctx) {
-  const idTypeMessage = `📝 **KYC STEP 3 OF 6: IDENTIFICATION TYPE**
+  const idTypeMessage = `📝 **KYC STEP 3 OF 8: IDENTIFICATION TYPE**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🆔 SELECT YOUR IDENTIFICATION TYPE**
 
@@ -10921,9 +10921,9 @@ async function showKYCIdNumberStep(ctx, idType) {
     ? '• 13-digit South African ID number\n• Format: YYMMDDGGGGGGG\n• No spaces or dashes'
     : '• Valid passport number\n• As shown on your passport\n• Letters and numbers only';
 
-  const idNumberMessage = `📝 **KYC STEP 4 OF 6: ${idTypeDisplay.toUpperCase()}**
+  const idNumberMessage = `📝 **KYC STEP 4 OF 8: ${idTypeDisplay.toUpperCase()}**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🆔 ENTER YOUR ${idTypeDisplay.toUpperCase()}**
 
@@ -10960,7 +10960,7 @@ This information will be used for identity verification and must match your offi
 async function showKYCTemporaryCompletion(ctx) {
   const completionMessage = `✅ **KYC DATA COLLECTED SUCCESSFULLY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🎉 BASIC KYC INFORMATION SAVED:**
 
@@ -10997,9 +10997,9 @@ The full KYC system (including phone, email, address collection) is currently be
 
 // Show phone number collection step
 async function showKYCPhoneStep(ctx) {
-  const phoneMessage = `📝 **KYC STEP 5 OF 6: PHONE NUMBER**
+  const phoneMessage = `📝 **KYC STEP 5 OF 8: PHONE NUMBER**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📞 ENTER YOUR PHONE NUMBER**
 
@@ -11109,9 +11109,9 @@ Enter your phone number with country code.
 
 // Show email collection step
 async function showKYCEmailStep(ctx) {
-  const emailMessage = `📝 **KYC STEP 6 OF 6: EMAIL ADDRESS**
+  const emailMessage = `📝 **KYC STEP 6 OF 8: EMAIL ADDRESS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📧 ENTER YOUR EMAIL ADDRESS**
 
@@ -11124,7 +11124,7 @@ Please enter your email address for certificate delivery and important communica
 
 **💡 EXAMPLES:**
 • **john.smith@gmail.com**
-• **investor@company.co.za**
+• **shareholder@company.co.za**
 
 **✅ INFORMATION SAVED:**
 • **Name:** ${ctx.session.kyc.data.first_name} ${ctx.session.kyc.data.last_name}
@@ -11167,7 +11167,7 @@ Enter the email address you use regularly and can access.
 • mary@company.co.za
 • user123@outlook.com
 
-⚠️ **Important:** You'll receive important updates about your investment at this email address.`);
+⚠️ **Important:** You'll receive important updates about your sahres at this email address.`);
     return;
   }
 
@@ -11231,7 +11231,7 @@ Enter a valid email address in the correct format.
 async function showKYCAddressStep(ctx) {
   const addressMessage = `📝 **KYC STEP 7 OF 8: STREET ADDRESS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🏠 ENTER YOUR STREET ADDRESS**
 
@@ -11240,7 +11240,6 @@ Please enter your complete street address for your share certificates.
 **📋 REQUIREMENTS:**
 • Complete street address including house/unit number
 • Street name and any apartment/unit details
-• Do not include city or postal code (next steps)
 
 **💡 EXAMPLES:**
 • **123 Main Street, Apt 4B**
@@ -11287,22 +11286,22 @@ async function handleKYCAddressInput(ctx, address) {
 
 // Show city collection step
 async function showKYCCityStep(ctx) {
-  const cityMessage = `📝 **KYC STEP 8 OF 8: CITY & COMPLETION**
+  const cityMessage = `📝 **KYC STEP 8 OF 8: Country & COMPLETION**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**🏙️ ENTER YOUR CITY**
 
-Please enter the city where you reside.
+**🏙️ ENTER YOUR Country**
+
+Please enter the country where you reside.
 
 **📋 REQUIREMENTS:**
-• City name only
+• Country name only
 • No postal codes or provinces
 
 **💡 EXAMPLES:**
-• **Cape Town**
-• **Johannesburg**
-• **London**
+• **South Africa**
+• **America**
+• **India**
 
 **✅ INFORMATION COLLECTED:**
 • **Name:** ${ctx.session.kyc.data.first_name} ${ctx.session.kyc.data.last_name}
@@ -11418,7 +11417,7 @@ async function showKYCCompletionSuccess(ctx) {
 
   const completionMessage = `🎉 **KYC COMPLETED SUCCESSFULLY!**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **✅ ALL REQUIRED INFORMATION COLLECTED:**
 
@@ -11432,7 +11431,7 @@ async function showKYCCompletionSuccess(ctx) {
 
 **🏠 Address Information:**
 • **Address:** ${kycData.street_address}
-• **City:** ${kycData.city}
+• **Country:** ${kycData.city}
 
 **📋 NEXT STEPS:**
 • Your information has been securely saved
@@ -11541,11 +11540,11 @@ async function handleBankTransferPayment(ctx) {
 async function showBankTransferAmountInput(ctx) {
   const customAmountMessage = `🏦 **BANK TRANSFER PURCHASE**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**💰 ENTER INVESTMENT AMOUNT**
 
-Enter your desired investment amount between $15 and $50,000:
+**💰 ENTER SHARE PURCHASE AMOUNT**
+
+Enter your desired amount between $15 and $50,000:
 
 **📋 BANK TRANSFER DETAILS:**
 • Minimum: $15 USD (R270 ZAR)
@@ -11561,7 +11560,7 @@ $100 USD + 10% fee = $110 USD = R1,980 ZAR
 **⚠️ IMPORTANT:**
 Bank transfer is only available for users in South Africa, Eswatini, and Namibia.
 
-**Type your investment amount in USD (numbers only):**`;
+**Type your share purchase amount in USD (numbers only):**`;
 
   await ctx.replyWithMarkdown(customAmountMessage, {
     reply_markup: {
@@ -11654,7 +11653,7 @@ async function showBankTransferInstructions(ctx, payment, phase, zarCalculation)
 
   const bankTransferMessage = `🏦 **BANK TRANSFER PAYMENT INSTRUCTIONS**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **💰 AMOUNT TO PAY:**
 **🇿🇦 R${zarCalculation.zarAmount.toFixed(2)} ZAR**
@@ -11754,7 +11753,7 @@ async function handleUploadProofRequest(ctx, callbackData) {
 
     const uploadMessage = `📤 **UPLOAD PAYMENT PROOF**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🏦 BANK TRANSFER PROOF REQUIRED**
 
@@ -11824,7 +11823,7 @@ async function handleBankTransferProofUpload(ctx, callbackData) {
 
     const bankProofMessage = `🏦 BANK TRANSFER PROOF UPLOAD
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 📋 PAYMENT DETAILS:
 • Payment ID: #${paymentId.substring(0, 8)}
@@ -11929,7 +11928,7 @@ async function handleBankTransferFileUpload(ctx, isDocument = false) {
     // Send confirmation to user
     const confirmationMessage = `✅ BANK TRANSFER PROOF UPLOADED
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 🏦 Your bank transfer proof has been successfully uploaded!
 
@@ -12004,7 +12003,7 @@ async function handleViewBankProof(ctx, callbackData) {
 
     const proofMessage = `🏦 **BANK TRANSFER PROOF**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Payment ID:** #${paymentId.substring(0, 8)}
 **Amount:** $${payment.amount} USD
@@ -12063,7 +12062,7 @@ async function handleCancelProofUpload(ctx) {
 
     const cancelMessage = `❌ **PROOF UPLOAD CANCELLED**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **Upload process has been cancelled.**
 
@@ -12155,7 +12154,7 @@ async function sendCountrySelectionRequest(telegramId, username) {
 
     const countryMessage = `🌍 **SELECT YOUR COUNTRY OF RESIDENCE**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📍 COUNTRY SELECTION REQUIRED**
 
@@ -12164,7 +12163,7 @@ To complete your registration and ensure compliance with international regulatio
 **🔍 WHY WE NEED THIS:**
 • Regulatory compliance and legal requirements
 • Tax reporting and documentation
-• Country-specific investment regulations
+• Country-specific share regulations
 • Proper customer verification (KYC)
 • Certificate generation and delivery
 
@@ -12223,7 +12222,7 @@ Your country information is securely stored and used only for compliance and ser
 async function showCountrySelection(ctx) {
   const countryMessage = `🌍 **SELECT YOUR COUNTRY OF RESIDENCE**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📍 COUNTRY SELECTION REQUIRED**
 
@@ -12232,7 +12231,7 @@ To complete your registration and ensure compliance with international regulatio
 **🔍 WHY WE NEED THIS:**
 • Regulatory compliance and legal requirements
 • Tax reporting and documentation
-• Country-specific investment regulations
+• Country-specific share regulations
 • Proper customer verification (KYC)
 • Certificate generation and delivery
 
@@ -12325,7 +12324,7 @@ async function handleCountrySelection(ctx, callbackData) {
     // Show confirmation message
     const confirmationMessage = `✅ **COUNTRY SELECTED SUCCESSFULLY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🌍 COUNTRY OF RESIDENCE CONFIRMED**
 
@@ -12337,9 +12336,9 @@ ${countryInfo.flag} **${countryInfo.name}**
 • Account setup: ✅ Finalized
 
 **🎯 WHAT'S NEXT:**
-• Explore our gold mining investment opportunities
+• Explore our gold mining shares opportunities
 • Review company presentation and mining operations
-• Start your investment journey with confidence
+• Start your share ownership journey with confidence
 
 **💡 NEED TO CHANGE?**
 You can update your country selection later through the settings menu.
@@ -12366,7 +12365,7 @@ You can update your country selection later through the settings menu.
 async function showMoreCountries(ctx) {
   const moreCountriesMessage = `🌍 **MORE COUNTRIES**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📍 ADDITIONAL COUNTRY OPTIONS**
 
@@ -12442,7 +12441,7 @@ async function handleOtherCountrySelection(ctx) {
 
   const customCountryMessage = `🌎 **TYPE YOUR COUNTRY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📍 CUSTOM COUNTRY ENTRY**
 
@@ -12536,7 +12535,7 @@ async function handleCustomCountryInput(ctx, countryName) {
     // Show confirmation message
     const confirmationMessage = `✅ **COUNTRY SAVED SUCCESSFULLY**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **🌍 COUNTRY OF RESIDENCE CONFIRMED**
 
@@ -12548,9 +12547,9 @@ async function handleCustomCountryInput(ctx, countryName) {
 • Account setup: ✅ Finalized
 
 **🎯 WHAT'S NEXT:**
-• Explore our gold mining investment opportunities
+• Explore our gold mining shares opportunities
 • Review company presentation and mining operations
-• Start your investment journey with confidence
+• Start your share ownership journey with confidence
 
 **💡 NEED TO CHANGE?**
 You can update your country selection later through the settings menu.
@@ -12578,7 +12577,7 @@ You can update your country selection later through the settings menu.
 async function showAsiaCountries(ctx) {
   const asiaMessage = `🌏 **ASIA & MIDDLE EAST COUNTRIES**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📍 SELECT YOUR COUNTRY:**`;
 
@@ -12651,7 +12650,7 @@ async function showAsiaCountries(ctx) {
 async function showAfricaCountries(ctx) {
   const africaMessage = `🌍 **AFRICAN COUNTRIES**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📍 SELECT YOUR COUNTRY (Alphabetical):**`;
 
@@ -12783,7 +12782,7 @@ async function showAfricaCountries(ctx) {
 async function showAmericasCountries(ctx) {
   const americasMessage = `🌎 **AMERICAN COUNTRIES**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📍 SELECT YOUR COUNTRY (Alphabetical):**`;
 
@@ -12860,7 +12859,7 @@ async function showAmericasCountries(ctx) {
 async function showOceaniaCountries(ctx) {
   const oceaniaMessage = `🏝️ **OCEANIA COUNTRIES**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 
 **📍 SELECT YOUR COUNTRY:**`;
 

@@ -1771,7 +1771,8 @@ bot.on('callback_query', async (ctx) => {
     'enter_sponsor_manual', 'assign_default_sponsor', 'accept_terms',
     'select_country_', 'show_more_countries', 'country_selection_other',
     'show_asia_countries', 'show_africa_countries', 'show_europe_countries',
-    'show_americas_countries', 'show_oceania_countries'
+    'show_americas_countries', 'show_oceania_countries', 'connect_to_website',
+    'copy_telegram_id_'
   ];
 
   // Exclude all admin callbacks from mandatory checks

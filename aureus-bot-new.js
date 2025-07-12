@@ -879,6 +879,9 @@ function createMainMenuKeyboard(isAdmin = false, hasKYC = true) {
     [
       { text: "🆘 Support Center", callback_data: "menu_help" },
       { text: "⚙️ Settings", callback_data: "user_settings" }
+    ],
+    [
+      { text: "🌐 Connect to Website", callback_data: "connect_to_website" }
     ]
   ];
 

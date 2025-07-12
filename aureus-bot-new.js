@@ -1508,9 +1508,12 @@ async function showMainMenu(ctx) {
     .eq('status', 'approved')
     .limit(1);
 
+  // Initialize hasKYC with default value
+  let hasKYC = true;
+
   // Only require KYC if user has approved payments
   if (approvedPayments && approvedPayments.length > 0) {
-    const hasKYC = await checkKYCCompletion(authenticatedUser.id);
+    hasKYC = await checkKYCCompletion(authenticatedUser.id);
     if (!hasKYC) {
       console.log(`📋 [KYC] User ${authenticatedUser.id} has approved payments but no KYC - showing KYC dashboard`);
       await showKYCDashboard(ctx, authenticatedUser.id);

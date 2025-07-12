@@ -1753,6 +1753,66 @@ bot.command('version', async (ctx) => {
   await ctx.replyWithMarkdown(versionInfo);
 });
 
+// Web Authentication Command Handler
+bot.command('webauth', async (ctx) => {
+  console.log(`🔐 [WEBAUTH] Web authentication request from ${ctx.from.username} (${ctx.from.id})`);
+  
+  const args = ctx.message.text.split(' ');
+  if (args.length < 2) {
+    return ctx.reply('❌ Invalid authentication request format.\n\nUsage: /webauth <token>');
+  }
+  
+  const authToken = args[1];
+  const telegramId = ctx.from.id;
+  const username = ctx.from.username;
+  const firstName = ctx.from.first_name;
+  
+  try {
+    // Authenticate user first to ensure they exist in the database
+    const user = await authenticateUser(ctx);
+    if (!user) {
+      return ctx.reply('❌ Authentication failed. Please register first by using the bot normally.');
+    }
+    
+    // Send confirmation message with buttons
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '✅ Confirm Web Authentication', callback_data: `confirm_webauth:${authToken}` },
+          { text: '❌ Cancel', callback_data: `cancel_webauth:${authToken}` }
+        ]
+      ]
+    };
+    
+    const confirmMessage = `🔐 **WEB AUTHENTICATION REQUEST**
+    
+📱 A web application is requesting to authenticate with your Telegram account.
+
+👤 **Your Details:**
+🆔 Telegram ID: ${telegramId}
+👤 Username: @${username || 'Not set'}
+📛 Name: ${firstName || 'Not set'}
+
+⚠️ **SECURITY NOTICE:**
+Only confirm if you initiated this request from the Aureus Alliance Holdings website.
+
+🌐 **Website:** https://aureus.africa
+💻 **Web Dashboard:** localhost:3003 (development)
+
+Do you want to authorize this web authentication?`;
+    
+    await ctx.replyWithMarkdown(confirmMessage, {
+      reply_markup: keyboard
+    });
+    
+    console.log(`🔐 [WEBAUTH] Sent confirmation prompt for token: ${authToken}`);
+    
+  } catch (error) {
+    console.error('🔐 [WEBAUTH] Error processing web auth request:', error);
+    ctx.reply('❌ Authentication error. Please try again later.');
+  }
+});
+
 
 
 // Callback query handler
@@ -1849,6 +1909,19 @@ bot.on('callback_query', async (ctx) => {
     const telegramId = callbackData.replace('copy_telegram_id_', '');
     console.log(`📋 [COPY_ID] Handling copy telegram ID: ${telegramId}`);
     await handleCopyTelegramId(ctx, telegramId);
+    return;
+  }
+
+  // Handle Web Authentication callbacks
+  if (callbackData.startsWith('confirm_webauth:')) {
+    console.log('🔐 [WEBAUTH] Handling confirm web authentication');
+    await handleConfirmWebAuth(ctx, callbackData);
+    return;
+  }
+
+  if (callbackData.startsWith('cancel_webauth:')) {
+    console.log('🔐 [WEBAUTH] Handling cancel web authentication');
+    await handleCancelWebAuth(ctx, callbackData);
     return;
   }
 
@@ -2293,6 +2366,122 @@ async function handleCopyTelegramId(ctx, telegramId) {
       ]
     }
   });
+}
+
+// Web Authentication Handler Functions
+async function handleConfirmWebAuth(ctx, callbackData) {
+  const authToken = callbackData.split(':')[1];
+  const telegramId = ctx.from.id;
+  const username = ctx.from.username;
+  const firstName = ctx.from.first_name;
+  
+  console.log(`🔐 [WEBAUTH-CONFIRM] Processing confirmation for token: ${authToken}, user: ${username} (${telegramId})`);
+  
+  try {
+    // Get user data from the database
+    const { data: telegramUser, error: fetchError } = await db.client
+      .from('telegram_users')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .single();
+    
+    if (fetchError) {
+      console.error('🔐 [WEBAUTH-CONFIRM] Error fetching user:', fetchError);
+      await ctx.answerCbQuery('❌ User not found in database');
+      return;
+    }
+    
+    // Store authentication success in auth_tokens table
+    const { error: tokenError } = await db.client
+      .from('auth_tokens')
+      .upsert({
+        token: authToken,
+        telegram_id: telegramId,
+        user_data: JSON.stringify(telegramUser),
+        confirmed: true,
+        cancelled: false,
+        created_at: new Date().toISOString()
+      });
+    
+    if (tokenError) {
+      console.error('🔐 [WEBAUTH-CONFIRM] Error storing auth token:', tokenError);
+      await ctx.answerCbQuery('❌ Failed to confirm authentication');
+      return;
+    }
+    
+    // Update the message
+    const successMessage = `✅ **WEB AUTHENTICATION SUCCESSFUL!**
+    
+🎉 Your Telegram account has been successfully linked to the web platform.
+
+📱 **Account Details:**
+🆔 Telegram ID: ${telegramId}
+👤 Username: @${username || 'Not set'}
+💼 Account Status: Active
+
+🌐 **Next Steps:**
+1. Return to the web application (localhost:3003)
+2. Your authentication should complete automatically
+3. You'll have access to your complete dashboard
+
+**✅ You can now use both the Telegram bot and web platform seamlessly!**`;
+    
+    await ctx.editMessageText(successMessage, { parse_mode: 'Markdown' });
+    await ctx.answerCbQuery('✅ Web authentication confirmed!');
+    
+    console.log(`🔐 [WEBAUTH-CONFIRM] Successfully confirmed authentication for token: ${authToken}`);
+    
+  } catch (error) {
+    console.error('🔐 [WEBAUTH-CONFIRM] Error processing confirmation:', error);
+    await ctx.answerCbQuery('❌ Authentication failed. Please try again.');
+  }
+}
+
+async function handleCancelWebAuth(ctx, callbackData) {
+  const authToken = callbackData.split(':')[1];
+  
+  console.log(`🔐 [WEBAUTH-CANCEL] Processing cancellation for token: ${authToken}`);
+  
+  try {
+    // Store cancellation in auth_tokens table
+    const { error: tokenError } = await db.client
+      .from('auth_tokens')
+      .upsert({
+        token: authToken,
+        confirmed: false,
+        cancelled: true,
+        created_at: new Date().toISOString()
+      });
+    
+    if (tokenError) {
+      console.error('🔐 [WEBAUTH-CANCEL] Error storing cancellation:', tokenError);
+    }
+    
+    // Update the message
+    const cancelMessage = `❌ **WEB AUTHENTICATION CANCELLED**
+  
+The web authentication request has been cancelled.
+
+🔒 **Security Note:**
+Your account remains secure. No external access has been granted.
+
+**🔄 To Try Again:**
+• Go to the web platform
+• Click "Authenticate with Telegram" again
+• Follow the new authentication instructions
+
+**❓ Need Help?**
+Contact our support team if you're having trouble with authentication.`;
+    
+    await ctx.editMessageText(cancelMessage, { parse_mode: 'Markdown' });
+    await ctx.answerCbQuery('Authentication cancelled.');
+    
+    console.log(`🔐 [WEBAUTH-CANCEL] Successfully cancelled authentication for token: ${authToken}`);
+    
+  } catch (error) {
+    console.error('🔐 [WEBAUTH-CANCEL] Error processing cancellation:', error);
+    await ctx.answerCbQuery('❌ Error cancelling authentication.');
+  }
 }
 
 async function showSupportFAQ(ctx) {

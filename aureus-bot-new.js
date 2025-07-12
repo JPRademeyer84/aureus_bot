@@ -1837,6 +1837,20 @@ bot.on('callback_query', async (ctx) => {
     return;
   }
 
+  // Handle Connect to Website callbacks
+  if (callbackData === 'connect_to_website') {
+    console.log('🌐 [CONNECT] Handling connect_to_website');
+    await handleConnectToWebsite(ctx);
+    return;
+  }
+
+  if (callbackData.startsWith('copy_telegram_id_')) {
+    const telegramId = callbackData.replace('copy_telegram_id_', '');
+    console.log(`📋 [COPY_ID] Handling copy telegram ID: ${telegramId}`);
+    await handleCopyTelegramId(ctx, telegramId);
+    return;
+  }
+
   try {
     console.log('🔍 [DEBUG] Entering switch statement for:', callbackData);
     switch (callbackData) {
@@ -2194,6 +2208,86 @@ async function handleSupportCenter(ctx) {
         [{ text: "📧 Get Email Address", callback_data: "support_email" }],
         [{ text: "🌐 Visit Website", url: "https://aureus.africa" }],
         [{ text: "❓ FAQ & Common Issues", callback_data: "support_faq" }],
+        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+// Connect to Website Handler
+async function handleConnectToWebsite(ctx) {
+  const user = ctx.from;
+  const telegramId = user.id;
+  
+  const connectMessage = `🌐 **CONNECT TO WEBSITE**
+
+🔗 **SYNC YOUR ACCOUNT**
+
+To sync your Telegram bot account with the Aureus Alliance Holdings website, you'll need your unique Telegram ID.
+
+**📱 YOUR TELEGRAM ID:**
+\`${telegramId}\`
+
+**📋 INSTRUCTIONS:**
+1. **Copy** the Telegram ID above (tap and hold to select)
+2. **Visit** our website: https://aureus.africa
+3. **Login** to your website account
+4. **Navigate** to Account Settings or Profile
+5. **Paste** your Telegram ID in the "Telegram Sync" field
+6. **Save** your settings
+
+**✅ BENEFITS OF SYNCING:**
+• 🔄 **Real-time sync** between website and bot
+• 📊 **Unified portfolio** view across platforms  
+• 💰 **Seamless payment** tracking
+• 🔔 **Instant notifications** for account activities
+• 📈 **Enhanced dashboard** features
+
+**🔐 SECURITY NOTE:**
+Your Telegram ID is unique and safe to share with our official website. Never share it with unauthorized third parties.
+
+**❓ NEED HELP?**
+Contact our support team if you encounter any issues during the sync process.`;
+
+  await ctx.replyWithMarkdown(connectMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📋 Copy Telegram ID", callback_data: `copy_telegram_id_${telegramId}` }],
+        [{ text: "🌐 Visit Website", url: "https://aureus.africa" }],
+        [{ text: "📞 Contact Support", callback_data: "menu_help" }],
+        [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
+      ]
+    }
+  });
+}
+
+// Handle Copy Telegram ID (provides additional confirmation)
+async function handleCopyTelegramId(ctx, telegramId) {
+  await ctx.answerCbQuery("✅ Telegram ID ready to copy!");
+  
+  const copyMessage = `📋 **TELEGRAM ID READY TO COPY**
+
+**Your Telegram ID:**
+\`${telegramId}\`
+
+**📱 TO COPY:**
+• **Mobile:** Tap and hold the ID above, then select "Copy"
+• **Desktop:** Click and drag to select the ID, then Ctrl+C (Windows) or Cmd+C (Mac)
+
+**🔗 NEXT STEPS:**
+1. Go to https://aureus.africa
+2. Login to your account
+3. Find the "Telegram Sync" or "Connect Bot" section
+4. Paste this ID: \`${telegramId}\`
+5. Save your settings
+
+**✅ Once synced, you'll see your complete portfolio and transaction history on both the website and this bot!**`;
+
+  await ctx.replyWithMarkdown(copyMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🌐 Go to Website", url: "https://aureus.africa" }],
+        [{ text: "🔄 Show Connection Guide Again", callback_data: "connect_to_website" }],
         [{ text: "🔙 Back to Dashboard", callback_data: "main_menu" }]
       ]
     }

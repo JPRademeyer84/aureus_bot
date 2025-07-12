@@ -1700,8 +1700,15 @@ bot.start(async (ctx) => {
   } else {
     console.log(`✅ [START] User ${user.id} has accepted terms - proceeding`);
     if (startPayload) {
-      console.log(`🔗 [START] Referral link detected with payload: ${startPayload}`);
-      await handleReferralRegistration(ctx, startPayload);
+      // Check if this is a web authentication request
+      if (startPayload.startsWith('webauth_')) {
+        const authToken = startPayload.replace('webauth_', '');
+        console.log(`🔐 [START] Web authentication request detected with token: ${authToken}`);
+        await handleWebAuthFromStart(ctx, authToken);
+      } else {
+        console.log(`🔗 [START] Referral link detected with payload: ${startPayload}`);
+        await handleReferralRegistration(ctx, startPayload);
+      }
     } else {
       console.log(`🏠 [START] No referral payload, showing main menu`);
       await showMainMenu(ctx);
@@ -2369,6 +2376,53 @@ async function handleCopyTelegramId(ctx, telegramId) {
 }
 
 // Web Authentication Handler Functions
+async function handleWebAuthFromStart(ctx, authToken) {
+  const telegramId = ctx.from.id;
+  const username = ctx.from.username;
+  const firstName = ctx.from.first_name;
+  
+  console.log(`🔐 [WEBAUTH-START] Processing web authentication from start command for token: ${authToken}, user: ${username} (${telegramId})`);
+  
+  try {
+    // Send confirmation message immediately
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '✅ Confirm Web Authentication', callback_data: `confirm_webauth:${authToken}` },
+          { text: '❌ Cancel', callback_data: `cancel_webauth:${authToken}` }
+        ]
+      ]
+    };
+    
+    const confirmMessage = `🔐 **WEB AUTHENTICATION REQUEST**
+    
+📱 Your web application is requesting to authenticate with your Telegram account.
+
+👤 **Your Details:**
+🆔 Telegram ID: ${telegramId}
+👤 Username: @${username || 'Not set'}
+📛 Name: ${firstName || 'Not set'}
+
+🌐 **Website:** https://aureus.africa
+💻 **Web Dashboard:** localhost:3003 (development)
+
+⚠️ **SECURITY NOTICE:**
+Only confirm if you initiated this request from the Aureus Alliance Holdings website.
+
+Do you want to authorize this web authentication?`;
+    
+    await ctx.replyWithMarkdown(confirmMessage, {
+      reply_markup: keyboard
+    });
+    
+    console.log(`🔐 [WEBAUTH-START] Sent confirmation prompt for token: ${authToken}`);
+    
+  } catch (error) {
+    console.error('🔐 [WEBAUTH-START] Error processing web auth from start:', error);
+    ctx.reply('❌ Authentication error. Please try again later.');
+  }
+}
+
 async function handleConfirmWebAuth(ctx, callbackData) {
   const authToken = callbackData.split(':')[1];
   const telegramId = ctx.from.id;

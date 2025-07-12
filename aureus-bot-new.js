@@ -1704,6 +1704,25 @@ bot.start(async (ctx) => {
 });
 
 bot.command("menu", async (ctx) => {
+  // Authenticate user first
+  const authenticatedUser = await authenticateUser(ctx);
+  if (!authenticatedUser) return;
+
+  // Check if user has a sponsor (required)
+  const hasSponsor = await checkUserHasSponsor(authenticatedUser.id);
+  if (!hasSponsor) {
+    await promptSponsorAssignment(ctx);
+    return;
+  }
+
+  // Check if user has selected country (required)
+  const hasSelectedCountry = await checkCountrySelection(authenticatedUser.id);
+  if (!hasSelectedCountry) {
+    console.log(`🌍 [MENU] User ${authenticatedUser.id} trying to access menu without country selection`);
+    await showCountrySelection(ctx);
+    return;
+  }
+
   await showMainMenu(ctx);
 });
 
@@ -1740,20 +1759,40 @@ bot.on('callback_query', async (ctx) => {
     return;
   }
 
-  // Check if user has a sponsor (except for sponsor-related actions and admin functions)
+  // Check if user has completed mandatory requirements (sponsor and country selection)
+  // Only exclude sponsor/country-related actions and admin functions
   const excludedCallbacks = [
-    'main_menu', 'accept_terms', 'menu_referrals', 'enter_sponsor_manual', 'assign_default_sponsor',
-    'view_approved', 'view_rejected', 'view_pending'
+    'enter_sponsor_manual', 'assign_default_sponsor', 'accept_terms',
+    'select_country_', 'show_more_countries', 'country_selection_other',
+    'show_asia_countries', 'show_africa_countries', 'show_europe_countries',
+    'show_americas_countries', 'show_oceania_countries'
   ];
 
-  // Exclude all admin callbacks from sponsor check
+  // Exclude all admin callbacks from mandatory checks
   const isAdminCallback = callbackData.startsWith('admin_') || callbackData.includes('admin');
 
-  if (user && !excludedCallbacks.includes(callbackData) && !isAdminCallback) {
-    const hasSponsor = await checkUserHasSponsor(user.id);
-    if (!hasSponsor) {
-      await promptSponsorAssignment(ctx);
-      return;
+  // Check if this is a country selection callback
+  const isCountryCallback = callbackData.startsWith('select_country_') ||
+                           excludedCallbacks.some(excluded => callbackData.startsWith(excluded));
+
+  if (user && !isAdminCallback && !isCountryCallback) {
+    // First check sponsor requirement
+    if (!excludedCallbacks.includes(callbackData)) {
+      const hasSponsor = await checkUserHasSponsor(user.id);
+      if (!hasSponsor) {
+        await promptSponsorAssignment(ctx);
+        return;
+      }
+    }
+
+    // Then check country selection requirement (for all actions except sponsor-related)
+    if (!callbackData.includes('sponsor') && !excludedCallbacks.includes(callbackData)) {
+      const hasSelectedCountry = await checkCountrySelection(user.id);
+      if (!hasSelectedCountry) {
+        console.log(`🌍 [COUNTRY] User ${user.id} trying to access ${callbackData} without country selection`);
+        await showCountrySelection(ctx);
+        return;
+      }
     }
   }
 

@@ -1500,12 +1500,22 @@ async function showMainMenu(ctx) {
     return;
   }
 
-  // Check KYC status and show KYC dashboard if needed
-  const hasKYC = await checkKYCCompletion(authenticatedUser.id);
-  if (!hasKYC) {
-    console.log(`📋 [KYC] User ${authenticatedUser.id} has not completed KYC - showing KYC dashboard`);
-    await showKYCDashboard(ctx, authenticatedUser.id);
-    return;
+  // Check KYC status ONLY if user has approved payments
+  const { data: approvedPayments, error: paymentError } = await db.client
+    .from('crypto_payment_transactions')
+    .select('id')
+    .eq('user_id', authenticatedUser.id)
+    .eq('status', 'approved')
+    .limit(1);
+
+  // Only require KYC if user has approved payments
+  if (approvedPayments && approvedPayments.length > 0) {
+    const hasKYC = await checkKYCCompletion(authenticatedUser.id);
+    if (!hasKYC) {
+      console.log(`📋 [KYC] User ${authenticatedUser.id} has approved payments but no KYC - showing KYC dashboard`);
+      await showKYCDashboard(ctx, authenticatedUser.id);
+      return;
+    }
   }
 
   const currentPhase = await db.getCurrentPhase();
